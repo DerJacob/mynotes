@@ -2154,7 +2154,7 @@ function renderSidebar() {
       iconBtn("lock", "Sperren (L)", () => lock("Gesperrt.")),
       iconBtn("settings", "Einstellungen", openSettings)));
   replace(side,
-    h("div", { class: "side-head" }, h("div", { class: "logo sm" }), h("div", { class: "brand" }, "MyNotes", h("small", null, "am PC")),
+    h("div", { class: "side-head" }, h("img", { class: "logo-img sm", src: "logo.png", alt: "" }), h("div", { class: "brand" }, "MyNotes", h("small", null, "am PC")),
       h("span", { class: "grow" }), iconBtn("help", "Tastenkürzel & Hilfe (?)", openShortcuts, "sm"),
       h("button", { class: "icon-btn sm only-narrow", title: "Schließen", onclick: closeNav }, icon("close"))),
     h("div", { class: "search-box" }, icon("search"), search, h("kbd", null, "Strg K")),
@@ -3597,7 +3597,7 @@ function showLogin(message, bad) {
       msg.textContent = e.message;
     }
   };
-  gate(h("div", { class: "logo" }), h("h1", null, "MyNotes am PC"),
+  gate(h("img", { class: "logo-img", src: "logo.png", alt: "" }), h("h1", null, "MyNotes am PC"),
     h("p", null, "Deine Handy-Notizen ansehen, durchsuchen und kopieren – und neue Notizen ans Handy schicken."),
     btn, msg,
     h("p", { class: "small", style: { marginTop: "16px" } }, "Voraussetzung am Handy: Einstellungen → „PC-Zugriff (Web-App)“ einschalten (mit verschlüsselter Drive-Sicherung)."),
@@ -3609,7 +3609,7 @@ async function connect() {
   const steps = [["Google-Konto", "a"], ["Ordner „MyNotes PC“ suchen", "b"], ["Verschlüsselte Notizen laden", "c"]];
   const list = h("ul", { class: "gate-steps" }, steps.map(([t, k]) => h("li", { dataset: { k } }, h("span", { class: "st" }, "•"), t)));
   const msg = h("div", { class: "gate-msg" });
-  gate(h("div", { class: "logo" }), h("h1", null, "Verbinde …"), list, msg);
+  gate(h("img", { class: "logo-img", src: "logo.png", alt: "" }), h("h1", null, "Verbinde …"), list, msg);
   const mark = (k, st) => { const li = $(`li[data-k="${k}"]`, list); if (li) { li.className = st; $(".st", li).textContent = st === "done" ? "✓" : st === "bad" ? "!" : "•"; } };
   let step = "a";
   try {
@@ -3673,7 +3673,7 @@ function showUnlock(message) {
   };
   btn.onclick = go;
   input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); go(); } });
-  gate(h("div", { class: "logo" }), h("h1", null, "Entsperren"),
+  gate(h("img", { class: "logo-img", src: "logo.png", alt: "" }), h("h1", null, "Entsperren"),
     h("div", { class: "gate-user" },
       user.photo ? h("img", { src: user.photo, alt: "", referrerpolicy: "no-referrer" }) : h("span", { class: "avatar" }, initials(user.name)),
       h("div", { class: "grow" }, h("div", { style: { fontWeight: 600 } }, user.name || "Angemeldet"), h("div", { class: "small muted" }, user.email || "")),
@@ -4035,7 +4035,7 @@ async function boot() {
     return;
   }
   if (!window.crypto || !crypto.subtle || typeof DecompressionStream === "undefined") {
-    gate(h("div", { class: "logo" }), h("h1", null, "Browser zu alt"),
+    gate(h("img", { class: "logo-img", src: "logo.png", alt: "" }), h("h1", null, "Browser zu alt"),
       h("p", null, "Bitte einen aktuellen Chrome, Edge, Firefox oder Safari verwenden (und die Seite über https öffnen)."));
     return;
   }

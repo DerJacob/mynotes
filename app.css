@@ -177,6 +177,8 @@ input.field:focus, textarea.field:focus, select.field:focus { outline: none; bor
   background: #202124; box-shadow: 0 12px 0 #202124, -0px 24px 0 -0px #202124;
 }
 .boot-logo::after, .logo::after { content: ""; position: absolute; left: 14px; width: 16px; top: 42px; height: 5px; border-radius: 3px; background: #202124; display: none; }
+.logo-img { width: 72px; height: 72px; border-radius: 18px; box-shadow: var(--shadow); display: block; object-fit: cover; }
+.logo-img.sm { width: 34px; height: 34px; border-radius: 9px; }
 .logo.sm { width: 28px; height: 32px; border-radius: 8px; }
 .logo.sm::before { left: 7px; right: 7px; top: 9px; height: 3px; box-shadow: 0 6px 0 #202124, 0 12px 0 #202124; }
 
