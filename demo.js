@@ -210,12 +210,16 @@
     { id: 3, area: 0, parentId: 6, kind: 0, title: "Erledigt", sort: 100, collapsed: false }
   ];
   notes.find(n => n.id === 19).sort = 200;
+  notes.find(n => n.id === 9).pinnedAt = now - 5 * DAY;
+  notes.find(n => n.id === 3).pinnedAt = now - 4 * DAY;
+  folders.find(f => f.id === 6).pinnedAt = now - 6 * DAY;
 
   const snapshot = {
     format: "mynotes-backup", version: 1, createdAt: now - 3 * MIN, appVersion: "1.2", dbVersion: 24,
     folders, notes, blocks,
     labels: [{ id: 1, name: "Wichtig", color: "#E53935" }, { id: 2, name: "Idee", color: "#FDD835" }, { id: 3, name: "Finanzen", color: "#43A047" }],
     folderRefs, labelRefs, backlinks: [[2, 9], [2, 3], [4, 7], [4, 3]], dividers,
+    folderLinks: [{ folderId: 7, parentId: null, sort: 2 }, { folderId: 2, parentId: 4, sort: 50 }],
     projects: [{ folderId: 6, board: false, createdAt: now - 30 * DAY }, { folderId: 3, board: true, createdAt: now - 20 * DAY }],
     phases: [
       { id: 1, folderId: 6, name: "Vorbereitung", position: 0, color: "#1E88E5", collapsed: false },

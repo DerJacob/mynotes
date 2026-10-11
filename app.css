@@ -418,6 +418,16 @@ mark.cur { background: var(--accent); color: var(--on-accent); }
 .b-check.done .box { background: var(--muted); border-color: var(--muted); }
 .b-check.done .box::after { content: ""; width: 5px; height: 10px; border: solid var(--bg); border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
 .b-check .txt { flex: 1 1 auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.b-check .box.live { cursor: pointer; padding: 0; background: transparent; }
+.b-check .box.live:hover { border-color: var(--accent); }
+.b-check.done .box.live { background: var(--muted); }
+.b-check.pending .box { border-color: var(--accent) !important; }
+.b-check.pending.done .box { background: var(--accent) !important; }
+.task-row .box.live { cursor: pointer; }
+.task-row .box.live:hover { border-color: var(--accent); }
+.task-row.pending .box { border-color: var(--accent); }
+.task-row.pending.done .box { background: var(--accent); }
+.pending-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; font-size: .75rem; color: var(--accent); text-decoration: none; vertical-align: 1px; white-space: nowrap; }
 .b-check.done .txt { text-decoration: line-through; color: var(--muted); }
 .prio { display: inline-flex; align-items: center; gap: 2px; font-size: .75rem; font-weight: 700; padding: 0 6px; border-radius: 6px; margin-right: 6px; vertical-align: 1px; }
 .prio.p1 { color: #8ab4f8; background: rgba(138, 180, 248, .14); }
@@ -512,6 +522,8 @@ a.url { color: var(--link); overflow-wrap: anywhere; }
 .panel .row-link .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel .row-link .d { font-size: .8rem; color: var(--muted); white-space: nowrap; }
 .panel .row-link .d.over { color: var(--danger); font-weight: 600; }
+.pinned-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pin-chip { font-size: .92rem; padding: 7px 14px; color: var(--text); }
 .quick textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
 .quick .actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .quick .actions .hint { flex: 1; font-size: .8rem; color: var(--muted); }

@@ -607,7 +607,7 @@ function buildDb(snap) {
     db.folders.set(f.id, {
       id: f.id, name: f.name || "Ordner", color: cssColor(f.color), parentId: f.parentId ?? null,
       sort: f.sort || 0, createdAt: f.createdAt || 0, modifiedAt: f.modifiedAt || 0,
-      children: [], noteIds: [], project: null
+      children: [], noteIds: [], project: null, pinnedAt: f.pinnedAt || null
     });
   }
   for (const f of db.folders.values()) {
@@ -626,7 +626,7 @@ function buildDb(snap) {
       deletedAt: n.deletedAt || null, template: !!n.template, reminder: n.reminder || null,
       reminderRepeat: n.reminderRepeat || 0, reminderHasTime: !!n.reminderHasTime, color: cssColor(n.color),
       createdAt: n.createdAt || 0, modifiedAt: n.modifiedAt || 0, sort: n.sort || 0,
-      pageNames: n.pageNames ?? null, blocks: [], folderIds: [], labelIds: [], _text: null, _norm: null
+      pageNames: n.pageNames ?? null, pinnedAt: n.pinnedAt || null, blocks: [], folderIds: [], labelIds: [], _text: null, _norm: null
     });
   }
   for (const b of snap.blocks || []) {
@@ -685,6 +685,14 @@ function buildDb(snap) {
     folder.project.items.set(it.noteId, { phaseId: it.phaseId, done: !!it.done, position: it.position || 0 });
   }
   for (const f of db.folders.values()) if (f.project) f.project.phases.sort((a, b) => a.position - b.position || a.id - b.id);
+  // NEU (AL): Ordner, die an weiteren Orten gezeigt werden (Verweise)
+  db.links = new Map();
+  for (const l of snap.folderLinks || []) {
+    if (!db.folders.has(l.folderId) || (l.parentId != null && !db.folders.has(l.parentId))) continue;
+    const key = l.parentId == null ? "home" : "f" + l.parentId;
+    if (!db.links.has(key)) db.links.set(key, []);
+    db.links.get(key).push({ folder: db.folders.get(l.folderId), sort: l.sort || 0 });
+  }
   return db;
 }
 
@@ -937,16 +945,17 @@ function sortNotes(notes, mode = S.settings.sort) {
  * Einträge eines Bereichs: Favoriten oben, dann (bei „Eigene Reihenfolge“) Ordner, Notizen und
  * Überschriften gemischt nach Position.
  */
-function areaEntries(folders, notes, dividers, mode = S.settings.sort) {
+function areaEntries(folders, notes, dividers, mode = S.settings.sort, links = []) {
   const fav = notes.filter(n => n.favorite), rest = notes.filter(n => !n.favorite);
+  const linked = links.map(l => ({ kind: "folder", folder: l.folder, linked: true, pos: l.sort, id: l.folder.id }));
   if (mode !== "custom") {
     return [...sortNotes(fav, mode).map(n => ({ kind: "note", note: n })),
-      ...folders.map(f => ({ kind: "folder", folder: f })),
+      ...folders.map(f => ({ kind: "folder", folder: f })), ...linked,
       ...sortNotes(rest, mode).map(n => ({ kind: "note", note: n }))];
   }
   const rank = { divider: 0, folder: 1, note: 2 };
   const mixed = [
-    ...folders.map(f => ({ kind: "folder", folder: f, pos: f.sort, id: f.id })),
+    ...folders.map(f => ({ kind: "folder", folder: f, pos: f.sort, id: f.id })), ...linked,
     ...rest.map(n => ({ kind: "note", note: n, pos: n.sort, id: n.id })),
     ...(dividers || []).map(d => ({ kind: "divider", divider: d, pos: d.sort, id: d.id }))
   ].sort((a, b) => a.pos - b.pos || rank[a.kind] - rank[b.kind] || a.id - b.id);
@@ -1661,10 +1670,25 @@ function renderBlock(b, opts) {
     }
     case "CHECKLIST_ITEM": {
       const prio = PRIO[b.priority];
-      const row = h("div", { class: "b-check" + (b.checked ? " done" : "") },
-        h("span", { class: "box", role: "checkbox", "aria-checked": String(b.checked) }),
-        h("div", { class: "txt" }, prio ? h("span", { class: "prio " + prio[0], title: prio[2] }, prio[1]) : null, inline(b.content, ts)));
-      return wrapBlock(b, row, opts, { text: () => readable(b.content), title: "Punkt kopieren" });
+      // NEU (AH-3): am PC abhaken → wird beim nächsten Abgleich am Handy übernommen
+      const live = !opts.preview && b.id != null && canCheckFromPc(opts.note);
+      const pending = live ? pendingCheck(b.id) : null;
+      const checked = pending ? pending.checked : b.checked;
+      const box = h(live ? "button" : "span", {
+        class: "box" + (live ? " live" : ""), role: "checkbox", "aria-checked": String(checked), type: live ? "button" : null,
+        title: live ? (checked ? "Haken entfernen (wird am Handy übernommen)" : "Abhaken (wird am Handy übernommen)") : null
+      });
+      const row = h("div", { class: "b-check" + (checked ? " done" : "") + (pending ? " pending" : "") },
+        box,
+        h("div", { class: "txt" }, prio ? h("span", { class: "prio " + prio[0], title: prio[2] }, prio[1]) : null, inline(b.content, ts),
+          pending ? h("span", { class: "pending-tag", title: "Wartet auf das Handy" }, icon("phone", "sm"), "→ Handy") : null));
+      const el = wrapBlock(b, row, opts, { text: () => readable(b.content), title: "Punkt kopieren" });
+      if (live) box.addEventListener("click", e => {
+        e.stopPropagation();
+        toggleCheckFromPc(b);
+        el.replaceWith(renderBlock(b, opts));
+      });
+      return el;
     }
     case "CODE": {
       const pre = h("pre", null, h("code", null));
@@ -1925,7 +1949,7 @@ function cardPreview(note, budget, tile) {
   }
   return frag.childNodes.length ? frag : null;
 }
-function folderCard(folder) {
+function folderCard(folder, linked = false) {
   const sub = [];
   if (folder.children.length) sub.push(plural(folder.children.length, "Unterordner", "Unterordner"));
   sub.push(plural(folder.noteIds.length, "Notiz", "Notizen"));
@@ -1941,7 +1965,9 @@ function folderCard(folder) {
     onkeydown: e => { if (e.key === "Enter") go({ view: "folder", id: folder.id }, null); }
   },
   h("span", { style: { color: folder.color || "var(--muted)" } }, icon(folder.project ? "project" : "folder")),
-  h("div", { class: "grow" }, h("div", { class: "ellipsis", style: { fontWeight: 600 } }, folder.name), h("div", { class: "sub" }, sub.join(" · ")),
+  h("div", { class: "grow" }, h("div", { class: "ellipsis", style: { fontWeight: 600 } }, folder.name,
+    linked ? h("span", { title: "Wird hier zusätzlich gezeigt", style: { marginLeft: "6px", color: "var(--muted)" } }, icon("link", "sm")) : null),
+  h("div", { class: "sub" }, sub.join(" · ")),
     progress != null ? h("div", { class: "progress" }, h("div", { style: { width: Math.round(progress * 100) + "%" } })) : null),
   icon("chevron", "sm"));
 }
@@ -2186,15 +2212,15 @@ function toggleAllFolders() {
 function folderTree() {
   const box = h("div", { class: "tree" });
   // Startseiten-Überschriften wie am Handy zwischen den Ordnern
-  const entries = areaEntries(S.db.rootFolders, [], S.db.dividers.get("home") || [], "custom");
+  const entries = areaEntries(S.db.rootFolders, [], S.db.dividers.get("home") || [], "custom", S.db.links.get("home") || []);
   for (const e of entries) {
     if (e.kind === "divider") box.appendChild(e.divider.kind === 0 ? h("div", { class: "tree-head" }, e.divider.title || "Abschnitt") : h("div", { class: "tree-line" }));
-    else if (e.kind === "folder") appendFolderRow(box, e.folder, 0);
+    else if (e.kind === "folder") appendFolderRow(box, e.folder, 0, e.linked);
   }
   if (!S.db.rootFolders.length) box.appendChild(h("div", { class: "small muted", style: { padding: "4px 20px" } }, "Keine Ordner"));
   return box;
 }
-function appendFolderRow(box, f, depth) {
+function appendFolderRow(box, f, depth, linked = false) {
   const open = S.treeOpen.has(f.id);
   const on = S.route.view === "folder" && S.route.id === f.id;
   let extra = null;
@@ -2210,10 +2236,14 @@ function appendFolderRow(box, f, depth) {
     h("button", { class: "tree-main", onclick: () => { go({ view: "folder", id: f.id }, null); } },
       h("span", { style: { color: f.color || "var(--muted)", display: "inline-flex" } }, icon(f.project ? "project" : "folder")),
       h("span", { class: "tree-name" }, f.name),
+      linked ? h("span", { title: "Wird hier zusätzlich gezeigt", style: { display: "inline-flex", color: "var(--muted)" } }, icon("link", "sm")) : null,
       extra,
       f.noteIds.length ? h("span", { class: "count" }, fmtNum.format(f.noteIds.length)) : null));
   box.appendChild(row);
-  if (open) for (const c of f.children) appendFolderRow(box, c, depth + 1);
+  if (open && depth < 12) {
+    for (const c of f.children) appendFolderRow(box, c, depth + 1);
+    for (const l of S.db.links.get("f" + f.id) || []) appendFolderRow(box, l.folder, depth + 1, true);
+  }
 }
 function progressRing(p, title) {
   const r = 7, c = 2 * Math.PI * r;
@@ -2288,7 +2318,7 @@ function listModel() {
       return {
         title: f.name, color: f.color, folder: f,
         sub: path.length > 1 ? path.slice(0, -1).map(x => x.name).join(" › ") : (f.project ? "Projekt" : null),
-        entries: areaEntries(f.children, notesOf(f.noteIds), db.dividers.get("f" + f.id) || [])
+        entries: areaEntries(f.children, notesOf(f.noteIds), db.dividers.get("f" + f.id) || [], S.settings.sort, db.links.get("f" + f.id) || [])
       };
     }
     default: return { title: VIEWS[r.view]?.title || "", entries: [] };
@@ -2376,7 +2406,7 @@ function fillEntries(body, entries, opts) {
       frag.appendChild(h("button", { class: "btn subtle small list-more", onclick: () => { S.listLimit += 200; rememberScroll(); renderList(); } }, "Weitere " + fmtNum.format(rest) + " anzeigen"));
       break;
     }
-    frag.appendChild(e.kind === "folder" ? folderCard(e.folder) : noteCard(e.note, { showFolder: opts.showFolder, ts: opts.ts }));
+    frag.appendChild(e.kind === "folder" ? folderCard(e.folder, e.linked) : noteCard(e.note, { showFolder: opts.showFolder, ts: opts.ts }));
     shown++;
   }
   body.appendChild(frag);
@@ -2477,17 +2507,28 @@ function renderTaskList(list) {
       for (const b of g.items) body.appendChild(taskRow(b, g.note, false));
     }
   }
-  body.appendChild(h("div", { class: "small muted", style: { padding: "16px 4px" } }, plural(total, "Punkt", "Punkte") + " · Abhaken geht am Handy (hier nur ansehen)."));
+  body.appendChild(h("div", { class: "small muted", style: { padding: "16px 4px" } }, plural(total, "Punkt", "Punkte") + " · Kästchen anklicken = abhaken – das Handy übernimmt es beim nächsten Abgleich (bis dahin „→ Handy“)."));
 }
 function taskRow(b, note, showNote) {
   const prio = PRIO[b.priority];
-  return h("div", {
-    class: "task-row" + (b.checked ? " done" : ""), tabindex: "0",
+  const checked = effectiveChecked(b); // NEU (AH-3)
+  const pending = pendingCheck(b.id);
+  const box = h("span", { class: "box live", title: "Abhaken (wird am Handy übernommen)" });
+  const row = h("div", {
+    class: "task-row" + (checked ? " done" : "") + (pending ? " pending" : ""), tabindex: "0",
     onclick: () => openNote(note.id, { blockId: b.id }),
     onkeydown: e => { if (e.key === "Enter") openNote(note.id, { blockId: b.id }); }
-  }, h("span", { class: "box" }),
-  h("span", { class: "t" }, prio ? h("span", { class: "prio " + prio[0] }, prio[1]) : null, readable(b.content)),
+  }, box,
+  h("span", { class: "t" }, prio ? h("span", { class: "prio " + prio[0] }, prio[1]) : null, readable(b.content),
+    pending ? h("span", { class: "pending-tag" }, icon("phone", "sm"), "→ Handy") : null),
   showNote ? h("span", { class: "from" }, note.title || "Ohne Titel") : null);
+  box.addEventListener("click", e => {
+    e.stopPropagation();
+    if (!canCheckFromPc(note)) return;
+    toggleCheckFromPc(b);
+    row.replaceWith(taskRow(b, note, showNote));
+  });
+  return row;
 }
 function seg(options, value, onChange) {
   return h("div", { class: "seg" }, options.map(([v, label]) => h("button", { class: v === value ? "on" : "", onclick: () => onChange(v) }, label)));
@@ -2738,6 +2779,19 @@ function renderDashboard(main) {
     h("p", null, fmtDateLong.format(now) + " · Stand vom Handy " + relTime(db.createdAt))));
   const grid = h("div", { class: "dash-grid" });
 
+  // Angepinnt (wie am Handy)
+  const pinned = [
+    ...[...db.folders.values()].filter(f => f.pinnedAt).map(f => ({ t: f.pinnedAt, folder: f })),
+    ...[...db.notes.values()].filter(n => n.pinnedAt && !n.deleted && !n.archived).map(n => ({ t: n.pinnedAt, note: n }))
+  ].sort((a, b) => a.t - b.t);
+  if (pinned.length) {
+    grid.appendChild(h("div", { class: "panel wide" }, h("h3", null, icon("pin"), "Angepinnt"),
+      h("div", { class: "pinned-row" }, pinned.map(p => p.folder
+        ? h("button", { class: "chip pin-chip", onclick: () => go({ view: "folder", id: p.folder.id }, null) },
+          h("span", { style: { color: p.folder.color || "var(--muted)", display: "inline-flex" } }, icon("folder", "sm")), p.folder.name)
+        : h("button", { class: "chip pin-chip", onclick: () => openNote(p.note.id) }, icon("note", "sm"), p.note.title || "Ohne Titel")))));
+  }
+
   // Schnell ans Handy
   const ta = h("textarea", { class: "field", placeholder: "Text, Link oder Liste hier hineinschreiben oder einfügen …\nErste Zeile = Titel (optional). „- [ ] “ wird zur Checkliste.", spellcheck: "true" });
   const send = async () => {
@@ -2854,7 +2908,7 @@ function renderBoard(main, folder) {
   wrap.appendChild(board);
   if (folder.children.length) {
     wrap.appendChild(h("div", { class: "group-title" }, "Unterordner", h("span", { class: "line" })));
-    wrap.appendChild(h("div", { class: "tiles-folders" }, folder.children.map(folderCard)));
+    wrap.appendChild(h("div", { class: "tiles-folders" }, folder.children.map(f => folderCard(f))));
   }
   scroller.appendChild(wrap);
   replace(main, bar, scroller);
@@ -2886,8 +2940,8 @@ function renderTiles(main) {
     m.noSort ? null : sortButton(m.sortNoCustom), viewButton());
   watchScroll(scroller, bar);
   const wrap = h("div", { class: "tiles-wrap" });
-  const folders = m.entries.filter(e => e.kind === "folder").map(e => e.folder);
-  if (folders.length) wrap.appendChild(h("div", { class: "tiles-folders" }, folders.map(folderCard)));
+  const folders = m.entries.filter(e => e.kind === "folder");
+  if (folders.length) wrap.appendChild(h("div", { class: "tiles-folders" }, folders.map(e => folderCard(e.folder, e.linked))));
   // Abschnitte (Überschriften wie am Handy), darin die Karten
   const sections = [{ title: null, cards: [] }];
   let shown = 0;
@@ -3144,7 +3198,7 @@ function renderSidebarCounts() {
 
 // ---------------- Laden & Speichern ----------------
 function parseInbox(json) {
-  if (!json || json.format !== "mynotes-pc-inbox") return { notes: [], web: null };
+  if (!json || json.format !== "mynotes-pc-inbox") return { notes: [], checks: [], web: null };
   const notes = (json.notes || []).filter(n => n && n.id).map(n => {
     const blocks = Array.isArray(n.blocks) ? n.blocks.map(b => ({ type: b.type || "TEXT", content: b.content || "", checked: !!b.checked })) : [];
     return {
@@ -3152,7 +3206,10 @@ function parseInbox(json) {
       md: typeof n.md === "string" ? n.md : blocksToMarkup(blocks), blocks
     };
   });
-  return { notes, web: json.web && typeof json.web === "object" ? json.web : null };
+  // NEU (AH-3): Haken, die am PC gesetzt wurden (das Handy übernimmt sie)
+  const checks = (json.checks || []).filter(c => c && c.id && c.blockId != null)
+    .map(c => ({ id: String(c.id), blockId: Number(c.blockId), noteId: Number(c.noteId) || null, checked: !!c.checked, at: c.at || 0 }));
+  return { notes, checks, web: json.web && typeof json.web === "object" ? json.web : null };
 }
 async function loadInbox(file) {
   if (!file) { S.inbox.fileId = null; S.inbox.modifiedTime = null; S.inbox.readable = true; return; }
@@ -3160,16 +3217,18 @@ async function loadInbox(file) {
   try {
     const parsed = parseInbox(await decryptJson(bytes, S.key));
     S.inbox.notes = parsed.notes;
+    S.inbox.checks = parsed.checks;
     S.inbox.webRemote = parsed.web;
     S.inbox.readable = true;
   } catch (e) {
     if (!(e instanceof WrongKeyError)) throw e;
     S.inbox.notes = [];
+    S.inbox.checks = [];
     S.inbox.readable = false;
   }
   S.inbox.fileId = file.id;
   S.inbox.modifiedTime = file.modifiedTime;
-  S.inbox.base = new Map(S.inbox.notes.map(n => [n.id, n.modified]));
+  S.inbox.base = inboxBase();
 }
 async function loadDone(file) {
   if (!file) { S.done = new Set(); S.doneModified = null; return; }
@@ -3183,8 +3242,22 @@ async function loadDone(file) {
   S.doneModified = file.modifiedTime;
 }
 /** Drei-Wege-Abgleich mit dem Stand im Drive (falls ein anderer PC/Tab inzwischen gespeichert hat) */
-function mergeInbox(remoteNotes) {
+/** Stand für den Drei-Wege-Abgleich: Notizen (id → geändert) und Haken („c:“ + id → Zeitpunkt) */
+function inboxBase() {
+  return new Map([...S.inbox.notes.map(n => [n.id, n.modified]), ...(S.inbox.checks || []).map(c => ["c:" + c.id, c.at])]);
+}
+function mergeInbox(remoteNotes, remoteChecks = []) {
   const base = S.inbox.base;
+  // NEU (AH-3): Haken – neu hier/woanders bleibt, hier/woanders gelöscht verschwindet
+  const lc = new Map((S.inbox.checks || []).map(c => [c.id, c])), rc = new Map(remoteChecks.map(c => [c.id, c]));
+  const checks = [];
+  for (const id of new Set([...lc.keys(), ...rc.keys()])) {
+    const l = lc.get(id), r = rc.get(id);
+    if (l && r) checks.push(l);
+    else if (l) { if (!base.has("c:" + id)) checks.push(l); }
+    else if (r) { if (!base.has("c:" + id)) checks.push(r); }
+  }
+  S.inbox.checks = checks;
   const local = new Map(S.inbox.notes.map(n => [n.id, n]));
   const remote = new Map(remoteNotes.map(n => [n.id, n]));
   const result = [];
@@ -3212,7 +3285,7 @@ async function saveInbox() {
         else if (meta.modifiedTime !== S.inbox.modifiedTime && S.inbox.readable) {
           try {
             const remote = parseInbox(await decryptJson(await downloadFile(S.inbox.fileId), S.key));
-            mergeInbox(remote.notes);
+            mergeInbox(remote.notes, remote.checks);
           } catch (e) { if (!(e instanceof WrongKeyError)) throw e; }
         }
       } else {
@@ -3223,7 +3296,7 @@ async function saveInbox() {
         if (f) {
           try {
             const remote = parseInbox(await decryptJson(await downloadFile(f.id), S.key));
-            mergeInbox(remote.notes);
+            mergeInbox(remote.notes, remote.checks);
           } catch (e) { if (!(e instanceof WrongKeyError)) throw e; }
           S.inbox.fileId = f.id;
         }
@@ -3232,10 +3305,12 @@ async function saveInbox() {
       const taken = S.inbox.notes.filter(n => S.done.has(n.id));
       if (taken.length) S.inbox.taken = [...(S.inbox.taken || []).filter(t => !taken.some(x => x.id === t.id)), ...taken];
       S.inbox.notes = S.inbox.notes.filter(n => !S.done.has(n.id));
+      S.inbox.checks = (S.inbox.checks || []).filter(c => !S.done.has(c.id)); // vom Handy übernommen
       // 3) Verschlüsselt hochladen
       const payload = {
         format: "mynotes-pc-inbox", v: 1,
         notes: S.inbox.notes.map(n => ({ id: n.id, title: n.title, created: n.created, modified: n.modified, blocks: n.blocks, md: n.md })),
+        checks: S.inbox.checks || [], // NEU (AH-3)
         web: { ...S.settings, v: 1 }
       };
       const plain = TE.encode(JSON.stringify(payload));
@@ -3243,7 +3318,7 @@ async function saveInbox() {
       const res = await uploadFile(F_INBOX, await encryptBytes(plain, S.key), S.inbox.fileId);
       S.inbox.fileId = res.id;
       S.inbox.modifiedTime = res.modifiedTime;
-      S.inbox.base = new Map(S.inbox.notes.map(n => [n.id, n.modified]));
+      S.inbox.base = inboxBase();
       S.inbox.readable = true;
       S.inbox.dirty = false;
       S.inbox.settingsDirty = false;
@@ -3565,6 +3640,40 @@ function openTemplatePickerInsert(area) {
     if (titleIn && !titleIn.value.trim()) { titleIn.value = n.title; titleIn.dispatchEvent(new Event("input")); }
   }, { placeholder: "Vorlage suchen …" });
 }
+
+
+// =====================================================================
+// NEU (AH-3): Abhaken am PC – der PC schlägt den Haken vor, das Handy übernimmt ihn
+// =====================================================================
+function pendingCheck(blockId) {
+  return (S.inbox.checks || []).find(c => c.blockId === blockId && !S.done.has(c.id)) || null;
+}
+function effectiveChecked(b) {
+  const p = pendingCheck(b.id);
+  return p ? p.checked : b.checked;
+}
+function canCheckFromPc(note) {
+  return !!note && !note.deleted && S.inbox.readable !== false;
+}
+function toggleCheckFromPc(b) {
+  const next = !effectiveChecked(b);
+  S.inbox.checks = (S.inbox.checks || []).filter(c => c.blockId !== b.id || S.done.has(c.id));
+  if (next !== b.checked) S.inbox.checks.push({ id: uuid(), blockId: b.id, noteId: b.noteId, checked: next, at: Date.now() });
+  S.inbox.dirty = true;
+  saveInboxSoon();
+  renderSidebarCounts();
+}
+/** Neuer Stand vom Handy: Haken, die dort schon so sind, braucht es nicht mehr */
+function dropSatisfiedChecks() {
+  if (!S.inbox.checks || !S.inbox.checks.length) return false;
+  const before = S.inbox.checks.length;
+  S.inbox.checks = S.inbox.checks.filter(c => {
+    const note = noteById(c.noteId);
+    const b = note && note.blocks.find(x => x.id === c.blockId);
+    return b && b.checked !== c.checked;
+  });
+  return S.inbox.checks.length !== before;
+}
 // =====================================================================
 // Anmelden → PC-Kopie finden → Passwort → App
 // =====================================================================
@@ -3697,7 +3806,7 @@ async function unlock(secret) {
   }
   S.db = buildDb(snap);
   // „Vom PC“ + übernommen
-  S.inbox = { notes: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [], state: null };
+  S.inbox = { notes: [], checks: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [], state: null };
   try {
     await Promise.all([loadInbox(S.files.get(F_INBOX)), loadDone(S.files.get(F_DONE))]);
   } catch (e) { toast("„Vom PC“ konnte nicht geladen werden: " + e.message, { bad: true }); }
@@ -3769,6 +3878,8 @@ async function poll(manual) {
       await loadInbox(inbox);
       if (S.route.view === "pc" && !S.pcId) renderList();
     }
+    // NEU (AH-3): übernommene Haken aufräumen
+    if ((S.inbox.checks || []).some(c => S.done.has(c.id)) && !saving) saveInbox();
     if (S.done.size !== doneBefore || S.inbox.notes.some(n => S.done.has(n.id))) {
       const newlyTaken = S.inbox.notes.filter(n => S.done.has(n.id));
       if (newlyTaken.length) {
@@ -3818,6 +3929,7 @@ async function refreshMirror(file) {
   for (const id of old.notes.keys()) if (!db.notes.has(id)) changed++;
   S.db = db;
   S.extras = extras;
+  if (dropSatisfiedChecks()) { S.inbox.dirty = true; saveInboxSoon(); } // NEU (AH-3)
   S.meta = meta;
   S.zip = zip;
   S.mirror = { id: file.id, modifiedTime: file.modifiedTime };
@@ -3858,7 +3970,7 @@ async function lock(message) {
   clearTimeout(S.pollTimer); clearInterval(S.lockTimer); clearInterval(S.clockTimer);
   closeDialog(); closeLightbox(); closeMenu();
   S.key = null; S.db = null; S.extras = { calc: {}, work: {} };
-  S.inbox = { notes: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
+  S.inbox = { notes: [], checks: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
   S.done = new Set(); S.doneModified = null;
   S.fresh.clear(); S.collapsed.clear(); S.page.clear(); S.query = ""; S.findTerms = null;
   clearImages();
@@ -3881,7 +3993,7 @@ async function logout() {
   S.unlocked = false;
   clearTimeout(S.pollTimer); clearInterval(S.lockTimer); clearInterval(S.clockTimer);
   S.key = null; S.db = null; S.zip = null; S.meta = null; S.mirror = null;
-  S.inbox = { notes: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
+  S.inbox = { notes: [], checks: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
   clearImages();
   revokeToken();
   S.user = null; S.folderId = null; S.files = new Map();
@@ -3945,7 +4057,7 @@ function openShortcuts() {
     h("h2", { style: { marginTop: "22px" } }, icon("help"), "Gut zu wissen"),
     h("ul", { class: "small", style: { margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "var(--muted)" } },
       h("li", null, "Das Handy lädt Änderungen etwa 1 Minute nach dem Bearbeiten hoch. Die Web-App schaut jede Minute nach."),
-      h("li", null, "Am PC kannst du nichts an deinen Handy-Notizen ändern – nur in „Vom PC“ schreiben. So kann nichts kaputtgehen."),
+      h("li", null, "Am PC schreibst du nur in „Vom PC“. Abhaken geht auch hier: Der Haken wird als Vorschlag gespeichert und vom Handy übernommen („→ Handy“). Sonst ändert der PC nie etwas an deinen Notizen."),
       h("li", null, "Rechnungen und Arbeitszeit zeigen die Ergebnisse, die das Handy berechnet hat."),
       h("li", null, "Der versteckte Bereich ist nie auf dem PC."),
       h("li", null, "Über Kopier-Symbole neben Blöcken: Tabellen gehen direkt in Excel, Links auf Stellen in „Vom PC“."))
@@ -4024,8 +4136,8 @@ async function boot() {
       S.db = buildDb(d.snapshot);
       S.extras = d.extras;
       S.files = new Map();
-      S.inbox = { notes: parseInbox(d.inbox).notes, fileId: "demo", modifiedTime: "demo", base: new Map(), readable: true, taken: [], state: null };
-      S.inbox.base = new Map(S.inbox.notes.map(n => [n.id, n.modified]));
+      S.inbox = { notes: parseInbox(d.inbox).notes, checks: [], fileId: "demo", modifiedTime: "demo", base: new Map(), readable: true, taken: [], state: null };
+      S.inbox.base = inboxBase();
       S.done = new Set(d.done || []);
       window.MyNotesTest = { readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
       startApp();
