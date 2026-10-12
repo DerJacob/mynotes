@@ -812,3 +812,7 @@ a.url { color: var(--link); overflow-wrap: anywhere; }
 /* NEU (AN): Steckbrief-Gruppen */
 .profile-group { display: flex; align-items: center; gap: 8px; margin: 12px 0 2px; padding: 0 8px; font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
 .profile-row .v.mono { font-family: var(--mono); font-size: .92rem; }
+
+.tt-now-row { gap: 10px; }
+.tt-now-row .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.tt-now-row .t { font-weight: 600; }

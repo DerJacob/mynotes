@@ -3124,12 +3124,32 @@ function renderDashboard(main) {
 
   // Erinnerungen
   const rem = [...db.notes.values()].filter(n => n.reminder && !n.deleted && !n.template && n.reminder > now - 7 * 86_400_000).sort((a, b) => a.reminder - b.reminder).slice(0, 7);
+  // NEU (AR): Stundenplan – was läuft gerade, was kommt als Nächstes (wie am Handy)
+  const ttRows = [];
+  for (const n of active) {
+    for (const b of n.blocks) {
+      if (b.type !== "TIMETABLE") continue;
+      let raw = {};
+      try { raw = JSON.parse(b.content || "{}"); } catch (_) {}
+      if (raw.home === false) continue;
+      const tt = timetableParse(b.content);
+      if (!tt.slots.length) continue;
+      const { current, next } = ttNowNext(tt);
+      if (!current && !next) continue;
+      const e = current || next;
+      ttRows.push(h("button", { class: "row-link tt-now-row", onclick: () => openNote(n.id) },
+        h("span", { class: "dot", style: { background: ttColor(e.c) } }),
+        h("span", { class: "t" }, current ? "Jetzt: " + current.t + (current.room ? " (" + current.room + ")" : "") : "Als Nächstes: " + next.t + (next.room ? " (" + next.room + ")" : "")),
+        h("span", { class: "d" }, current ? "bis " + ttFmt(ttEnd(tt, current)) + (next ? " · danach " + next.t : "") : ttFmt(tt.slots[next.s].s))));
+    }
+  }
   grid.appendChild(h("div", { class: "panel" }, h("h3", null, icon("bell"), h("span", { class: "grow" }, "Anstehend"),
     h("button", { class: "btn subtle small", onclick: () => go({ view: "reminders" }, null) }, "Alle")),
+  ttRows,
   rem.length ? rem.map(n => h("button", { class: "row-link", onclick: () => openNote(n.id) },
     h("span", { class: "t" }, n.title || "Ohne Titel"),
     h("span", { class: "d" + (n.reminder < now && !n.reminderRepeat ? " over" : "") }, relDay(n.reminder, n.reminderHasTime))))
-    : h("div", { class: "muted small" }, "Keine Erinnerungen in Sicht.")));
+    : ttRows.length ? null : h("div", { class: "muted small" }, "Keine Erinnerungen in Sicht.")));
 
   // Aufgaben (wichtigste zuerst)
   const tasks = [];
