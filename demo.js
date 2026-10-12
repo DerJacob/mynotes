@@ -203,6 +203,35 @@
       B("TEXT", "Beispieltext Nummer " + (i - 26) + ". Hier steht etwas zum Durchsuchen – z. B. Kaffee, Statistik oder Gardasee.")
     ]);
   }
+  // NEU (AR): Stundenplan wie die Skizze
+  note(48, "Stundenplan WiSe", { folders: [4], favorite: true, modifiedAt: now - 30 * MIN }, [
+    B("TIMETABLE", JSON.stringify({
+      v: 1, days: [1, 2, 3, 4, 5], ab: true, aMon: null,
+      slots: [{ s: "07:45", e: "10:50", l: "Pause 09:15–09:30" }, { s: "11:00", e: "14:30", l: "Pause 12:30–13:00" }, { s: "14:35", e: "17:45", l: "Pause 16:00–16:10" }],
+      entries: [
+        { id: "a", t: "Arbeit", c: 0xFFA8EFEA, d: 1, s: 0, n: 2 },
+        { id: "b", t: "Labor Regelung", c: 0xFFD9A0F5, d: 1, s: 2, n: 1, who: "Th. Rottpeter", room: "V7-2.15" },
+        { id: "c", t: "Projekt-management", c: 0xFFFFF27A, d: 2, s: 0, n: 1, who: "Ralf Thümler", room: "V7-0.04", tag: "Projekt" },
+        { id: "d", t: "Mathe 2", c: 0xFF9BA2F7, d: 2, s: 1, n: 1, who: "St. Kraft", room: "V7-0.15" },
+        { id: "e", t: "Labor EMAL", c: 0xFF8A8A8A, d: 2, s: 1, n: 1, room: "V7-3.04", w: "B" },
+        { id: "f", t: "Labor Nachhaltige Energiesysteme", c: 0xFF86E879, d: 2, s: 2, n: 1, who: "Richard Heinzen", room: "V7-3.04" },
+        { id: "g", t: "Arbeit", c: 0xFFA8EFEA, d: 3, s: 0, n: 3 },
+        { id: "h", t: "Fertigungs-planung", c: 0xFFF78B8B, d: 4, s: 1, n: 1, who: "Hr. Becker", room: "V7-3.02" },
+        { id: "i", t: "Unternehmens-gründung", c: 0xFFC2A07F, d: 4, s: 1, n: 1, who: "Dan. Pfennig", room: "V3-203" },
+        { id: "j", t: "Arbeit", c: 0xFFA8EFEA, d: 5, s: 0, n: 3 }
+      ]
+    }))
+  ]);
+  // NEU (AO): Wochenplan mit Über-Überschrift
+  note(49, "Wochenplan", { folders: [5], modifiedAt: now - 80 * MIN }, [
+    B("HEADING", "KW 41 · 05.10.2026 – 11.10.2026", { priority: 1, collapsed: true }),
+    B("HEADING", "Arbeit"), B("CHECKLIST_ITEM", "Bericht", { checked: true }),
+    B("HEADING", "KW 42 · 12.10.2026 – 18.10.2026", { priority: 1 }),
+    B("HEADING", "Arbeit"), B("CHECKLIST_ITEM", "E-Pläne digitalisieren", { priority: 2 }), B("CHECKLIST_ITEM", "Meeting vorbereiten"),
+    B("HEADING", "Uni"), B("CHECKLIST_ITEM", "Mathe-Übung abgeben"),
+    B("HEADING", "Unterlagen", { priority: 3 }), B("TEXT", "Skript Kapitel 3 lesen"),
+    B("HEADING", "Privat"), B("CHECKLIST_ITEM", "Einkaufen")
+  ]);
   // Wochenend-Notiz ohne Ordner mit Überschrift
   const dividers = [
     { id: 1, area: 1, parentId: null, kind: 0, title: "Beruf", sort: 0, collapsed: false },
@@ -239,6 +268,7 @@
   const calcBlock = blocks.find(b => b.type === "CALC");
   const workBlock = blocks.find(b => b.type === "WORKTIME");
   const extras = {
+    settings: { auto: true },
     calc: {
       [calcBlock.id]: [{ h: true }, { v: "2.450,00 €", a: false }, { v: "380,00 €", a: false }, null, { h: true }, { v: "820,00 €", a: false }, { v: "65,00 €", a: false }, { v: "18,00 €", a: false }, { v: "340,00 €", a: false }, { v: "1.243,00 €", a: true }, null, { v: "1.587,00 €", a: false }]
     },
@@ -255,8 +285,14 @@
     notes: [
       { id: "demo-pc-1", title: "Link für später", created: now - 2 * 3600_000, modified: now - 2 * 3600_000, md: "https://developer.android.com/jetpack/compose\n\n- [ ] Am Wochenende lesen", blocks: [] },
       { id: "demo-pc-2", title: "Antwort an Vermieter", created: now - DAY, modified: now - 20 * 3600_000, md: "Sehr geehrter Herr Schmidt,\n\nvielen Dank für Ihre Nachricht. Der Übergabetermin am 31.10. passt mir gut.\n\nMit freundlichen Grüßen", blocks: [] },
-      { id: "demo-pc-3", title: "Todo vom Büro-PC", created: now - 3 * DAY, modified: now - 3 * DAY, md: "- [x] Drucker bestellt\n- [ ] Rechnung weiterleiten", blocks: [] }
-    ]
+      { id: "demo-pc-3", title: "Todo vom Büro-PC", created: now - 3 * DAY, modified: now - 3 * DAY, md: "- [x] Drucker bestellt\n- [ ] Rechnung weiterleiten", blocks: [] },
+      { id: "demo-pc-4", title: "Literatur Seminar", created: now - 40 * MIN, modified: now - 40 * MIN, md: "## Quellen\n- [ ] Buch aus der Bibliothek holen", blocks: [], folderId: 4 }
+    ],
+    edits: [{
+      id: "demo-edit-1", noteId: 1, noteTitle: "Einkaufsliste", at: now - 10 * MIN, base: now - 4 * MIN, title: null,
+      sets: [{ blockId: 101, from: "Milch", to: "Hafermilch (2 Packungen)", checked: false, level: null }],
+      dels: [], adds: [{ tmp: "demoadd1", after: 106, page: 0, type: "CHECKLIST_ITEM", content: "Batterien AA", checked: false, level: null }]
+    }]
   };
   window.MyNotesDemo = {
     setup() {

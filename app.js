@@ -53,8 +53,8 @@ const S = {
   key: null,               // CryptoKey (nicht auslesbar)
   db: null,                // aufbereitete Daten (siehe buildDb)
   extras: { calc: {}, work: {} },
-  inbox: { notes: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, settings: null },
-  done: new Set(), doneModified: null,
+  inbox: { notes: [], checks: [], edits: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, settings: null },
+  done: new Set(), rejected: new Set(), doneModified: null,
   settings: { ...DEFAULT_SETTINGS },
   images: new Map(),       // Bildname → Promise<objectURL>
   fresh: new Set(),        // Notiz-IDs, die sich seit dem Öffnen geändert haben
@@ -130,6 +130,8 @@ function replace(el, ...kids) { clear(el); append(el, kids); return el; }
 // Icons (Material Icons, Apache 2.0)
 // ---------------------------------------------------------------------
 const ICONS = {
+  swap: "M6.99 11 3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z",
+  split: "M3 15h8v-2H3v2zm0 4h8v-2H3v2zm0-8h8V9H3v2zm0-6v2h8V5H3zm10 0h8v14h-8V5z",
   search: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
   folder: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
   star: "M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z",
@@ -697,6 +699,28 @@ function buildDb(snap) {
 }
 
 const isActive = n => !n.deleted && !n.archived && !n.template;
+/** NEU (AO): Ebene einer Überschrift – 1 Über, 2 normal (auch alle alten), 3 Unter (steht in `priority`) */
+const headingLevel = b => b.priority >= 1 && b.priority <= 3 ? b.priority : 2;
+/**
+ * NEU (AM): Alle Notizen in einem Ordner – inkl. Unterordner und verknüpfter Ordner,
+ * jede Notiz nur einmal (Notizen an mehreren Orten). Zwischengespeichert pro Datenstand.
+ */
+function folderTotal(folder) {
+  const db = S.db;
+  if (!db._totals) db._totals = new Map();
+  if (db._totals.has(folder.id)) return db._totals.get(folder.id);
+  const seen = new Set(), notes = new Set(), stack = [folder];
+  while (stack.length) {
+    const f = stack.pop();
+    if (!f || seen.has(f.id)) continue;
+    seen.add(f.id);
+    f.noteIds.forEach(id => notes.add(id));
+    f.children.forEach(c => stack.push(c));
+    (db.links.get("f" + f.id) || []).forEach(l => stack.push(l.folder));
+  }
+  db._totals.set(folder.id, notes.size);
+  return notes.size;
+}
 const noteById = id => S.db && S.db.notes.get(Number(id));
 const folderById = id => S.db && S.db.folders.get(Number(id));
 
@@ -764,6 +788,7 @@ function blockText(b) {
     case "WORKTIME": { const w = S.extras.work[b.id]; return w ? w.summary : "Arbeitszeit"; }
     case "DRAWING": return drawingTexts(b.content).join("\n");
     case "IMAGE": case "PROJECT": case "DIVIDER": return "";
+    case "TIMETABLE": return timetableText(b.content); // NEU (AR)
     default: return readable(b.content);
   }
 }
@@ -795,6 +820,7 @@ function blockPlainLines(b, note) {
     case "DRAWING": return ["(Zeichnung)"];
     case "IMAGE": return ["(Bild)"];
     case "PROJECT": return [projectSummaryText(note, b.page)];
+    case "TIMETABLE": return timetableText(b.content).split("\n"); // NEU (AR)
     default: return [readable(b.content)];
   }
 }
@@ -817,7 +843,8 @@ function noteMarkdown(note) {
     if (prev && !(prev === "CHECKLIST_ITEM" && b.type === "CHECKLIST_ITEM")) out.push("");
     prev = b.type;
     switch (b.type) {
-      case "HEADING": out.push((note.pages ? "### " : "## ") + readable(b.content).replace(/\n/g, " ")); break;
+      // GEÄNDERT (AO): Ebene 1–3 → ## / ### / #### (wie der Markdown-Export am Handy)
+      case "HEADING": out.push("#".repeat(headingLevel(b) + 1) + " " + readable(b.content).replace(/\n/g, " ")); break;
       case "CHECKLIST_ITEM": out.push((b.checked ? "- [x] " : "- [ ] ") + (b.priority > 0 ? "!".repeat(b.priority) + " " : "") + readable(b.content).replace(/\n/g, " ")); break;
       case "CODE": out.push("```", b.content, "```"); break;
       case "DIVIDER": out.push("---"); break;
@@ -832,6 +859,7 @@ function noteMarkdown(note) {
       case "WORKTIME": { const w = S.extras.work[b.id]; out.push(w ? w.summary : "⏱ Arbeitszeit"); break; }
       case "PROJECT": out.push("**" + projectSummaryText(note, b.page) + "**"); break;
       case "DRAWING": out.push("*(Zeichnung)*"); break;
+      case "TIMETABLE": out.push(timetableText(b.content)); break; // NEU (AR)
       case "IMAGE": out.push("*(Bild)*"); break;
       default: out.push(readable(b.content));
     }
@@ -1018,7 +1046,8 @@ function snippets(note, ts, max = 2) {
 
 // ---------------------------------------------------------------------
 // „Vom PC“: einfache Schreibweise ⇄ Blöcke
-//   # Überschrift · - [ ] Punkt · - [x] erledigt · --- Trennlinie · ``` Code ```
+//   # Über-Überschrift · ## Überschrift · ### Unter-Überschrift (NEU AO)
+//   - [ ] Punkt · - [x] erledigt · --- Trennlinie · ``` Code ```
 // ---------------------------------------------------------------------
 const CHECK_RE = /^\s*(?:[-*+]\s*)?\[( |x|X)\]\s?(.*)$/;
 const CHECK_ALT_RE = /^\s*([☐☑✓✔])\s?(.*)$/;
@@ -1044,7 +1073,7 @@ function markupToBlocks(text) {
       continue;
     }
     let m;
-    if (/^#{1,6}\s+/.test(t)) { flushText(); blocks.push({ type: "HEADING", content: t.replace(/^#{1,6}\s+/, ""), checked: false }); continue; }
+    if ((m = /^(#{1,6})\s+/.exec(t))) { flushText(); blocks.push({ type: "HEADING", content: t.replace(/^#{1,6}\s+/, ""), checked: false, level: Math.min(3, m[1].length) }); continue; }
     if ((m = CHECK_RE.exec(line))) { flushText(); blocks.push({ type: "CHECKLIST_ITEM", content: m[2], checked: m[1] !== " " }); continue; }
     if ((m = CHECK_ALT_RE.exec(line))) { flushText(); blocks.push({ type: "CHECKLIST_ITEM", content: m[2], checked: m[1] !== "☐" }); continue; }
     if (/^(-{3,}|\*{3,}|_{3,}|—{2,})$/.test(t)) { flushText(); blocks.push({ type: "DIVIDER", content: "", checked: false }); continue; }
@@ -1060,7 +1089,7 @@ function blocksToMarkup(blocks) {
     if (prev && !(prev === "CHECKLIST_ITEM" && b.type === "CHECKLIST_ITEM") && !(prev === "HEADING")) out.push("");
     prev = b.type;
     switch (b.type) {
-      case "HEADING": out.push("# " + b.content.replace(/\n/g, " ")); break;
+      case "HEADING": out.push("#".repeat(b.level || 2) + " " + b.content.replace(/\n/g, " ")); break;
       case "CHECKLIST_ITEM": out.push((b.checked ? "- [x] " : "- [ ] ") + b.content.replace(/\n/g, " ")); break;
       case "CODE": out.push("```", b.content, "```"); break;
       case "DIVIDER": out.push("---"); break;
@@ -1075,7 +1104,7 @@ function noteToMarkup(note) {
   for (const b of note.blocks) {
     switch (b.type) {
       case "TEXT": case "HEADING": case "CHECKLIST_ITEM": case "CODE": case "DIVIDER":
-        blocks.push({ type: b.type, content: b.content, checked: b.checked }); break;
+        blocks.push({ type: b.type, content: b.content, checked: b.checked, level: b.type === "HEADING" ? headingLevel(b) : undefined }); break;
       case "TABLE": blocks.push({ type: "TEXT", content: parseTable(b.content).map(r => r.map(c => c.trim()).join(" | ")).join("\n") }); break;
       case "CALC": blocks.push({ type: "CODE", content: b.content }); break;
       case "IMAGE": case "DRAWING": case "PROJECT": break;
@@ -1598,19 +1627,24 @@ const PRIO = { 1: ["p1", "!", "Niedrige Priorität"], 2: ["p2", "!!", "Mittlere 
  */
 function renderBlocks(blocks, opts = {}) {
   const root = h("div", { class: "blocks" });
-  let target = root;
   let hiddenDone = 0;
-  let sectionInfo = null;
+  // GEÄNDERT (AO): Überschriften mit Ebenen – ein Abschnitt reicht bis zur nächsten Überschrift
+  // gleicher oder höherer Ebene; tiefere Überschriften liegen IM Abschnitt (klappen mit ein).
+  const stack = []; // offene Abschnitte { level, body, info }
+  const target = () => stack.length ? stack[stack.length - 1].body : root;
   for (const b of blocks) {
     if (b.type === "HEADING") {
+      const level = b.level || headingLevel(b);
+      while (stack.length && stack[stack.length - 1].level >= level) stack.pop().info.apply();
       const wasCollapsed = b.id != null && S.collapsed.has(b.id) ? !!S.collapsed.get(b.id) : !!(b.collapsed && !opts.preview);
-      const body = h("div", { class: "section-body" });
+      const body = h("div", { class: "section-body lv" + level });
       const toggle = h("button", { class: "tree-toggle" + (wasCollapsed ? "" : " open"), title: "Ein-/Ausklappen", type: "button" }, icon("chevron", "sm"));
       const count = h("span", { class: "hidden-count" });
-      const head = h("div", { class: "b-heading" }, toggle, h("h2", null, inline(b.content, opts.ts), " ", count));
+      const head = h("div", { class: "b-heading lv" + level }, toggle, h(level === 1 ? "h2" : level === 2 ? "h3" : "h4", null, inline(b.content, opts.ts), " ", count));
       const blk = wrapBlock(b, head, opts);
-      root.appendChild(blk);
-      root.appendChild(body);
+      stack.forEach(x => x.info.n++);
+      target().appendChild(blk);
+      target().appendChild(body);
       const info = { body, toggle, count, collapsed: wasCollapsed, n: 0 };
       const apply = () => {
         body.classList.toggle("collapsed", info.collapsed);
@@ -1619,18 +1653,16 @@ function renderBlocks(blocks, opts = {}) {
       };
       toggle.onclick = () => { info.collapsed = !info.collapsed; if (b.id != null) S.collapsed.set(b.id, info.collapsed); apply(); };
       info.apply = apply;
-      sectionInfo && sectionInfo.apply();
-      sectionInfo = info;
-      target = body;
+      stack.push({ level, body, info });
       continue;
     }
     if (b.type === "CHECKLIST_ITEM" && b.checked && S.settings.hideDone && !opts.preview) { hiddenDone++; continue; }
     const el = renderBlock(b, opts);
     if (!el) continue;
-    target.appendChild(el);
-    if (sectionInfo) sectionInfo.n++;
+    target().appendChild(el);
+    stack.forEach(x => x.info.n++);
   }
-  sectionInfo && sectionInfo.apply();
+  while (stack.length) stack.pop().info.apply();
   if (hiddenDone) {
     root.appendChild(h("button", {
       class: "chip", style: { marginTop: "10px", alignSelf: "flex-start" },
@@ -1641,14 +1673,15 @@ function renderBlocks(blocks, opts = {}) {
 }
 
 function wrapBlock(b, inner, opts, copy) {
-  const el = h("div", { class: "blk", id: b.id != null ? "b" + b.id : null });
+  const el = h("div", { class: "blk" + (b.pendingEdit ? " pending-edit" : ""), id: b.id != null ? "b" + b.id : null });
+  if (b.pendingEdit) el.title = "Am PC geändert – wartet aufs Handy";
   const hl = highlightColor(b.highlight);
   if (hl) { el.classList.add("hlbg"); el.style.setProperty("--hl", hl); }
   el.appendChild(inner);
   if (opts.tools && !opts.preview) {
     const tools = h("div", { class: "blk-tools" });
     if (copy) tools.appendChild(iconBtn("copy", copy.title || "Kopieren", e => { e.stopPropagation(); copyText(copy.text(), copy.done || "Kopiert"); }, "sm"));
-    if (opts.note && b.id != null && ["HEADING", "TEXT", "CHECKLIST_ITEM", "TABLE", "CODE", "CALC"].includes(b.type)) {
+    if (opts.note && typeof b.id === "number" && ["HEADING", "TEXT", "CHECKLIST_ITEM", "TABLE", "CODE", "CALC"].includes(b.type)) {
       tools.appendChild(iconBtn("link", "Link auf diese Stelle kopieren (für „Vom PC“)", e => {
         e.stopPropagation();
         const section = readable(b.content).split("\n").find(l => l.trim()) || "";
@@ -1671,7 +1704,7 @@ function renderBlock(b, opts) {
     case "CHECKLIST_ITEM": {
       const prio = PRIO[b.priority];
       // NEU (AH-3): am PC abhaken → wird beim nächsten Abgleich am Handy übernommen
-      const live = !opts.preview && b.id != null && canCheckFromPc(opts.note);
+      const live = !opts.preview && typeof b.id === "number" && canCheckFromPc(opts.note) && !b.pendingEdit;
       const pending = live ? pendingCheck(b.id) : null;
       const checked = pending ? pending.checked : b.checked;
       const box = h(live ? "button" : "span", {
@@ -1757,16 +1790,40 @@ function renderBlock(b, opts) {
       return wrapBlock(b, box, opts);
     }
     case "PROFILE": {
+      // GEÄNDERT (AN): wie am Handy – Kopf mit Farbe, Gruppen, IBAN verdeckt bis „Anzeigen“
       const fields = parseProfile(b.content);
       const name = (fields.find(f => f.l.toLowerCase() === "name") || {}).v || "";
+      const subtitle = fields.filter(f => PROFILE_SUB.has(f.l.trim().toLowerCase()) && f.v.trim()).map(f => f.v.trim()).join(" · ");
+      const rest = fields.filter(f => f.v.trim() && f.l.toLowerCase() !== "name" && !PROFILE_SUB.has(f.l.trim().toLowerCase()));
+      let reveal = false;
       const card = h("div", { class: "b-profile" },
         h("div", { class: "profile-head" }, h("div", { class: "avatar" }, initials(name)),
-          h("div", { class: "grow" }, h("h3", null, name || "Steckbrief"), h("div", { class: "small muted" }, "Zeile anklicken = kopieren"))));
-      for (const f of fields.filter(f => f.v.trim())) {
-        const row = h("div", { class: "profile-row", title: "„" + f.l + "“ kopieren", onclick: () => copyText(f.v, "„" + f.l + "“ kopiert") },
-          h("div", { class: "l" }, f.l), h("div", { class: "v" }), h("span", { class: "copy" }, icon("copy", "sm")));
-        appendMarked(row.children[1], f.v, ts);
-        card.appendChild(row);
+          h("div", { class: "grow" }, h("h3", null, name || "Steckbrief"),
+            h("div", { class: "small muted" }, subtitle || "Zeile anklicken = kopieren"))));
+      const groups = new Map();
+      for (const f of rest) { const g = profileGroup(f.l); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(f); }
+      const valueEls = [];
+      for (const g of PROFILE_GROUPS) {
+        const list = groups.get(g);
+        if (!list) continue;
+        const hasSecret = list.some(f => profileSecret(f.l));
+        const head = h("div", { class: "profile-group" }, h("span", { class: "grow" }, g));
+        if (hasSecret) head.appendChild(h("button", {
+          class: "btn subtle small", type: "button", onclick: e => {
+            e.stopPropagation(); reveal = !reveal;
+            valueEls.forEach(x => { x.el.textContent = profileDisplay(x.f, reveal); });
+            e.currentTarget.textContent = reveal ? "Verbergen" : "Anzeigen";
+          }
+        }, "Anzeigen"));
+        card.appendChild(head);
+        for (const f of list) {
+          const v = h("div", { class: "v" + (profileIsIban(f.l) ? " mono" : "") });
+          if (profileSecret(f.l) || profileIsIban(f.l)) { v.textContent = profileDisplay(f, false); valueEls.push({ el: v, f }); }
+          else appendMarked(v, profileDisplay(f, true), ts);
+          const copyVal = profileIsIban(f.l) ? f.v.replace(/\s/g, "").toUpperCase() : f.v.trim();
+          card.appendChild(h("div", { class: "profile-row", title: "„" + f.l + "“ kopieren", onclick: () => copyText(copyVal, "„" + f.l + "“ kopiert") },
+            h("div", { class: "l" }, f.l), v, h("span", { class: "copy" }, icon("copy", "sm"))));
+        }
       }
       const el = wrapBlock(b, card, opts, { text: () => fields.filter(f => f.v).map(f => f.l + ": " + f.v).join("\n"), title: "Alles kopieren" });
       if (opts.tools && !opts.preview) {
@@ -1806,6 +1863,8 @@ function renderBlock(b, opts) {
       box.appendChild(list);
       return wrapBlock(b, box, opts);
     }
+    case "TIMETABLE": // NEU (AR)
+      return wrapBlock(b, timetableEl(b.content), opts, { text: () => timetableText(b.content), title: "Stundenplan als Text kopieren" });
     default:
       return wrapBlock(b, h("div", { class: "unknown-block" }, "Dieser Inhalt („" + b.type + "“) wird am PC noch nicht angezeigt."), opts);
   }
@@ -1837,11 +1896,15 @@ function vCard(fields) {
 // Karten in Listen
 // =====================================================================
 function noteCard(note, opts = {}) {
+  note = effectiveNote(note); // NEU (AS): offene Änderungen vom PC auch in der Vorschau
   const card = h("div", {
     class: "card" + (note.color ? " colored" : "") + (S.noteId === note.id ? " on" : ""),
     tabindex: "0", role: "button", dataset: { note: String(note.id) },
-    onclick: () => openNote(note.id, { ts: opts.ts }),
-    onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); openNote(note.id, { ts: opts.ts }); } }
+    // GEÄNDERT (AT): Strg/⌘-Klick oder Mittelklick = daneben öffnen, Rechtsklick = Menü
+    onclick: e => { if (e.ctrlKey || e.metaKey) openSplit(note.id); else openNote(note.id, { ts: opts.ts }); },
+    onauxclick: e => { if (e.button === 1) { e.preventDefault(); openSplit(note.id); } },
+    oncontextmenu: e => noteContextMenu(e, note),
+    onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); if (e.ctrlKey || e.metaKey) openSplit(note.id); else openNote(note.id, { ts: opts.ts }); } }
   });
   if (note.color) card.style.setProperty("--note-color", note.color);
   const title = h("div", { class: "card-title" },
@@ -1934,6 +1997,7 @@ function cardPreview(note, budget, tile) {
       }
       case "WORKTIME": { const w = S.extras.work[b.id]; box.appendChild(h("div", { class: "ln" }, w ? w.summary : "⏱ Arbeitszeit")); lines++; break; }
       case "PROJECT": box.appendChild(h("div", { class: "ln" }, projectSummaryText(note, b.page))); lines++; break;
+      case "TIMETABLE": box.appendChild(h("div", { class: "ln" }, timetableSummary(b.content))); lines++; break; // NEU (AR)
       case "DRAWING": if (!thumb && b.content.trim()) thumb = { type: "d", b }; break;
       case "IMAGE": if (!thumb && b.content) thumb = { type: "i", b }; break;
     }
@@ -1952,7 +2016,7 @@ function cardPreview(note, budget, tile) {
 function folderCard(folder, linked = false) {
   const sub = [];
   if (folder.children.length) sub.push(plural(folder.children.length, "Unterordner", "Unterordner"));
-  sub.push(plural(folder.noteIds.length, "Notiz", "Notizen"));
+  sub.push(plural(folderTotal(folder), "Notiz", "Notizen")); // GEÄNDERT (AM): inkl. Unterordner
   let progress = null;
   if (folder.project) {
     const pb = projectBoard(folder);
@@ -1970,6 +2034,204 @@ function folderCard(folder, linked = false) {
   h("div", { class: "sub" }, sub.join(" · ")),
     progress != null ? h("div", { class: "progress" }, h("div", { style: { width: Math.round(progress * 100) + "%" } })) : null),
   icon("chevron", "sm"));
+}
+
+
+// ---------------------------------------------------------------------
+// NEU (AN): Steckbrief-Hilfen (wie Profile in ProfileBlock.kt)
+// ---------------------------------------------------------------------
+const PROFILE_SUB = new Set(["beruf", "rolle", "firma", "position"]);
+const PROFILE_GROUPS = ["Persönlich", "Kontakt", "Adresse", "Nummern & Konten", "Weiteres"];
+function profileKey(l) { return String(l || "").trim().toLowerCase(); }
+function profileIsIban(l) { return profileKey(l).includes("iban"); }
+function profileSecret(l) { const k = profileKey(l); return ["iban", "konto", "pin", "passwort", "steuer", "ausweis"].some(x => k.includes(x)); }
+function profileGroup(l) {
+  const k = profileKey(l);
+  if (["e-mail", "email", "mail", "telefon", "handy", "mobil", "festnetz", "webseite", "website", "homepage"].includes(k)) return "Kontakt";
+  if (["anschrift", "adresse"].includes(k)) return "Adresse";
+  if (profileSecret(l) || k.includes("nummer") || k.endsWith("-id")) return "Nummern & Konten";
+  if (["geburtstag", "geburtsdatum"].includes(k) || PROFILE_SUB.has(k)) return "Persönlich";
+  return "Weiteres";
+}
+function profileDisplay(f, reveal) {
+  const v = f.v.trim();
+  if (profileIsIban(f.l)) {
+    const c = v.replace(/\s/g, "").toUpperCase();
+    const grouped = c.replace(/(.{4})/g, "$1 ").trim();
+    return reveal || c.length < 8 ? grouped : c.slice(0, 4) + " •••• •••• " + c.slice(-4);
+  }
+  if (profileSecret(f.l) && !reveal) return "•".repeat(Math.min(12, Math.max(4, v.length)));
+  const k = profileKey(f.l);
+  if (k === "geburtstag" || k === "geburtsdatum") {
+    const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(v);
+    if (m) {
+      const d = new Date(+m[3], +m[2] - 1, +m[1]), now = new Date();
+      let age = now.getFullYear() - d.getFullYear();
+      if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) age--;
+      return v + " · " + age + " Jahre";
+    }
+  }
+  return v;
+}
+// =====================================================================
+// NEU (AR): Stundenplan (Format siehe Timetable.kt)
+// {"v":1,"days":[1..7],"slots":[{s:"07:45",e:"10:50",l:"Pause …"}],"ab":bool,"aMon":"2026-10-12",
+//  "entries":[{id,t,c (ARGB-Zahl),d (1=Mo),s (Block),n (Länge),who,room,tag,w ("",A,B),info}]}
+// =====================================================================
+const TT_DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const TT_DAYS_LONG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+
+function timetableParse(content) {
+  let j = {};
+  try { j = content && content.trim() ? JSON.parse(content) : {}; } catch (_) { j = {}; }
+  const slots = (j.slots || []).filter(x => x && x.s && x.e).map(x => ({ s: x.s, e: x.e, l: x.l || "" }));
+  const days = (j.days || [1, 2, 3, 4, 5]).filter(d => d >= 1 && d <= 7).sort((a, b) => a - b);
+  return {
+    days: days.length ? days : [1, 2, 3, 4, 5],
+    slots,
+    ab: !!j.ab,
+    aMon: j.aMon || null,
+    entries: (j.entries || []).filter(e => e && e.id).map(e => ({
+      id: String(e.id), t: e.t || "", c: Number(e.c) || 0xFFA8EFEA, d: e.d || 1, s: e.s || 0, n: Math.max(1, e.n || 1),
+      who: e.who || "", room: e.room || "", tag: e.tag || "", w: e.w || "", info: e.info || ""
+    }))
+  };
+}
+function ttMin(hm) { const [h, m] = String(hm).split(":").map(Number); return (h || 0) * 60 + (m || 0); }
+function ttFmt(hm) { const [h, m] = String(hm).split(":"); return Number(h) + ":" + (m || "00").padStart(2, "0"); }
+function ttColor(argb) { return "#" + (Number(argb) & 0xFFFFFF).toString(16).padStart(6, "0"); }
+function ttMonday(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+/** "A"/"B" für diese Woche – null, wenn A/B aus */
+function ttWeekOf(tt, date = new Date()) {
+  if (!tt.ab) return null;
+  if (!tt.aMon) return "A";
+  const ref = new Date(tt.aMon + "T00:00:00");
+  const weeks = Math.round((ttMonday(date) - ttMonday(ref)) / (7 * 86_400_000));
+  return ((weeks % 2) + 2) % 2 === 0 ? "A" : "B";
+}
+function ttVisible(tt, week) {
+  return tt.entries.filter(e => tt.days.includes(e.d) && e.s < tt.slots.length && (week == null || !e.w || e.w === week));
+}
+function ttEnd(tt, e) { return tt.slots[Math.min(tt.slots.length - 1, e.s + e.n - 1)].e; }
+/** Überschneidungen je Tag → nebeneinander: id → [Spur, Spuren] */
+function ttLanes(entries) {
+  const out = new Map();
+  const byDay = new Map();
+  entries.forEach(e => { if (!byDay.has(e.d)) byDay.set(e.d, []); byDay.get(e.d).push(e); });
+  for (const list of byDay.values()) {
+    list.sort((a, b) => a.s - b.s || b.n - a.n || a.t.localeCompare(b.t));
+    let group = [], groupEnd = -1;
+    const flush = () => {
+      if (!group.length) return;
+      const ends = [];
+      const lane = new Map();
+      for (const e of group) {
+        let i = ends.findIndex(x => x < e.s);
+        if (i < 0) { ends.push(-1); i = ends.length - 1; }
+        ends[i] = e.s + e.n - 1;
+        lane.set(e.id, i);
+      }
+      group.forEach(e => out.set(e.id, [lane.get(e.id), ends.length]));
+      group = [];
+    };
+    for (const e of list) {
+      if (group.length && e.s > groupEnd) flush();
+      group.push(e);
+      groupEnd = Math.max(groupEnd, e.s + e.n - 1);
+    }
+    flush();
+  }
+  return out;
+}
+function ttNowNext(tt, now = new Date()) {
+  const day = ((now.getDay() + 6) % 7) + 1;
+  const min = now.getHours() * 60 + now.getMinutes();
+  const today = ttVisible(tt, ttWeekOf(tt, now)).filter(e => e.d === day).sort((a, b) => ttMin(tt.slots[a.s].s) - ttMin(tt.slots[b.s].s));
+  const current = today.filter(e => ttMin(tt.slots[e.s].s) <= min && min < ttMin(ttEnd(tt, e))).sort((a, b) => a.n - b.n)[0] || null;
+  const next = today.find(e => ttMin(tt.slots[e.s].s) > min) || null;
+  return { current, next };
+}
+function timetableSummary(content) {
+  const tt = timetableParse(content);
+  const { current, next } = ttNowNext(tt);
+  return ["🗓 Stundenplan · " + plural(tt.entries.length, "Eintrag", "Einträge"),
+    current ? "jetzt: " + current.t : null, next ? "danach: " + next.t + " " + ttFmt(tt.slots[next.s].s) : null].filter(Boolean).join(" · ");
+}
+function timetableText(content) {
+  const tt = timetableParse(content);
+  const out = [];
+  for (const d of tt.days) {
+    const list = tt.entries.filter(e => e.d === d && e.s < tt.slots.length).sort((a, b) => a.s - b.s);
+    if (!list.length) continue;
+    out.push(TT_DAYS_LONG[d - 1]);
+    for (const e of list) {
+      const extra = [e.who, e.room, e.tag, e.w ? "Woche " + e.w : ""].filter(Boolean).join(", ");
+      out.push("  " + ttFmt(tt.slots[e.s].s) + "–" + ttFmt(ttEnd(tt, e)) + " " + e.t + (extra ? " (" + extra + ")" : ""));
+    }
+  }
+  return out.join("\n") || "🗓 Stundenplan (leer)";
+}
+
+/** Raster wie am Handy: Tage × Zeitblöcke, parallele Einträge nebeneinander, Jetzt-Linie */
+function timetableEl(content) {
+  const tt = timetableParse(content);
+  const box = h("div", { class: "b-tt" });
+  if (!tt.slots.length) { box.appendChild(h("div", { class: "muted small" }, "🗓 Stundenplan – noch nicht eingerichtet (am Handy).")); return box; }
+  const thisWeek = ttWeekOf(tt);
+  let week = thisWeek;
+  const draw = () => {
+    clear(box);
+    const now = new Date();
+    const { current, next } = ttNowNext(tt, now);
+    const head = h("div", { class: "tt-head" }, h("b", null, "🗓 Stundenplan"),
+      h("span", { class: "small muted grow" }, [current ? "Jetzt: " + current.t + (current.room ? " (" + current.room + ")" : "") : null,
+        next ? "danach " + ttFmt(tt.slots[next.s].s) + ": " + next.t : null].filter(Boolean).join(" · ")));
+    if (tt.ab) {
+      head.appendChild(seg([["A", "Woche A" + (thisWeek === "A" ? " · jetzt" : "")], ["B", "Woche B" + (thisWeek === "B" ? " · jetzt" : "")], ["*", "Alle"]],
+        week == null ? "*" : week, v => { week = v === "*" ? null : v; draw(); }));
+    }
+    box.appendChild(head);
+    const entries = ttVisible(tt, week);
+    const lanes = ttLanes(entries);
+    const monday = ttMonday(now);
+    const todayD = ((now.getDay() + 6) % 7) + 1;
+    const grid = h("div", { class: "tt-grid", vars: { "--tt-days": String(tt.days.length), "--tt-rows": String(tt.slots.length) } });
+    grid.appendChild(h("div", { class: "tt-corner" }));
+    tt.days.forEach(d => {
+      const date = new Date(monday); date.setDate(monday.getDate() + d - 1);
+      grid.appendChild(h("div", { class: "tt-day" + (d === todayD ? " today" : "") }, TT_DAYS[d - 1] + " " + date.getDate() + "."));
+    });
+    const times = h("div", { class: "tt-times" });
+    tt.slots.forEach(sl => times.appendChild(h("div", { class: "tt-time" }, h("b", null, ttFmt(sl.s)), sl.l ? h("span", { class: "l" }, sl.l) : null, h("span", null, ttFmt(sl.e)))));
+    grid.appendChild(times);
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    let nowPos = null;
+    tt.slots.forEach((sl, i) => { const a = ttMin(sl.s), b = ttMin(sl.e); if (nowMin >= a && nowMin < b) nowPos = i + (nowMin - a) / Math.max(1, b - a); });
+    tt.days.forEach(d => {
+      const col = h("div", { class: "tt-col" + (d === todayD ? " today" : "") });
+      for (const e of entries.filter(x => x.d === d)) {
+        const [lane, n] = lanes.get(e.id) || [0, 1];
+        const span = Math.min(e.n, tt.slots.length - e.s);
+        const bg = ttColor(e.c);
+        const running = d === todayD && (!e.w || e.w === thisWeek) && nowMin >= ttMin(tt.slots[e.s].s) && nowMin < ttMin(ttEnd(tt, e));
+        const el = h("div", {
+          class: "tt-entry" + (isLight(bg) ? "" : " dark") + (n > 1 ? " multi" : "") + (running ? " running" : "") + (e.info ? " has-info" : ""), tabindex: "0",
+          title: [e.t, ttFmt(tt.slots[e.s].s) + "–" + ttFmt(ttEnd(tt, e)), e.who, e.room, e.tag, e.w ? "Woche " + e.w : "", e.info].filter(Boolean).join("\n"),
+          vars: { "--top": String(e.s), "--span": String(span), "--lane": String(lane), "--lanes": String(n), "--tt-bg": bg }
+        },
+        e.who ? h("span", { class: "who" }, e.who) : null,
+        e.tag ? h("span", { class: "tag" }, e.tag) : null,
+        h("span", { class: "t" }, e.t + (e.w ? " (" + e.w + ")" : "")),
+        e.room ? h("span", { class: "room" }, e.room) : null);
+        col.appendChild(el);
+      }
+      if (d === todayD && nowPos != null) col.appendChild(h("div", { class: "tt-now", vars: { "--pos": String(nowPos) } }));
+      grid.appendChild(col);
+    });
+    box.appendChild(h("div", { class: "tt-scroll" }, grid));
+  };
+  draw();
+  return box;
 }
 // =====================================================================
 // Navigation (Adresse enthält nur Nummern – keine Titel, keine Inhalte, keine Suchbegriffe)
@@ -2014,7 +2276,7 @@ function go(route, noteId, { push = true } = {}) {
   const sameRoute = route.view === S.route.view && route.id === S.route.id;
   rememberScroll();
   S.route = { view: route.view, id: route.id };
-  if (noteId !== undefined) { S.noteId = noteId; S.pcId = null; }
+  if (noteId !== undefined) { S.noteId = noteId; S.pcId = null; if (noteId == null) S.split.noteId = null; }
   if (!sameRoute) S.listLimit = 80;
   if (push) history.pushState(null, "", routeHash());
   closeNav();
@@ -2028,6 +2290,13 @@ function openNote(id, { anchor = null, ts = null, blockId = null } = {}) {
   const note = noteById(id);
   if (!note) { toast("Notiz nicht gefunden"); return; }
   rememberScroll();
+  // NEU (AT): Nebeneinander – in der gerade aktiven Spalte öffnen
+  if (splitActive() && S.split.active === "b" && note.id !== S.noteId) {
+    S.split.noteId = note.id;
+    renderMain({ anchor: anchor || blockId });
+    return;
+  }
+  if (splitActive() && note.id === S.split.noteId) { setActivePane("b"); return; }
   S.noteId = note.id;
   S.pcId = null;
   S.findTerms = ts && ts.length ? ts : null;
@@ -2048,6 +2317,7 @@ function openPc(id) {
   setMobilePane("main");
 }
 function closeNote() {
+  if (splitActive()) { closeSplit(S.split.active); return; } // NEU (AT)
   S.noteId = null; S.pcId = null; S.findTerms = null;
   history.pushState(null, "", routeHash());
   markListSelection();
@@ -2238,7 +2508,7 @@ function appendFolderRow(box, f, depth, linked = false) {
       h("span", { class: "tree-name" }, f.name),
       linked ? h("span", { title: "Wird hier zusätzlich gezeigt", style: { display: "inline-flex", color: "var(--muted)" } }, icon("link", "sm")) : null,
       extra,
-      f.noteIds.length ? h("span", { class: "count" }, fmtNum.format(f.noteIds.length)) : null));
+      folderTotal(f) ? h("span", { class: "count", title: "Alle Notizen – auch in Unterordnern" }, fmtNum.format(folderTotal(f))) : null));
   box.appendChild(row);
   if (open && depth < 12) {
     for (const c of f.children) appendFolderRow(box, c, depth + 1);
@@ -2344,9 +2614,19 @@ function renderList() {
   if (m.folder && m.folder.project) {
     tools.appendChild(h("button", { class: "chip accent", onclick: () => { if (S.noteId != null) closeNote(); else renderMain(); } }, icon("project", "sm"), "Projekt-Board"));
   }
+  // NEU (AS): neue Notiz direkt in diesem Ordner
+  if (m.folder && S.inbox.readable !== false) {
+    tools.appendChild(h("button", { class: "chip", title: "Neue Notiz in diesem Ordner – kommt am Handy direkt hierher", onclick: () => newNoteInFolder(m.folder.id) }, icon("add", "sm"), "Neue Notiz"));
+  }
   replace(list, listHead(m.title, m.sub, m.color, m.entries.filter(e => e.kind === "note").length), tools, body);
+  // NEU (AS): am PC in diesem Ordner angelegt, noch nicht am Handy
+  const pend = m.folder ? pcVisible().filter(n => n.folderId === m.folder.id) : [];
+  if (pend.length) {
+    body.appendChild(h("div", { class: "group-title" }, "Vom PC – kommt gleich", h("span", { class: "line" })));
+    pend.forEach(n => body.appendChild(pcCard(n)));
+  }
   if (!m.entries.length) {
-    body.appendChild(h("div", { class: "list-empty" }, icon(VIEWS[r.view]?.icon || "note"), m.empty || "Hier ist nichts."));
+    if (!pend.length) body.appendChild(h("div", { class: "list-empty" }, icon(VIEWS[r.view]?.icon || "note"), m.empty || "Hier ist nichts."));
   } else fillEntries(body, m.entries, { showFolder: m.showFolder, area: r.view === "folder" ? "f" + r.id : r.view });
   const key = "list:" + r.view + ":" + (r.id ?? "");
   if (S.scroll.has(key)) body.scrollTop = S.scroll.get(key);
@@ -2565,7 +2845,12 @@ function renderMain(opts = {}) {
   if (!main) return;
   const shell = $(".shell");
   shell && shell.classList.toggle("tiles", tilesActive() && S.noteId == null && !S.pcId);
+  // NEU (AT): Aufräumen nach der Nebeneinander-Ansicht
+  main.classList.remove("split");
+  if (main._splitObs && !splitActive()) { main._splitObs.disconnect(); main._splitObs = null; }
+  renderShellSplit();
   if (S.route.view === "pc" || S.pcId) return renderPcMain(main);
+  if (splitActive()) return renderSplit(main); // NEU (AT)
   if (S.noteId != null) return renderNote(main, opts);
   if (tilesActive()) return renderTiles(main);
   if (S.route.view === "home") return renderDashboard(main);
@@ -2595,16 +2880,20 @@ function watchScroll(scroller, bar) {
 // ---------------------------------------------------------------------
 // Notiz ansehen
 // ---------------------------------------------------------------------
-function renderNote(main, opts = {}) {
-  const note = noteById(S.noteId);
+function renderNote(main, opts = {}, { noteId = S.noteId, pane = null } = {}) {
+  // GEÄNDERT (AS): offene Änderungen vom PC schon anzeigen; (AT): auch als Spalte (pane „a“/„b“)
+  const raw = noteById(noteId);
+  if (raw && S.edit && S.edit.noteId === raw.id) return renderNoteEditor(main, raw);
+  const note = effectiveNote(raw);
+  const closeThis = pane === "b" ? () => closeSplit("b") : pane === "a" ? () => closeSplit("a") : closeNote;
   if (!note) {
     replace(main, h("div", { class: "main-empty" }, icon("warn"), h("h3", null, "Diese Notiz gibt es nicht mehr"),
       h("div", null, "Sie wurde am Handy gelöscht oder in den versteckten Bereich verschoben."),
-      h("button", { class: "btn subtle", onclick: closeNote }, "Schließen")));
+      h("button", { class: "btn subtle", onclick: closeThis }, "Schließen")));
     return;
   }
-  const ts = S.findTerms;
-  S.findNext = S.findPrev = null;
+  const ts = pane === "b" ? null : S.findTerms;
+  if (pane !== "b") S.findNext = S.findPrev = null;
   const scroller = h("div", { class: "main-scroll" });
   // Kopfzeile: Ordnerpfad + Aktionen
   const crumbs = h("div", { class: "crumbs" });
@@ -2617,10 +2906,15 @@ function renderNote(main, opts = {}) {
     if (paths.length > 1) crumbs.appendChild(h("span", { class: "chip", title: paths.slice(1).map(p => p.map(f => f.name).join(" › ")).join("\n") }, "+" + (paths.length - 1)));
   } else crumbs.appendChild(h("span", { style: { padding: "2px 6px" } }, note.deleted ? "Papierkorb" : note.template ? "Vorlage" : note.archived ? "Archiv" : "Ohne Ordner"));
   const page = Math.min(S.page.get(note.id) || 0, note.pages ? note.pages.length - 1 : 0);
-  const bar = mainBar(backButton(), crumbs,
+  const editable = canEditFromPc(raw);
+  const bar = mainBar(pane ? null : backButton(), crumbs,
+    editable ? h("button", { class: "btn subtle small edit-btn", title: "Am PC bearbeiten (E) – das Handy übernimmt die Änderungen", onclick: () => startEdit(raw, page) }, icon("edit", "sm"), "Bearbeiten") : null,
     iconBtn("copy", "Als Text kopieren", () => copyText(notePlainText(note), "Notiz kopiert")),
-    iconBtn("print", "Drucken / als PDF speichern", () => printNote()),
+    pane ? null : iconBtn("print", "Drucken / als PDF speichern", () => printNote()),
     iconBtn("more", "Mehr", e => openMenu(e.currentTarget, [
+      editable ? { label: "Am PC bearbeiten", icon: "edit", run: () => startEdit(raw, page) } : null,
+      pane ? { label: "Seiten tauschen", icon: "swap", run: swapSplit } : { label: "Daneben öffnen …", icon: "split", run: pickSplitNote },
+      { sep: true },
       { label: "Als Text kopieren", icon: "copy", run: () => copyText(notePlainText(note), "Notiz kopiert") },
       note.pages ? { label: "Nur diese Seite kopieren", icon: "copy", run: () => copyText(notePlainText(note, page), "Seite kopiert") } : null,
       { label: "Als Markdown kopieren", icon: "code", run: () => copyText(noteMarkdown(note), "Markdown kopiert") },
@@ -2630,9 +2924,9 @@ function renderNote(main, opts = {}) {
       { label: "Drucken / PDF", icon: "print", run: printNote },
       { sep: true },
       { label: "Link kopieren (für „Vom PC“)", icon: "link", run: () => copyText(linkMarkup(note.title || "Notiz", note.id), "Link kopiert – in einer PC-Notiz einfügen") },
-      { label: note.template ? "Als neue PC-Notiz verwenden" : "Als Kopie in „Vom PC“ bearbeiten", icon: "edit", run: () => pcFromNote(note) }
+      { label: note.template ? "Als neue PC-Notiz verwenden" : "Als Kopie in „Vom PC“ bearbeiten", icon: "template", run: () => pcFromNote(note) }
     ])),
-    iconBtn("close", "Schließen (Esc)", closeNote));
+    iconBtn("close", pane ? "Diese Notiz schließen" : "Schließen (Esc)", closeThis));
   watchScroll(scroller, bar);
   const wrap = h("div", { class: "note-wrap" });
   const paper = h("article", { class: "note-paper" });
@@ -2656,6 +2950,8 @@ function renderNote(main, opts = {}) {
   meta.appendChild(h("span", { class: "chip", title: "Erstellt " + fullTime(note.createdAt) + "\nGeändert " + fullTime(note.modifiedAt) }, icon("clock", "sm"), "Geändert " + relTime(note.modifiedAt)));
   if (S.fresh.has(note.id)) meta.appendChild(h("span", { class: "chip accent" }, "● Neu seit dem Öffnen"));
   paper.appendChild(meta);
+  const eb = pendingEditBanner(note); // NEU (AS)
+  if (eb) paper.appendChild(eb);
   if (note.template) {
     paper.appendChild(h("div", { class: "panel", style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
       h("div", { class: "grow" }, h("b", null, "Vorlage"), h("div", { class: "small muted" }, "Mit „Als PC-Notiz verwenden“ entsteht daraus eine neue Notiz in „Vom PC“ – fertig zum Ausfüllen und Übernehmen am Handy.")),
@@ -2679,7 +2975,7 @@ function renderNote(main, opts = {}) {
   const heads = blocks.filter(b => b.type === "HEADING" && b.content.trim());
   if (heads.length >= 3) {
     const ol = h("ol");
-    heads.forEach(b => ol.appendChild(h("li", null, h("a", { href: "#", onclick: e => { e.preventDefault(); scrollToBlock(b.id); } }, readable(b.content)))));
+    heads.forEach(b => ol.appendChild(h("li", { class: "lv" + headingLevel(b) }, h("a", { href: "#", onclick: e => { e.preventDefault(); scrollToBlock(b.id); } }, readable(b.content)))));
     paper.appendChild(h("details", { class: "toc" }, h("summary", null, "Inhalt (" + heads.length + " Abschnitte)"), ol));
   }
   const blocksEl = renderBlocks(blocks, { ts, note, tools: true, pageBlocks: blocks });
@@ -2720,9 +3016,9 @@ function scrollToBlock(blockId, fromLink) {
     if (fromLink) toast("Diese Stelle gibt es nicht mehr – die Notiz wird von oben gezeigt");
     return;
   }
-  // Eingeklappten Abschnitt öffnen
-  const section = el.closest(".section-body.collapsed");
-  if (section) { const head = section.previousElementSibling; head && $(".tree-toggle", head)?.click(); }
+  // Eingeklappte Abschnitte öffnen (GEÄNDERT AO: auch verschachtelte)
+  let section, guard = 0;
+  while ((section = el.closest(".section-body.collapsed")) && guard++ < 10) { const head = section.previousElementSibling; const t = head && $(".tree-toggle", head); if (!t) break; t.click(); }
   el.scrollIntoView({ block: "center", behavior: "smooth" });
   el.classList.remove("flash");
   void el.offsetWidth;
@@ -3125,7 +3421,7 @@ function pcDirty() { return !!S.inbox.dirty; }
 function firstLine(md) { return (String(md || "").split("\n").find(l => l.trim()) || "").replace(/^#+\s*|^\s*[-*]\s*\[[ xX]\]\s*/g, "").trim().slice(0, 80); }
 
 /** Neue PC-Notiz aus Text. Beim Schnell-Senden: erste Zeile wird Titel, wenn danach noch etwas kommt. */
-function createPcNote(text, { fromQuick = false, title = null } = {}) {
+function createPcNote(text, { fromQuick = false, title = null, folderId = null } = {}) {
   const now = Date.now();
   let md = String(text || "").replace(/\r\n?/g, "\n");
   let t = title;
@@ -3139,13 +3435,13 @@ function createPcNote(text, { fromQuick = false, title = null } = {}) {
       t = "Link vom PC";
     } else t = "Vom PC · " + fmtDateShort.format(now) + " " + fmtTime.format(now);
   }
-  const note = { id: uuid(), title: t || "", created: now, modified: now, md, blocks: markupToBlocks(md) };
+  const note = { id: uuid(), title: t || "", created: now, modified: now, md, blocks: markupToBlocks(md), folderId: folderId ?? null };
   S.inbox.notes.push(note);
   S.inbox.dirty = true;
   return note;
 }
-function newPcNote(md = "", title = "") {
-  const n = createPcNote(md, { title });
+function newPcNote(md = "", title = "", folderId = null) {
+  const n = createPcNote(md, { title, folderId });
   if (S.route.view !== "pc") { S.route = { view: "pc" }; renderSidebarActive(); }
   S.pcId = n.id; S.noteId = null;
   history.pushState(null, "", routeHash());
@@ -3198,18 +3494,21 @@ function renderSidebarCounts() {
 
 // ---------------- Laden & Speichern ----------------
 function parseInbox(json) {
-  if (!json || json.format !== "mynotes-pc-inbox") return { notes: [], checks: [], web: null };
+  if (!json || json.format !== "mynotes-pc-inbox") return { notes: [], checks: [], edits: [], web: null };
   const notes = (json.notes || []).filter(n => n && n.id).map(n => {
-    const blocks = Array.isArray(n.blocks) ? n.blocks.map(b => ({ type: b.type || "TEXT", content: b.content || "", checked: !!b.checked })) : [];
+    const blocks = Array.isArray(n.blocks) ? n.blocks.map(b => ({ type: b.type || "TEXT", content: b.content || "", checked: !!b.checked, level: b.level || undefined })) : [];
     return {
       id: String(n.id), title: n.title || "", created: n.created || 0, modified: n.modified || 0,
-      md: typeof n.md === "string" ? n.md : blocksToMarkup(blocks), blocks
+      md: typeof n.md === "string" ? n.md : blocksToMarkup(blocks), blocks,
+      folderId: n.folderId != null ? Number(n.folderId) : null // NEU (AS): direkt im Ordner angelegt
     };
   });
+  // NEU (AS): Änderungen an vorhandenen Notizen
+  const edits = (json.edits || []).filter(e => e && e.id && e.noteId != null).map(e => ({ ...e, id: String(e.id), noteId: Number(e.noteId), at: e.at || 0 }));
   // NEU (AH-3): Haken, die am PC gesetzt wurden (das Handy übernimmt sie)
   const checks = (json.checks || []).filter(c => c && c.id && c.blockId != null)
     .map(c => ({ id: String(c.id), blockId: Number(c.blockId), noteId: Number(c.noteId) || null, checked: !!c.checked, at: c.at || 0 }));
-  return { notes, checks, web: json.web && typeof json.web === "object" ? json.web : null };
+  return { notes, checks, edits, web: json.web && typeof json.web === "object" ? json.web : null };
 }
 async function loadInbox(file) {
   if (!file) { S.inbox.fileId = null; S.inbox.modifiedTime = null; S.inbox.readable = true; return; }
@@ -3218,12 +3517,14 @@ async function loadInbox(file) {
     const parsed = parseInbox(await decryptJson(bytes, S.key));
     S.inbox.notes = parsed.notes;
     S.inbox.checks = parsed.checks;
+    S.inbox.edits = parsed.edits;
     S.inbox.webRemote = parsed.web;
     S.inbox.readable = true;
   } catch (e) {
     if (!(e instanceof WrongKeyError)) throw e;
     S.inbox.notes = [];
     S.inbox.checks = [];
+    S.inbox.edits = [];
     S.inbox.readable = false;
   }
   S.inbox.fileId = file.id;
@@ -3231,11 +3532,12 @@ async function loadInbox(file) {
   S.inbox.base = inboxBase();
 }
 async function loadDone(file) {
-  if (!file) { S.done = new Set(); S.doneModified = null; return; }
+  if (!file) { S.done = new Set(); S.rejected = new Set(); S.doneModified = null; return; }
   if (file.modifiedTime === S.doneModified) return;
   try {
     const json = await decryptJson(await downloadFile(file.id), S.key);
     S.done = new Set((json.done || []).map(String));
+    S.rejected = new Set((json.rejected || []).map(String)); // NEU (AS): am Handy verworfen
   } catch (e) {
     if (!(e instanceof WrongKeyError)) throw e;
   }
@@ -3244,10 +3546,21 @@ async function loadDone(file) {
 /** Drei-Wege-Abgleich mit dem Stand im Drive (falls ein anderer PC/Tab inzwischen gespeichert hat) */
 /** Stand für den Drei-Wege-Abgleich: Notizen (id → geändert) und Haken („c:“ + id → Zeitpunkt) */
 function inboxBase() {
-  return new Map([...S.inbox.notes.map(n => [n.id, n.modified]), ...(S.inbox.checks || []).map(c => ["c:" + c.id, c.at])]);
+  return new Map([...S.inbox.notes.map(n => [n.id, n.modified]), ...(S.inbox.checks || []).map(c => ["c:" + c.id, c.at]),
+    ...(S.inbox.edits || []).map(e => ["e:" + e.id, e.at])]);
 }
-function mergeInbox(remoteNotes, remoteChecks = []) {
+function mergeInbox(remoteNotes, remoteChecks = [], remoteEdits = []) {
   const base = S.inbox.base;
+  // NEU (AS): Edits wie Haken – neu hier/woanders bleibt, hier/woanders gelöscht verschwindet
+  const le = new Map((S.inbox.edits || []).map(e => [e.id, e])), re = new Map(remoteEdits.map(e => [e.id, e]));
+  const edits = [];
+  for (const id of new Set([...le.keys(), ...re.keys()])) {
+    const l = le.get(id), r = re.get(id);
+    if (l && r) edits.push(l);
+    else if (l) { if (!base.has("e:" + id)) edits.push(l); }
+    else if (r) { if (!base.has("e:" + id)) edits.push(r); }
+  }
+  S.inbox.edits = edits.sort((a, b) => a.at - b.at);
   // NEU (AH-3): Haken – neu hier/woanders bleibt, hier/woanders gelöscht verschwindet
   const lc = new Map((S.inbox.checks || []).map(c => [c.id, c])), rc = new Map(remoteChecks.map(c => [c.id, c]));
   const checks = [];
@@ -3285,7 +3598,7 @@ async function saveInbox() {
         else if (meta.modifiedTime !== S.inbox.modifiedTime && S.inbox.readable) {
           try {
             const remote = parseInbox(await decryptJson(await downloadFile(S.inbox.fileId), S.key));
-            mergeInbox(remote.notes, remote.checks);
+            mergeInbox(remote.notes, remote.checks, remote.edits);
           } catch (e) { if (!(e instanceof WrongKeyError)) throw e; }
         }
       } else {
@@ -3296,7 +3609,7 @@ async function saveInbox() {
         if (f) {
           try {
             const remote = parseInbox(await decryptJson(await downloadFile(f.id), S.key));
-            mergeInbox(remote.notes, remote.checks);
+            mergeInbox(remote.notes, remote.checks, remote.edits);
           } catch (e) { if (!(e instanceof WrongKeyError)) throw e; }
           S.inbox.fileId = f.id;
         }
@@ -3306,11 +3619,13 @@ async function saveInbox() {
       if (taken.length) S.inbox.taken = [...(S.inbox.taken || []).filter(t => !taken.some(x => x.id === t.id)), ...taken];
       S.inbox.notes = S.inbox.notes.filter(n => !S.done.has(n.id));
       S.inbox.checks = (S.inbox.checks || []).filter(c => !S.done.has(c.id)); // vom Handy übernommen
+      moveAppliedEdits(); // NEU (AS): übernommene Edits bleiben sichtbar, bis der neue Stand da ist
       // 3) Verschlüsselt hochladen
       const payload = {
-        format: "mynotes-pc-inbox", v: 1,
-        notes: S.inbox.notes.map(n => ({ id: n.id, title: n.title, created: n.created, modified: n.modified, blocks: n.blocks, md: n.md })),
+        format: "mynotes-pc-inbox", v: 2,
+        notes: S.inbox.notes.map(n => ({ id: n.id, title: n.title, created: n.created, modified: n.modified, blocks: n.blocks, md: n.md, folderId: n.folderId ?? null })),
         checks: S.inbox.checks || [], // NEU (AH-3)
+        edits: S.inbox.edits || [],   // NEU (AS)
         web: { ...S.settings, v: 1 }
       };
       const plain = TE.encode(JSON.stringify(payload));
@@ -3365,9 +3680,10 @@ window.addEventListener("beforeunload", e => {
 // ---------------- Liste ----------------
 function pcStatusContent(n) {
   if (!n) return [];
+  if (S.rejected && S.rejected.has(n.id)) return [icon("close", "sm"), "Am Handy verworfen"];
   if (S.done.has(n.id) || (S.inbox.taken || []).some(t => t.id === n.id)) return [icon("phone", "sm"), "Am Handy übernommen"];
   if (DEMO) return [icon("cloud", "sm"), "Demo"];
-  if (S.inbox.base.get(n.id) === n.modified) return [icon("cloud", "sm"), "Im Drive – wartet aufs Handy"];
+  if (S.inbox.base.get(n.id) === n.modified) return [icon("cloud", "sm"), n.folderId != null && phoneAuto() ? "Im Drive – kommt automatisch in den Ordner" : "Im Drive – wartet aufs Handy"];
   return [icon("edit", "sm"), "Noch nicht gespeichert"];
 }
 function pcCard(n) {
@@ -3385,6 +3701,7 @@ function pcCard(n) {
   })) : null,
   h("div", { class: "card-meta" },
     h("span", { class: "pc-status " + (taken ? "ok" : DEMO || S.inbox.base.get(n.id) === n.modified ? "wait" : "bad") }, pcStatusContent(n)),
+    n.folderId != null && folderById(n.folderId) ? h("span", { title: "Kommt am Handy in diesen Ordner" }, icon("folder", "sm"), folderById(n.folderId).name) : null,
     h("span", null, relTime(n.modified))));
 }
 function renderPcList(list) {
@@ -3417,7 +3734,8 @@ function renderPcMain(main) {
   const scroller = h("div", { class: "main-scroll" });
   const state = h("span", { class: "save-state" });
   const bar = mainBar(backButton() || (matchMedia("(max-width: 760px)").matches ? iconBtn("back", "Zurück", closeNote) : null),
-    h("div", { class: "crumbs" }, h("span", { style: { display: "inline-flex", gap: "6px", alignItems: "center", padding: "2px 6px" } }, icon("computer", "sm"), "Vom PC"), state),
+    h("div", { class: "crumbs" }, h("span", { style: { display: "inline-flex", gap: "6px", alignItems: "center", padding: "2px 6px" } }, icon("computer", "sm"), "Vom PC"),
+      n.folderId != null && folderById(n.folderId) ? [icon("chevron", "sm"), h("button", { onclick: () => go({ view: "folder", id: n.folderId }, null), title: "Ordner öffnen" }, folderById(n.folderId).name)] : null, state),
     iconBtn(S.settings.previewPane ? "eyeOff" : "eye", S.settings.previewPane ? "Vorschau ausblenden" : "Vorschau zeigen", () => { S.settings.previewPane = !S.settings.previewPane; saveSettingsSoon(); renderMain(); }),
     iconBtn("copy", "Text kopieren", () => copyText((n.title ? n.title + "\n\n" : "") + n.md, "Kopiert")),
     iconBtn("trash", "PC-Notiz löschen", async () => {
@@ -3429,7 +3747,8 @@ function renderPcMain(main) {
   if (taken) {
     wrap.appendChild(h("div", { class: "panel", style: { margin: "8px 0 16px", display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" } },
       h("span", { style: { color: "var(--ok)" } }, icon("phone", "lg")),
-      h("div", { class: "grow" }, h("b", null, "Am Handy übernommen"), h("div", { class: "small muted" }, "Diese Notiz ist jetzt eine normale Notiz am Handy (in „Notizen ohne Ordner“). Änderungen hier kämen nicht mehr an.")),
+      S.rejected && S.rejected.has(n.id) ? h("div", { class: "grow" }, h("b", null, "Am Handy verworfen"), h("div", { class: "small muted" }, "Diese PC-Notiz wurde am Handy nicht übernommen. Du kannst sie als neue PC-Notiz weiterschreiben.")) :
+      h("div", { class: "grow" }, h("b", null, "Am Handy übernommen"), h("div", { class: "small muted" }, (n.folderId != null && folderById(n.folderId) ? "Diese Notiz liegt jetzt am Handy in „" + folderById(n.folderId).name + "“." : "Diese Notiz ist jetzt eine normale Notiz am Handy (in „Notizen ohne Ordner“).") + " Weiter bearbeiten: sobald sie in der Liste auftaucht, dort „Bearbeiten“.")),
       h("button", { class: "btn subtle", onclick: () => newPcNote(n.md, n.title ? n.title + " (neu)" : "") }, "Als neue PC-Notiz weiterschreiben")));
     wrap.appendChild(h("h1", { class: "note-title" }, n.title || "Ohne Titel"));
     wrap.appendChild(renderBlocks(markupToBlocks(n.md), { preview: true }));
@@ -3439,7 +3758,7 @@ function renderPcMain(main) {
     return;
   }
   const titleIn = h("input", { class: "editor-title", placeholder: "Titel", value: n.title, maxlength: "300", "aria-label": "Titel" });
-  const area = h("textarea", { class: "editor-area", spellcheck: "true", placeholder: "Schreib los …\n\n# Überschrift\n- [ ] Checkliste\n---  (Trennlinie)\n```  Code  ```", "aria-label": "Text" });
+  const area = h("textarea", { class: "editor-area", spellcheck: "true", placeholder: "Schreib los …\n\n## Überschrift\n- [ ] Checkliste\n---  (Trennlinie)\n```  Code  ```", "aria-label": "Text" });
   area.value = n.md;
   const preview = h("div", { class: "editor-preview" });
   const counter = h("span", { class: "small muted" });
@@ -3476,7 +3795,8 @@ function renderPcMain(main) {
   const tb = (iconName, label, title, fn) => h("button", { class: "tb", title, type: "button", onclick: () => { fn(); if (!$(".overlay")) area.focus(); } }, icon(iconName, "sm"), label);
   const toolbar = h("div", { class: "toolbar" },
     tb("checkbox", "Checkliste", "Zeilen als Checkliste (- [ ] )", () => toggleLines(area, "- [ ] ", /^\s*[-*]\s*\[[ xX]\]\s?/)),
-    tb("heading", "Überschrift", "Zeile als Überschrift (# )", () => toggleLines(area, "# ", /^#{1,6}\s+/)),
+    tb("heading", "Überschrift", "Zeile als Überschrift (## )", () => toggleLines(area, "## ", /^#{1,6}\s+/)),
+    tb("heading", "Über", "Zeile als Über-Überschrift (# ) – klappt die Überschriften darunter mit ein", () => toggleLines(area, "# ", /^#{1,6}\s+/)),
     tb("code", "Code", "Als Code-Block", () => wrapCode(area)),
     tb("hr", "Trennlinie", "Trennlinie einfügen", () => insertText(area, (atLineStart(area) ? "" : "\n") + "---\n")),
     h("span", { class: "sep" }),
@@ -3487,10 +3807,10 @@ function renderPcMain(main) {
     toolbar,
     h("div", { class: "editor-cols" + (S.settings.previewPane ? "" : " single") }, area, S.settings.previewPane ? preview : null),
     h("div", { class: "editor-help" },
-      h("span", null, h("code", null, "# "), " Überschrift"), h("span", null, h("code", null, "- [ ] "), " Checkliste"),
+      h("span", null, h("code", null, "# "), " Über-Überschrift"), h("span", null, h("code", null, "## "), " Überschrift"), h("span", null, h("code", null, "- [ ] "), " Checkliste"),
       h("span", null, h("code", null, "- [x] "), " erledigt"), h("span", null, h("code", null, "---"), " Trennlinie"),
       h("span", null, h("code", null, "```"), " Code"), h("span", null, h("kbd", null, "Strg S"), " speichern"),
-      h("span", null, "Am Handy: Startseite → „Vom PC“ → Übernehmen"), h("span", { class: "grow" }), counter));
+      h("span", null, n.folderId != null && folderById(n.folderId) ? "Kommt am Handy in „" + folderById(n.folderId).name + "“" : "Am Handy: Startseite → „Vom PC“ → Übernehmen"), h("span", { class: "grow" }), counter));
   scroller.appendChild(wrap);
   replace(main, bar, scroller);
   refreshPreview();
@@ -3511,7 +3831,7 @@ function renderPcIntro(main) {
     ["3", "Am Handy übernehmen", "Startseite → „Vom PC“ → Übernehmen. Daraus wird eine normale Notiz in „Notizen ohne Ordner“."]
   ];
   replace(main, h("div", { class: "main-scroll" }, h("div", { class: "dash", style: { maxWidth: "760px" } },
-    h("div", { class: "dash-hello" }, h("h1", null, "Vom PC"), h("p", null, "Der einzige Bereich, in den der PC schreibt – deine Handy-Notizen bleiben unangetastet.")),
+    h("div", { class: "dash-hello" }, h("h1", null, "Vom PC"), h("p", null, "Für ganz neue Notizen. Vorhandene Notizen bearbeitest du direkt in der Notiz („Bearbeiten“), neue Notizen für einen Ordner legst du im Ordner an.")),
     h("div", { class: "dash-grid", style: { gridTemplateColumns: "1fr" } },
       h("div", { class: "panel" }, steps.map(([n, t, d]) => h("div", { style: { display: "flex", gap: "14px", padding: "8px 0" } },
         h("span", { class: "avatar", style: { background: "var(--accent)", color: "var(--on-accent)" } }, n),
@@ -3675,6 +3995,405 @@ function dropSatisfiedChecks() {
   return S.inbox.checks.length !== before;
 }
 // =====================================================================
+// NEU (AS): Am PC direkt in Notizen schreiben
+//
+// Der PC ändert NIE selbst die Notizen – er schickt dem Handy nur „Edits“ (die geänderten
+// Stellen, mit dem Stand, den er gesehen hat). Das Handy übernimmt sie automatisch oder nach
+// Bestätigung (Einstellung am Handy). Hat sich eine Stelle am Handy inzwischen geändert, bleibt
+// die Handy-Fassung und die PC-Fassung kommt als eigene Notiz dazu – nichts geht verloren.
+//
+// Bis das Handy den neuen Stand hochgeladen hat, zeigt der PC die Änderungen schon an
+// (gestrichelt markiert, „→ Handy“).
+// =====================================================================
+const EDITABLE = new Set(["TEXT", "CHECKLIST_ITEM", "HEADING", "CODE"]);
+S.appliedEdits = [];   // vom Handy übernommen, neuer Stand aber noch nicht da
+S.edit = null;         // laufende Bearbeitung { noteId, page, title, rows, dirty }
+
+/** Übernimmt das Handy Änderungen automatisch? (steht in pcextras.enc) */
+function phoneAuto() { return !(S.extras && S.extras.settings && S.extras.settings.auto === false); }
+const levelToPrio = l => (l === 1 || l === 3 ? l : 0);
+
+function pendingEditsFor(noteId) {
+  const open = (S.inbox.edits || []).filter(e => e.noteId === noteId && !S.done.has(e.id));
+  const applied = S.appliedEdits.filter(x => x.edit.noteId === noteId).map(x => x.edit);
+  return [...applied, ...open].sort((a, b) => a.at - b.at);
+}
+/** Übernommene Edits merken, bis der neue Stand vom Handy da ist (sonst flackert der alte Text kurz auf) */
+function moveAppliedEdits() {
+  const edits = S.inbox.edits || [];
+  const taken = edits.filter(e => S.done.has(e.id));
+  if (!taken.length) return;
+  let rejected = 0;
+  for (const e of taken) {
+    if (S.rejected && S.rejected.has(e.id)) { rejected++; continue; } // am Handy verworfen → nicht mehr anzeigen
+    if (S.appliedEdits.some(x => x.edit.id === e.id)) continue;
+    S.appliedEdits.push({ edit: e, mod: noteById(e.noteId)?.modifiedAt ?? null, at: Date.now() });
+  }
+  S.inbox.edits = edits.filter(e => !S.done.has(e.id));
+  if (rejected) toast(plural(rejected, "Änderung wurde", "Änderungen wurden") + " am Handy verworfen");
+}
+/** Nach neuem Stand vom Handy: erledigte Edits wegwerfen */
+function dropAppliedEdits() {
+  const now = Date.now();
+  S.appliedEdits = S.appliedEdits.filter(x => {
+    const n = noteById(x.edit.noteId);
+    return n && n.modifiedAt === x.mod && now - x.at < 10 * 60_000;
+  });
+}
+
+/** Notiz so, wie sie nach den offenen Edits aussieht (für Anzeige und Editor) */
+function effectiveNote(note) {
+  if (!note) return note;
+  const edits = pendingEditsFor(note.id);
+  if (!edits.length) return note;
+  let title = note.title;
+  let blocks = note.blocks.map(b => ({ ...b }));
+  const find = id => blocks.findIndex(b => String(b.id) === String(id));
+  for (const e of edits) {
+    if (e.title && e.title.to != null) title = e.title.to;
+    for (const st of e.sets || []) {
+      const i = find(st.blockId);
+      if (i < 0) continue;
+      const b = blocks[i];
+      blocks[i] = { ...b, content: st.to, checked: st.checked != null ? st.checked : b.checked, priority: b.type === "HEADING" && st.level != null ? levelToPrio(st.level) : b.priority, pendingEdit: true };
+    }
+    for (const d of e.dels || []) { const i = find(d.blockId); if (i >= 0) blocks.splice(i, 1); }
+    for (const a of e.adds || []) {
+      const nb = { id: "t:" + a.tmp, noteId: note.id, type: a.type, content: a.content || "", checked: !!a.checked, priority: a.type === "HEADING" ? levelToPrio(a.level) : 0, highlight: null, collapsed: false, page: a.page || 0, pendingEdit: true };
+      let i = a.after != null ? find(a.after) : -1;
+      if (i >= 0) blocks.splice(i + 1, 0, nb);
+      else if (a.after == null) { const first = blocks.findIndex(b => b.page === nb.page); blocks.splice(first < 0 ? blocks.length : first, 0, nb); }
+      else { let last = -1; blocks.forEach((b, k) => { if (b.page === nb.page) last = k; }); blocks.splice(last < 0 ? blocks.length : last + 1, 0, nb); }
+    }
+  }
+  return { ...note, title, blocks, _pending: edits };
+}
+function canEditFromPc(note) { return !!note && !note.deleted && S.inbox.readable !== false; }
+
+/** Hinweis über der Notiz, solange Änderungen unterwegs sind */
+function pendingEditBanner(note) {
+  const open = (S.inbox.edits || []).filter(e => e.noteId === note.id && !S.done.has(e.id));
+  const applied = S.appliedEdits.some(x => x.edit.noteId === note.id);
+  if (!open.length && !applied) return null;
+  if (!open.length) return h("div", { class: "edit-banner ok" }, icon("phone", "sm"), h("span", { class: "grow" }, "Am Handy übernommen – der neue Stand kommt gleich."));
+  const saved = open.every(e => S.inbox.base.get("e:" + e.id) === e.at) || DEMO;
+  return h("div", { class: "edit-banner" }, icon("edit", "sm"),
+    h("span", { class: "grow" }, !saved ? "Am PC geändert – wird gespeichert …"
+      : phoneAuto() ? "Am PC geändert – das Handy übernimmt es beim nächsten Abgleich (App öffnen oder alle ~15 Min.)."
+        : "Am PC geändert – am Handy unter „Vom PC“ bestätigen."),
+    h("button", {
+      class: "btn subtle small", onclick: async () => {
+        if (!await confirmDialog("Änderungen zurücknehmen?", "Die Änderungen vom PC an dieser Notiz werden verworfen, bevor das Handy sie übernimmt.", "Zurücknehmen", true)) return;
+        S.inbox.edits = (S.inbox.edits || []).filter(e => !(e.noteId === note.id && !S.done.has(e.id)));
+        S.inbox.dirty = true; saveInboxSoon(); renderMain(); toast("Änderungen zurückgenommen");
+      }
+    }, "Zurücknehmen"));
+}
+
+// ---------------------------------------------------------------------
+// Editor
+// ---------------------------------------------------------------------
+function startEdit(note, page) {
+  if (!canEditFromPc(note)) { toast("Diese Notiz lässt sich am PC nicht bearbeiten", { bad: true }); return; }
+  const eff = effectiveNote(note);
+  const blocks = blocksOfPage(eff, page);
+  S.edit = {
+    noteId: note.id, page, dirty: false,
+    titleOrig: eff.title, title: eff.title,
+    orig: blocks.map(b => ({ id: b.id, type: b.type, content: b.content, checked: !!b.checked, level: b.type === "HEADING" ? headingLevel(b) : null })),
+    rows: blocks.map(b => ({ key: uuid(), origId: b.id, type: b.type, content: b.content, checked: !!b.checked, level: b.type === "HEADING" ? headingLevel(b) : null, block: b }))
+  };
+  renderMain();
+}
+function cancelEdit(force) {
+  const go2 = () => { S.edit = null; renderMain(); };
+  if (force || !S.edit || !S.edit.dirty) return go2();
+  confirmDialog("Änderungen verwerfen?", "Was du hier geändert hast, wird nicht gespeichert.", "Verwerfen", true).then(ok => { if (ok) go2(); });
+}
+function editMarkDirty() { if (S.edit) S.edit.dirty = true; }
+
+/** Edit aus dem Editor-Stand bauen (nur echte Änderungen) */
+function buildEdit(note) {
+  const ed = S.edit;
+  const origById = new Map(ed.orig.map(o => [String(o.id), o]));
+  const sets = [], dels = [], adds = [];
+  const present = new Set();
+  let prevRef = null; // Bezug für neue Blöcke: vorheriger Block (ID oder „t:…“)
+  for (const r of ed.rows) {
+    if (r.origId != null) {
+      const o = origById.get(String(r.origId));
+      present.add(String(r.origId));
+      if (o && EDITABLE.has(o.type)) {
+        const changed = o.content !== r.content || o.checked !== r.checked || (o.type === "HEADING" && o.level !== r.level);
+        if (changed) sets.push({ blockId: o.id, from: o.content, to: r.content, checked: o.type === "CHECKLIST_ITEM" ? r.checked : null, level: o.type === "HEADING" ? r.level : null });
+      }
+      prevRef = r.origId;
+    } else {
+      if (r.type !== "DIVIDER" && !r.content.trim() && r.type !== "CHECKLIST_ITEM") continue; // leere Textblöcke nicht schicken
+      if (r.type === "CHECKLIST_ITEM" && !r.content.trim()) continue;
+      const tmp = uuid().replace(/-/g, "").slice(0, 12);
+      adds.push({ tmp, after: prevRef, page: ed.page, type: r.type, content: r.type === "DIVIDER" ? "" : r.content, checked: !!r.checked, level: r.type === "HEADING" ? r.level : null });
+      prevRef = "t:" + tmp;
+    }
+  }
+  for (const o of ed.orig) if (!present.has(String(o.id)) && (EDITABLE.has(o.type) || o.type === "DIVIDER")) dels.push({ blockId: o.id, from: o.content });
+  const title = ed.title !== ed.titleOrig ? { from: ed.titleOrig, to: ed.title } : null;
+  if (!title && !sets.length && !dels.length && !adds.length) return null;
+  return { id: uuid(), noteId: note.id, noteTitle: ed.title || note.title, at: Date.now(), base: note.modifiedAt, title, sets, dels, adds };
+}
+async function saveEdit(note) {
+  const edit = buildEdit(note);
+  if (!edit) { cancelEdit(true); toast("Keine Änderungen"); return; }
+  S.inbox.edits = [...(S.inbox.edits || []), edit];
+  S.inbox.dirty = true;
+  S.edit = null;
+  renderMain();
+  renderSidebarCounts();
+  await saveInbox();
+  toast(phoneAuto() ? "Gespeichert ✓ – das Handy übernimmt die Änderungen automatisch" : "Gespeichert ✓ – am Handy unter „Vom PC“ bestätigen");
+}
+
+function renderNoteEditor(main, note) {
+  const ed = S.edit;
+  const scroller = h("div", { class: "main-scroll" });
+  const bar = mainBar(h("div", { class: "crumbs" }, h("span", { style: { padding: "2px 6px", display: "inline-flex", gap: "6px", alignItems: "center" } }, icon("edit", "sm"), "Bearbeiten – kommt aufs Handy")),
+    h("button", { class: "btn ghost small", onclick: () => cancelEdit(false) }, "Abbrechen"),
+    h("button", { class: "btn small", onclick: () => saveEdit(note) }, icon("send", "sm"), "Speichern"));
+  watchScroll(scroller, bar);
+  const wrap = h("div", { class: "editor-wrap note-editor" });
+  const titleIn = h("input", { class: "editor-title", value: ed.title, placeholder: "Titel", maxlength: "300", "aria-label": "Titel" });
+  titleIn.addEventListener("input", () => { ed.title = titleIn.value; editMarkDirty(); });
+  titleIn.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); focusRow(0, false); } });
+  const list = h("div", { class: "erows" });
+  const info = h("div", { class: "small muted edit-hint" },
+    note.pages ? "Seite „" + note.pages[ed.page] + "“ · " : "",
+    "Rechnungen, Tabellen, Zeichnungen & Co. bleiben unverändert (am Handy bearbeiten). ",
+    h("kbd", null, "Strg S"), " speichern · ", h("kbd", null, "Esc"), " abbrechen");
+
+  const rowEls = [];
+  function draw() {
+    clear(list);
+    rowEls.length = 0;
+    ed.rows.forEach((r, i) => { const el = rowEl(r, i); rowEls.push(el); list.appendChild(el); });
+    if (!ed.rows.length) list.appendChild(h("div", { class: "muted small", style: { padding: "8px 4px" } }, "(leer – unten etwas hinzufügen)"));
+  }
+  function focusRow(i, atEnd = true) {
+    const el = rowEls[Math.max(0, Math.min(i, rowEls.length - 1))];
+    const ta = el && $("textarea", el);
+    if (!ta) return;
+    ta.focus();
+    const p = atEnd ? ta.value.length : 0;
+    ta.setSelectionRange(p, p);
+  }
+  function insertRow(at, type, content = "", focus = true) {
+    ed.rows.splice(at, 0, { key: uuid(), origId: null, type, content, checked: false, level: type === "HEADING" ? 2 : null });
+    editMarkDirty();
+    draw();
+    if (focus) focusRow(at, false); // sofort – sonst landen schnell getippte Zeichen kurz außerhalb
+  }
+  function removeRow(i, focusPrev = true) {
+    ed.rows.splice(i, 1);
+    editMarkDirty();
+    draw();
+    if (focusPrev) focusRow(i - 1, true);
+  }
+  const grow = ta => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + 2 + "px"; };
+  function addMenu(anchor, at) {
+    openMenu(anchor, [
+      { hd: "Darunter einfügen" },
+      { label: "Text", icon: "note", run: () => insertRow(at, "TEXT") },
+      { label: "Checkliste", icon: "checkbox", run: () => insertRow(at, "CHECKLIST_ITEM") },
+      { label: "Überschrift", icon: "heading", run: () => insertRow(at, "HEADING") },
+      { label: "Code", icon: "code", run: () => insertRow(at, "CODE") },
+      { label: "Trennlinie", icon: "hr", run: () => insertRow(at, "DIVIDER", "", false) }
+    ]);
+  }
+  function rowEl(r, i) {
+    const tools = h("div", { class: "erow-tools" },
+      h("button", { class: "icon-btn sm", title: "Darunter einfügen", type: "button", onclick: e => addMenu(e.currentTarget, i + 1) }, icon("add", "sm")));
+    if (!EDITABLE.has(r.type) && r.type !== "DIVIDER") {
+      // Sonderblock: nur anzeigen
+      const prev = renderBlock(r.block, { note, preview: true, pageBlocks: ed.rows.map(x => x.block).filter(Boolean) });
+      return h("div", { class: "erow locked", title: "Am Handy bearbeiten" }, h("div", { class: "erow-lock" }, icon("phone", "sm")), h("div", { class: "grow" }, prev || h("span", { class: "muted small" }, "(" + r.type + ")")), tools);
+    }
+    if (r.type === "DIVIDER") {
+      tools.appendChild(h("button", { class: "icon-btn sm", title: "Trennlinie löschen", type: "button", onclick: () => removeRow(i, false) }, icon("close", "sm")));
+      return h("div", { class: "erow divider" }, h("hr", { class: "b-divider grow" }), tools);
+    }
+    const ta = h("textarea", { class: "erow-text t-" + r.type.toLowerCase() + (r.type === "HEADING" ? " lv" + r.level : ""), rows: "1", spellcheck: "true", placeholder: r.type === "HEADING" ? "Überschrift" : r.type === "CHECKLIST_ITEM" ? "Punkt" : r.type === "CODE" ? "Code" : "Text" });
+    ta.value = r.content;
+    ta.addEventListener("input", () => { r.content = ta.value; editMarkDirty(); grow(ta); });
+    ta.addEventListener("keydown", e => {
+      const atStart = ta.selectionStart === 0 && ta.selectionEnd === 0;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); saveEdit(note); return; }
+      if (e.key === "Escape") { e.preventDefault(); cancelEdit(false); return; }
+      if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && (r.type === "CHECKLIST_ITEM" || r.type === "HEADING")) {
+        e.preventDefault();
+        if (r.type === "CHECKLIST_ITEM" && !r.content.trim() && r.origId == null) { r.type = "TEXT"; editMarkDirty(); draw(); focusRow(i); return; }
+        const before = ta.value.slice(0, ta.selectionStart), after = ta.value.slice(ta.selectionEnd);
+        r.content = before;
+        insertRow(i + 1, r.type === "HEADING" ? "TEXT" : "CHECKLIST_ITEM", after);
+        return;
+      }
+      if (e.key === "Backspace" && atStart && !ta.value && r.origId == null) { e.preventDefault(); removeRow(i); return; }
+      if (e.key === "ArrowUp" && atStart && i > 0) { e.preventDefault(); focusRow(i - 1); }
+      if (e.key === "ArrowDown" && ta.selectionStart === ta.value.length && i < ed.rows.length - 1) { e.preventDefault(); focusRow(i + 1, false); }
+    });
+    setTimeout(() => grow(ta), 0);
+    let lead = null;
+    if (r.type === "CHECKLIST_ITEM") {
+      lead = h("button", { class: "box live" + (r.checked ? " on" : ""), type: "button", role: "checkbox", "aria-checked": String(r.checked), title: "Abhaken",
+        onclick: () => { r.checked = !r.checked; editMarkDirty(); draw(); focusRow(i); } });
+    } else if (r.type === "HEADING") {
+      lead = h("select", { class: "lv-select", title: "Ebene", onchange: e => { r.level = Number(e.target.value); editMarkDirty(); draw(); } },
+        [[1, "Über"], [2, "Normal"], [3, "Unter"]].map(([v, l]) => h("option", { value: String(v), selected: r.level === v }, l)));
+    }
+    tools.appendChild(h("button", { class: "icon-btn sm", title: r.origId == null ? "Entfernen" : "Löschen (am Handy nur, wenn dort unverändert)", type: "button", onclick: () => removeRow(i, false) }, icon("close", "sm")));
+    return h("div", { class: "erow t-" + r.type.toLowerCase() + (r.checked ? " done" : "") + (r.origId == null ? " new" : "") }, lead, ta, tools);
+  }
+  draw();
+  const adders = h("div", { class: "eadd" },
+    [["TEXT", "note", "Text"], ["CHECKLIST_ITEM", "checkbox", "Checkliste"], ["HEADING", "heading", "Überschrift"], ["CODE", "code", "Code"], ["DIVIDER", "hr", "Trennlinie"]]
+      .map(([t, ic, l]) => h("button", { class: "chip", type: "button", onclick: () => insertRow(ed.rows.length, t, "", t !== "DIVIDER") }, icon(ic, "sm"), l)));
+  wrap.append(h("div", { class: "editor-head" }, titleIn), info, list, adders,
+    h("div", { class: "edit-foot small muted" }, icon("shield", "sm"),
+      " Das Handy ändert nur Stellen, die dort noch so sind wie hier zu sehen. Wurde etwas am Handy inzwischen geändert, bleibt das – deine PC-Fassung kommt dann als eigene Notiz „⚠ Vom PC (Konflikt)“ dazu."));
+  scroller.appendChild(wrap);
+  replace(main, bar, scroller);
+  if (!ed.rows.length) titleIn.focus();
+}
+
+// ---------------------------------------------------------------------
+// Neue Notiz direkt in einem Ordner (am Handy automatisch oder nach Bestätigung im Ordner)
+// ---------------------------------------------------------------------
+function newNoteInFolder(folderId) {
+  if (S.inbox.readable === false) { toast("„Vom PC“ ist gerade nicht lesbar", { bad: true }); return; }
+  newPcNote("", "", folderId);
+  toast(phoneAuto() ? "Neue Notiz – kommt am Handy automatisch in diesen Ordner" : "Neue Notiz – am Handy unter „Vom PC“ bestätigen");
+}
+window.addEventListener("beforeunload", e => {
+  if (S.unlocked && S.edit && S.edit.dirty) { e.preventDefault(); e.returnValue = ""; }
+});
+// =====================================================================
+// NEU (AT): Zwei Notizen nebeneinander
+//  - Notiz-Karte mit Strg/⌘-Klick oder Mittelklick, Rechtsklick → „Daneben öffnen“,
+//    oder in der Notiz ⋯ → „Daneben öffnen …“
+//  - Breit genug: zwei Spalten, jede mit eigener Leiste und eigenem Scrollen, Trenner verschiebbar.
+//    Schmal: Reiter oben, es ist immer nur eine Notiz zu sehen – nichts überlappt.
+//  - Die Liste wird dafür ausgeblendet (mehr Platz); Schließen bringt sie zurück.
+// =====================================================================
+S.split = { noteId: null, ratio: 0.5, active: "a" };
+const SPLIT_MIN_W = 880;   // darunter Reiter statt Spalten
+
+function splitActive() {
+  return S.split.noteId != null && S.noteId != null && !S.pcId && !!noteById(S.split.noteId) && S.split.noteId !== S.noteId;
+}
+function openSplit(id) {
+  const note = noteById(id);
+  if (!note) { toast("Notiz nicht gefunden"); return; }
+  if (matchMedia("(max-width: 760px)").matches) { openNote(id); return; } // Handy-Breite: normal öffnen
+  if (S.noteId == null || S.pcId) { openNote(id); toast("Tipp: Mit Strg + Klick auf eine zweite Notiz öffnest du sie daneben"); return; }
+  if (S.noteId === note.id) { toast("Diese Notiz ist schon offen"); return; }
+  S.split.noteId = note.id;
+  S.split.active = "b";
+  renderShellSplit();
+  renderMain();
+}
+function closeSplit(which = "b") {
+  const closed = which === "a" ? S.noteId : S.split.noteId;
+  if (S.edit && S.edit.noteId === closed && !S.edit.dirty) S.edit = null;
+  if (which === "a" && S.split.noteId != null) {
+    // linke schließen → rechte rückt nach
+    S.noteId = S.split.noteId;
+    history.replaceState(null, "", routeHash());
+  }
+  S.split.noteId = null;
+  S.split.active = "a";
+  renderShellSplit();
+  markListSelection();
+  renderMain();
+}
+function swapSplit() {
+  if (!splitActive()) return;
+  const a = S.noteId;
+  S.noteId = S.split.noteId;
+  S.split.noteId = a;
+  history.replaceState(null, "", routeHash());
+  renderMain();
+}
+function renderShellSplit() {
+  const shell = $(".shell");
+  if (shell) shell.classList.toggle("split-on", splitActive());
+}
+function pickSplitNote() {
+  const notes = [...S.db.notes.values()].filter(n => !n.deleted && n.id !== S.noteId).sort((a, b) => b.modifiedAt - a.modifiedAt);
+  notePicker("Daneben öffnen", notes, n => openSplit(n.id), { placeholder: "Notiz suchen …", sub: n => n.folderIds.length ? (folderById(n.folderIds[0])?.name || "") : "" });
+}
+
+/** Hauptbereich mit zwei Notizen */
+function renderSplit(main) {
+  renderShellSplit();
+  const paneA = h("div", { class: "pane pane-a" + (S.split.active === "a" ? " active" : ""), onpointerdown: () => setActivePane("a") });
+  const paneB = h("div", { class: "pane pane-b" + (S.split.active === "b" ? " active" : ""), onpointerdown: () => setActivePane("b") });
+  const handle = h("div", { class: "split-handle", title: "Ziehen zum Verschieben · Doppelklick: Mitte", role: "separator", "aria-orientation": "vertical" });
+  const tabs = h("div", { class: "split-tabs", role: "tablist" });
+  const box = h("div", { class: "split-box" }, paneA, handle, paneB);
+  const root = h("div", { class: "split-root" }, tabs, box);
+  replace(main, root);
+  main.classList.add("split");
+  const applyRatio = () => box.style.setProperty("--split-a", (S.split.ratio * 100).toFixed(2) + "%");
+  applyRatio();
+  const noteA = noteById(S.noteId), noteB = noteById(S.split.noteId);
+  renderNote(paneA, {}, { noteId: S.noteId, pane: "a" });
+  renderNote(paneB, {}, { noteId: S.split.noteId, pane: "b" });
+  const tab = (key, n) => h("button", { class: S.split.active === key ? "on" : "", role: "tab", onclick: () => setActivePane(key) },
+    h("span", { class: "ellipsis" }, n?.title || "Ohne Titel"));
+  replace(tabs, tab("a", noteA), tab("b", noteB),
+    iconBtn("swap", "Seiten tauschen", swapSplit, "sm"), iconBtn("close", "Zweite Notiz schließen", () => closeSplit("b"), "sm"));
+  // Trenner ziehen
+  let drag = null;
+  handle.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    drag = { left: box.getBoundingClientRect().left, width: box.clientWidth };
+    handle.setPointerCapture(e.pointerId);
+    box.classList.add("dragging");
+  });
+  handle.addEventListener("pointermove", e => {
+    if (!drag) return;
+    S.split.ratio = Math.min(0.75, Math.max(0.25, (e.clientX - drag.left) / drag.width));
+    applyRatio();
+  });
+  const end = () => { if (!drag) return; drag = null; box.classList.remove("dragging"); };
+  handle.addEventListener("pointerup", end);
+  handle.addEventListener("pointercancel", end);
+  handle.addEventListener("dblclick", () => { S.split.ratio = 0.5; applyRatio(); });
+  // Breite beobachten: zu schmal → Reiter
+  const fit = () => root.classList.toggle("narrow", main.clientWidth < SPLIT_MIN_W);
+  fit();
+  if (main._splitObs) main._splitObs.disconnect();
+  if ("ResizeObserver" in window) { main._splitObs = new ResizeObserver(fit); main._splitObs.observe(main); }
+}
+function setActivePane(key) {
+  if (S.split.active === key) return;
+  S.split.active = key;
+  $$(".split-root .pane").forEach(p => p.classList.toggle("active", p.classList.contains("pane-" + key)));
+  $$(".split-tabs [role=tab]").forEach((t, i) => t.classList.toggle("on", (i === 0 ? "a" : "b") === key));
+}
+
+/** Rechtsklick-Menü auf Notiz-Karten */
+function noteContextMenu(e, note) {
+  e.preventDefault();
+  const anchor = { getBoundingClientRect: () => ({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY }) };
+  openMenu(anchor, [
+    { label: "Öffnen", icon: "open", run: () => openNote(note.id) },
+    { label: "Daneben öffnen", icon: "split", run: () => openSplit(note.id) },
+    { sep: true },
+    { label: "Als Text kopieren", icon: "copy", run: () => copyText(notePlainText(note), "Notiz kopiert") },
+    { label: "Link kopieren (für „Vom PC“)", icon: "link", run: () => copyText(linkMarkup(note.title || "Notiz", note.id), "Link kopiert") },
+    canEditFromPc(note) ? { label: "Am PC bearbeiten", icon: "edit", run: () => { openNote(note.id); startEdit(note, 0); } } : null
+  ]);
+}
+// =====================================================================
 // Anmelden → PC-Kopie finden → Passwort → App
 // =====================================================================
 function gate(...content) {
@@ -3802,7 +4521,7 @@ async function unlock(secret) {
   S.key = key;
   S.extras = { calc: {}, work: {} };
   if (S.zip["pcextras.enc"]) {
-    try { const x = await decryptJson(S.zip["pcextras.enc"], key); S.extras = { calc: x.calc || {}, work: x.work || {} }; } catch (_) {}
+    try { const x = await decryptJson(S.zip["pcextras.enc"], key); S.extras = { calc: x.calc || {}, work: x.work || {}, settings: x.settings || {} }; } catch (_) {}
   }
   S.db = buildDb(snap);
   // „Vom PC“ + übernommen
@@ -3879,7 +4598,10 @@ async function poll(manual) {
       if (S.route.view === "pc" && !S.pcId) renderList();
     }
     // NEU (AH-3): übernommene Haken aufräumen
-    if ((S.inbox.checks || []).some(c => S.done.has(c.id)) && !saving) saveInbox();
+    if (((S.inbox.checks || []).some(c => S.done.has(c.id)) || (S.inbox.edits || []).some(e => S.done.has(e.id))) && !saving) {
+      saveInbox();
+      if (S.noteId != null && !S.edit) renderMain(); // NEU (AS): Hinweis „übernommen“ zeigen
+    }
     if (S.done.size !== doneBefore || S.inbox.notes.some(n => S.done.has(n.id))) {
       const newlyTaken = S.inbox.notes.filter(n => S.done.has(n.id));
       if (newlyTaken.length) {
@@ -3918,7 +4640,7 @@ async function refreshMirror(file) {
   }
   const snap = await decryptJson(zip["backup.enc"], S.key);
   let extras = { calc: {}, work: {} };
-  if (zip["pcextras.enc"]) { try { const x = await decryptJson(zip["pcextras.enc"], S.key); extras = { calc: x.calc || {}, work: x.work || {} }; } catch (_) {} }
+  if (zip["pcextras.enc"]) { try { const x = await decryptJson(zip["pcextras.enc"], S.key); extras = { calc: x.calc || {}, work: x.work || {}, settings: x.settings || {} }; } catch (_) {} }
   const old = S.db;
   const db = buildDb(snap);
   let changed = 0;
@@ -3929,12 +4651,14 @@ async function refreshMirror(file) {
   for (const id of old.notes.keys()) if (!db.notes.has(id)) changed++;
   S.db = db;
   S.extras = extras;
+  delete S.db._totals; // NEU (AM)
+  dropAppliedEdits();  // NEU (AS): übernommene Änderungen sind jetzt im neuen Stand
   if (dropSatisfiedChecks()) { S.inbox.dirty = true; saveInboxSoon(); } // NEU (AH-3)
   S.meta = meta;
   S.zip = zip;
   S.mirror = { id: file.id, modifiedTime: file.modifiedTime };
   // Ansicht auffrischen, ohne die Position zu verlieren
-  const editing = document.activeElement && document.activeElement.closest(".editor-wrap, .quick, .search-box");
+  const editing = (document.activeElement && document.activeElement.closest(".editor-wrap, .quick, .search-box")) || (S.edit && S.edit.dirty);
   const mainScroll = $(".main-scroll")?.scrollTop || 0;
   rememberScroll();
   const searchFocus = document.activeElement && document.activeElement.closest(".search-box");
@@ -3970,8 +4694,9 @@ async function lock(message) {
   clearTimeout(S.pollTimer); clearInterval(S.lockTimer); clearInterval(S.clockTimer);
   closeDialog(); closeLightbox(); closeMenu();
   S.key = null; S.db = null; S.extras = { calc: {}, work: {} };
-  S.inbox = { notes: [], checks: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
-  S.done = new Set(); S.doneModified = null;
+  S.inbox = { notes: [], checks: [], edits: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
+  S.appliedEdits = []; S.edit = null; S.split.noteId = null; // NEU (AS/AT)
+  S.done = new Set(); S.rejected = new Set(); S.doneModified = null;
   S.fresh.clear(); S.collapsed.clear(); S.page.clear(); S.query = ""; S.findTerms = null;
   clearImages();
   $$(".toasts .toast").forEach(t => t.remove());
@@ -4048,6 +4773,8 @@ function openShortcuts() {
       k("G"), h("span", null, "Zur Startseite"),
       k("R"), h("span", null, "Jetzt aktualisieren"),
       k("C"), h("span", null, "Geöffnete Notiz als Text kopieren"),
+      k("E"), h("span", null, "Geöffnete Notiz am PC bearbeiten (kommt aufs Handy)"),
+      k("Strg", "Klick"), h("span", null, "Notiz daneben öffnen (zwei Notizen nebeneinander)"),
       k("V"), h("span", null, "Liste ⇄ Kacheln"),
       k("L"), h("span", null, "Sperren"),
       k("Esc"), h("span", null, "Schließen / zurück"),
@@ -4057,7 +4784,7 @@ function openShortcuts() {
     h("h2", { style: { marginTop: "22px" } }, icon("help"), "Gut zu wissen"),
     h("ul", { class: "small", style: { margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "var(--muted)" } },
       h("li", null, "Das Handy lädt Änderungen etwa 1 Minute nach dem Bearbeiten hoch. Die Web-App schaut jede Minute nach."),
-      h("li", null, "Am PC schreibst du nur in „Vom PC“. Abhaken geht auch hier: Der Haken wird als Vorschlag gespeichert und vom Handy übernommen („→ Handy“). Sonst ändert der PC nie etwas an deinen Notizen."),
+      h("li", null, "Am PC kannst du Notizen bearbeiten (E), neue Notizen in Ordnern anlegen und abhaken. Der PC schickt dem Handy nur Vorschläge – das Handy übernimmt sie automatisch oder nach Bestätigung (Einstellung am Handy). Was am Handy inzwischen anders ist, wird nie überschrieben."),
       h("li", null, "Rechnungen und Arbeitszeit zeigen die Ergebnisse, die das Handy berechnet hat."),
       h("li", null, "Der versteckte Bereich ist nie auf dem PC."),
       h("li", null, "Über Kopier-Symbole neben Blöcken: Tabellen gehen direkt in Excel, Links auf Stellen in „Vom PC“."))
@@ -4081,6 +4808,8 @@ addEventListener("keydown", e => {
     return;
   }
   if (mod || e.altKey) return;
+  // NEU (AS): Während des Bearbeitens keine Ein-Buchstaben-Kürzel (nur Esc)
+  if (S.edit && S.noteId != null && e.key !== "Escape") return;
   switch (e.key) {
     case "/": e.preventDefault(); focusSearch(); break;
     case "?": openShortcuts(); break;
@@ -4090,10 +4819,17 @@ addEventListener("keydown", e => {
     case "g": case "G": go({ view: "home" }, null); break;
     case "v": case "V": S.settings.view = S.settings.view === "tiles" ? "list" : "tiles"; saveSettingsSoon(); renderList(); renderMain(); break;
     case "c": case "C": { const n = noteById(S.noteId); if (n) copyText(notePlainText(n), "Notiz kopiert"); break; }
+    case "e": case "E": { // NEU (AS): bearbeiten
+      const id = splitActive() && S.split.active === "b" ? S.split.noteId : S.noteId;
+      const n = noteById(id);
+      if (n && canEditFromPc(n) && !S.pcId) { e.preventDefault(); startEdit(n, S.page.get(n.id) || 0); }
+      break;
+    }
     case "j": case "k": case "J": case "K": stepNote(e.key.toLowerCase() === "j" ? 1 : -1); break;
     case "Enter": if (S.findNext && document.activeElement === document.body) S.findNext(); break;
     case "Escape":
-      if (S.findTerms) { S.findTerms = null; renderMain(); }
+      if (S.edit && S.noteId != null) cancelEdit(false); // NEU (AS)
+      else if (S.findTerms) { S.findTerms = null; renderMain(); }
       else if ($(".shell.nav-open")) closeNav();
       else if (S.noteId != null || S.pcId) closeNote();
       else if (S.route.view === "search") { S.query = ""; const i = $(".search-box input"); if (i) i.value = ""; onSearchInput(""); }
@@ -4130,16 +4866,16 @@ async function boot() {
   applySettings();
   if (DEMO) {
     try {
-      await import("./demo.js?v=1");
+      await import("./demo.js?v=2");
       const d = window.MyNotesDemo.setup();
       S.user = d.user;
       S.db = buildDb(d.snapshot);
       S.extras = d.extras;
       S.files = new Map();
-      S.inbox = { notes: parseInbox(d.inbox).notes, checks: [], fileId: "demo", modifiedTime: "demo", base: new Map(), readable: true, taken: [], state: null };
+      S.inbox = { notes: parseInbox(d.inbox).notes, checks: [], edits: parseInbox(d.inbox).edits, fileId: "demo", modifiedTime: "demo", base: new Map(), readable: true, taken: [], state: null };
       S.inbox.base = inboxBase();
       S.done = new Set(d.done || []);
-      window.MyNotesTest = { readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
+      window.MyNotesTest = { effectiveNote, buildEdit, timetableParse, timetableText, ttLanes, folderTotal, openNote, go, readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
       startApp();
     } catch (e) {
       gate(h("h1", null, "Demo konnte nicht starten"), h("div", { class: "gate-msg bad" }, String(e && e.stack || e)));
