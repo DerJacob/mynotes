@@ -21,7 +21,9 @@ const CLIENT_ID = "723061989132-tu2nrvj1vvsbgmk6e03vf1g6gf6tsdmi.apps.googleuser
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
-const FOLDER_NAME = "MyNotes PC";
+// GEÄNDERT (BB): „?test“ öffnet den Ordner der Test-App („MyNotes Dev“) – getrennt von der echten App
+const TEST_APP = new URLSearchParams(location.search).has("test");
+const FOLDER_NAME = TEST_APP ? "MyNotes PC (Test-App)" : "MyNotes PC";
 const F_MIRROR = "mynotes-pc.zip";
 const F_INBOX = "mynotes-inbox.enc";
 const F_DONE = "mynotes-inbox-done.enc";
@@ -2455,6 +2457,7 @@ function renderShell() {
     h("main", { class: "main" }));
   app.appendChild(shell);
   if (DEMO) app.appendChild(h("div", { class: "demo-flag" }, "DEMO · Beispieldaten"));
+  else if (TEST_APP) app.appendChild(h("div", { class: "demo-flag" }, "TEST-APP · MyNotes Dev")); // NEU (BB)
   renderSidebar();
   renderList();
   renderMain();
