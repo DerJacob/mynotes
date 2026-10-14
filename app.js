@@ -788,7 +788,7 @@ function blockText(b) {
     case "WORKTIME": { const w = S.extras.work[b.id]; return w ? w.summary : "Arbeitszeit"; }
     case "DRAWING": return drawingTexts(b.content).join("\n");
     case "IMAGE": case "PROJECT": case "DIVIDER": return "";
-    case "TIMETABLE": return timetableText(b.content); // NEU (AR)
+    case "TIMETABLE": return timetableText(b.content); // NEU (AZ)
     default: return readable(b.content);
   }
 }
@@ -820,7 +820,7 @@ function blockPlainLines(b, note) {
     case "DRAWING": return ["(Zeichnung)"];
     case "IMAGE": return ["(Bild)"];
     case "PROJECT": return [projectSummaryText(note, b.page)];
-    case "TIMETABLE": return timetableText(b.content).split("\n"); // NEU (AR)
+    case "TIMETABLE": return timetableText(b.content).split("\n"); // NEU (AZ)
     default: return [readable(b.content)];
   }
 }
@@ -859,7 +859,7 @@ function noteMarkdown(note) {
       case "WORKTIME": { const w = S.extras.work[b.id]; out.push(w ? w.summary : "⏱ Arbeitszeit"); break; }
       case "PROJECT": out.push("**" + projectSummaryText(note, b.page) + "**"); break;
       case "DRAWING": out.push("*(Zeichnung)*"); break;
-      case "TIMETABLE": out.push(timetableText(b.content)); break; // NEU (AR)
+      case "TIMETABLE": out.push(timetableText(b.content)); break; // NEU (AZ)
       case "IMAGE": out.push("*(Bild)*"); break;
       default: out.push(readable(b.content));
     }
@@ -1863,7 +1863,7 @@ function renderBlock(b, opts) {
       box.appendChild(list);
       return wrapBlock(b, box, opts);
     }
-    case "TIMETABLE": // NEU (AR)
+    case "TIMETABLE": // NEU (AZ)
       return wrapBlock(b, timetableEl(b.content), opts, { text: () => timetableText(b.content), title: "Stundenplan als Text kopieren" });
     default:
       return wrapBlock(b, h("div", { class: "unknown-block" }, "Dieser Inhalt („" + b.type + "“) wird am PC noch nicht angezeigt."), opts);
@@ -1997,7 +1997,7 @@ function cardPreview(note, budget, tile) {
       }
       case "WORKTIME": { const w = S.extras.work[b.id]; box.appendChild(h("div", { class: "ln" }, w ? w.summary : "⏱ Arbeitszeit")); lines++; break; }
       case "PROJECT": box.appendChild(h("div", { class: "ln" }, projectSummaryText(note, b.page))); lines++; break;
-      case "TIMETABLE": box.appendChild(h("div", { class: "ln" }, timetableSummary(b.content))); lines++; break; // NEU (AR)
+      case "TIMETABLE": box.appendChild(h("div", { class: "ln" }, timetableSummary(b.content))); lines++; break; // NEU (AZ)
       case "DRAWING": if (!thumb && b.content.trim()) thumb = { type: "d", b }; break;
       case "IMAGE": if (!thumb && b.content) thumb = { type: "i", b }; break;
     }
@@ -2074,33 +2074,73 @@ function profileDisplay(f, reveal) {
   return v;
 }
 // =====================================================================
-// NEU (AR): Stundenplan (Format siehe Timetable.kt)
-// {"v":1,"days":[1..7],"slots":[{s:"07:45",e:"10:50",l:"Pause …"}],"ab":bool,"aMon":"2026-10-12",
-//  "entries":[{id,t,c (ARGB-Zahl),d (1=Mo),s (Block),n (Länge),who,room,tag,w ("",A,B),info}]}
+// GEÄNDERT (AZ): Stundenplan – Format wie Timetable.kt am Handy
+// v2: {"v":2,"days":[1..7],"slots":[{s:"07:45",e:"10:50",l:"",b:[["09:15","09:30"]]}],"ab":bool,"aMon":"2026-10-12","home":bool,
+//      "entries":[{id,t,c (ARGB-Zahl),days:[1,3,5],from:"07:45",to:"14:30",who,room,tag,w ("",A,B),info}]}
+// v1 (1.3): Einträge hingen an Zeitblock-Nummern (d, s, n) → werden beim Lesen umgewandelt
+//   (Uhrzeiten aus dem Raster, gleiche Einträge an mehreren Tagen zusammengefasst, „Pause 9:15–9:30“ → echte Pause).
+// Intern sind Uhrzeiten Minuten seit Mitternacht.
 // =====================================================================
 const TT_DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const TT_DAYS_LONG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
+function ttMin(hm) {
+  const m = /^\s*(\d{1,2})[:.](\d{2})\s*$/.exec(String(hm ?? ""));
+  if (!m) return NaN;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h <= 23 && mi <= 59 ? h * 60 + mi : NaN;
+}
+/** Minuten → „7:45“ */
+function ttFmt(min) { return Math.floor(min / 60) + ":" + String(min % 60).padStart(2, "0"); }
+function ttColor(argb) { return "#" + (Number(argb) & 0xFFFFFF).toString(16).padStart(6, "0"); }
+function ttMonday(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function ttBreaksInText(text) {
+  const out = [];
+  const re = /(\d{1,2}[:.]\d{2})\s*[–-]\s*(\d{1,2}[:.]\d{2})/g;
+  let m;
+  while ((m = re.exec(text || ""))) { const s = ttMin(m[1]), e = ttMin(m[2]); if (e > s) out.push({ s, e }); }
+  return out;
+}
+
 function timetableParse(content) {
   let j = {};
   try { j = content && content.trim() ? JSON.parse(content) : {}; } catch (_) { j = {}; }
-  const slots = (j.slots || []).filter(x => x && x.s && x.e).map(x => ({ s: x.s, e: x.e, l: x.l || "" }));
+  if (!j || typeof j !== "object") j = {};
+  const slots = (j.slots || []).filter(x => x && x.s && x.e).map(x => {
+    const b = Array.isArray(x.b) ? x.b.filter(p => Array.isArray(p)).map(p => ({ s: ttMin(p[0]), e: ttMin(p[1]) })).filter(p => p.e > p.s) : [];
+    const fromLabel = b.length ? [] : ttBreaksInText(x.l || "");
+    return { s: ttMin(x.s), e: ttMin(x.e), l: fromLabel.length ? "" : (x.l || ""), b: b.concat(fromLabel) };
+  }).filter(sl => sl.e > sl.s);
   const days = (j.days || [1, 2, 3, 4, 5]).filter(d => d >= 1 && d <= 7).sort((a, b) => a - b);
-  return {
-    days: days.length ? days : [1, 2, 3, 4, 5],
-    slots,
-    ab: !!j.ab,
-    aMon: j.aMon || null,
-    entries: (j.entries || []).filter(e => e && e.id).map(e => ({
-      id: String(e.id), t: e.t || "", c: Number(e.c) || 0xFFA8EFEA, d: e.d || 1, s: e.s || 0, n: Math.max(1, e.n || 1),
-      who: e.who || "", room: e.room || "", tag: e.tag || "", w: e.w || "", info: e.info || ""
-    }))
-  };
+  const base = e => ({
+    id: String(e.id || Math.random().toString(36).slice(2, 10)), t: e.t || "", c: Number(e.c) || 0xFFA8EFEA,
+    who: e.who || "", room: e.room || "", tag: e.tag || "", w: e.w || "", info: e.info || ""
+  });
+  let entries;
+  if ((j.v || 1) < 2) {
+    const single = (j.entries || []).filter(e => e && e.id).map(e => {
+      const s = e.s || 0, n = Math.max(1, e.n || 1), d = e.d || 1;
+      if (s >= slots.length || d < 1 || d > 7) return null;
+      const last = Math.min(s + n - 1, slots.length - 1);
+      return { ...base(e), days: [d], from: slots[s].s, to: slots[last].e };
+    }).filter(Boolean);
+    const merged = new Map();
+    for (const e of single) {
+      const key = JSON.stringify([e.t, e.c, e.from, e.to, e.who, e.room, e.tag, e.w, e.info]);
+      const known = merged.get(key);
+      if (known) known.days = [...new Set(known.days.concat(e.days))].sort((a, b) => a - b);
+      else merged.set(key, e);
+    }
+    entries = [...merged.values()];
+  } else {
+    entries = (j.entries || []).filter(e => e && e.from && e.to).map(e => ({
+      ...base(e),
+      days: [...new Set((e.days || []).filter(d => d >= 1 && d <= 7))].sort((a, b) => a - b),
+      from: ttMin(e.from), to: ttMin(e.to)
+    })).filter(e => e.days.length && e.to > e.from);
+  }
+  return { days: days.length ? days : [1, 2, 3, 4, 5], slots, ab: !!j.ab, aMon: j.aMon || null, home: j.home !== false, entries };
 }
-function ttMin(hm) { const [h, m] = String(hm).split(":").map(Number); return (h || 0) * 60 + (m || 0); }
-function ttFmt(hm) { const [h, m] = String(hm).split(":"); return Number(h) + ":" + (m || "00").padStart(2, "0"); }
-function ttColor(argb) { return "#" + (Number(argb) & 0xFFFFFF).toString(16).padStart(6, "0"); }
-function ttMonday(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
 /** "A"/"B" für diese Woche – null, wenn A/B aus */
 function ttWeekOf(tt, date = new Date()) {
   if (!tt.ab) return null;
@@ -2109,123 +2149,182 @@ function ttWeekOf(tt, date = new Date()) {
   const weeks = Math.round((ttMonday(date) - ttMonday(ref)) / (7 * 86_400_000));
   return ((weeks % 2) + 2) % 2 === 0 ? "A" : "B";
 }
-function ttVisible(tt, week) {
-  return tt.entries.filter(e => tt.days.includes(e.d) && e.s < tt.slots.length && (week == null || !e.w || e.w === week));
+/** Einträge eines Tages (week null = alle Wochen), nach Beginn sortiert */
+function ttEntriesOn(tt, day, week) {
+  return tt.entries.filter(e => e.days.includes(day) && (week == null || !e.w || e.w === week))
+    .sort((a, b) => a.from - b.from || (b.to - b.from) - (a.to - a.from));
 }
-function ttEnd(tt, e) { return tt.slots[Math.min(tt.slots.length - 1, e.s + e.n - 1)].e; }
-/** Überschneidungen je Tag → nebeneinander: id → [Spur, Spuren] */
-function ttLanes(entries) {
+/** Sichtbarer Bereich in Minuten (volle Stunden, mindestens 8–16 Uhr) */
+function ttRange(tt) {
+  const starts = tt.slots.map(s => s.s).concat(tt.entries.map(e => e.from));
+  const ends = tt.slots.map(s => s.e).concat(tt.entries.map(e => e.to));
+  const from = Math.min(8, Math.floor((starts.length ? Math.min(...starts) : 480) / 60));
+  const to = Math.min(24, Math.max(16, Math.ceil((ends.length ? Math.max(...ends) : 960) / 60)));
+  return [from * 60, to * 60];
+}
+/**
+ * Ebenen wie am Handy: Ein Eintrag, der einen anderen ganz umschließt und mindestens doppelt so lang ist,
+ * wird Hintergrund (z. B. Arbeit). Sonst stehen Überschneidungen nebeneinander.
+ * → id → { lane, lanes, bg, over }
+ */
+function ttLayout(dayEntries) {
+  const dur = e => e.to - e.from;
+  const encloses = (a, b) => a.id !== b.id && a.from <= b.from && a.to >= b.to && dur(a) >= 2 * dur(b);
+  const bgIds = new Set(dayEntries.filter(e => dayEntries.some(o => encloses(e, o))).map(e => e.id));
   const out = new Map();
-  const byDay = new Map();
-  entries.forEach(e => { if (!byDay.has(e.d)) byDay.set(e.d, []); byDay.get(e.d).push(e); });
-  for (const list of byDay.values()) {
-    list.sort((a, b) => a.s - b.s || b.n - a.n || a.t.localeCompare(b.t));
-    let group = [], groupEnd = -1;
+  const lanesFor = (group, isBg) => {
+    const sorted = group.slice().sort((a, b) => a.from - b.from || dur(b) - dur(a) || a.t.localeCompare(b.t));
+    let cluster = [], clusterEnd = -1;
     const flush = () => {
-      if (!group.length) return;
+      if (!cluster.length) return;
       const ends = [];
       const lane = new Map();
-      for (const e of group) {
-        let i = ends.findIndex(x => x < e.s);
-        if (i < 0) { ends.push(-1); i = ends.length - 1; }
-        ends[i] = e.s + e.n - 1;
+      for (const e of cluster) {
+        let i = ends.findIndex(x => x <= e.from);
+        if (i < 0) { ends.push(e.to); i = ends.length - 1; } else ends[i] = e.to;
         lane.set(e.id, i);
       }
-      group.forEach(e => out.set(e.id, [lane.get(e.id), ends.length]));
-      group = [];
+      for (const e of cluster) {
+        const over = !isBg && dayEntries.some(o => bgIds.has(o.id) && o.from < e.to && e.from < o.to);
+        // Hintergrund: Name an der ersten freien Stelle (mind. 18 Min.), damit ihn nichts verdeckt
+        let label = 0;
+        if (isBg) {
+          let cursor = e.from;
+          for (const f of dayEntries.filter(o => !bgIds.has(o.id) && o.from < e.to && e.from < o.to).sort((a, b) => a.from - b.from)) {
+            if (f.from - cursor >= 18) break;
+            cursor = Math.max(cursor, f.to);
+          }
+          label = cursor <= e.to - 15 ? cursor - e.from : 0;
+        }
+        out.set(e.id, { lane: lane.get(e.id), lanes: ends.length, bg: isBg, over, label });
+      }
+      cluster = [];
     };
-    for (const e of list) {
-      if (group.length && e.s > groupEnd) flush();
-      group.push(e);
-      groupEnd = Math.max(groupEnd, e.s + e.n - 1);
+    for (const e of sorted) {
+      if (cluster.length && e.from >= clusterEnd) flush();
+      cluster.push(e);
+      clusterEnd = Math.max(clusterEnd, e.to);
     }
     flush();
-  }
+  };
+  lanesFor(dayEntries.filter(e => bgIds.has(e.id)), true);
+  lanesFor(dayEntries.filter(e => !bgIds.has(e.id)), false);
   return out;
 }
+/** Was läuft gerade / als Nächstes (heute)? Bei mehreren gleichzeitig: der kürzere. */
 function ttNowNext(tt, now = new Date()) {
   const day = ((now.getDay() + 6) % 7) + 1;
   const min = now.getHours() * 60 + now.getMinutes();
-  const today = ttVisible(tt, ttWeekOf(tt, now)).filter(e => e.d === day).sort((a, b) => ttMin(tt.slots[a.s].s) - ttMin(tt.slots[b.s].s));
-  const current = today.filter(e => ttMin(tt.slots[e.s].s) <= min && min < ttMin(ttEnd(tt, e))).sort((a, b) => a.n - b.n)[0] || null;
-  const next = today.find(e => ttMin(tt.slots[e.s].s) > min) || null;
+  const today = ttEntriesOn(tt, day, ttWeekOf(tt, now));
+  const current = today.filter(e => e.from <= min && min < e.to).sort((a, b) => (a.to - a.from) - (b.to - b.from))[0] || null;
+  const next = today.filter(e => e.from > min).sort((a, b) => a.from - b.from)[0] || null;
   return { current, next };
 }
 function timetableSummary(content) {
   const tt = timetableParse(content);
   const { current, next } = ttNowNext(tt);
   return ["🗓 Stundenplan · " + plural(tt.entries.length, "Eintrag", "Einträge"),
-    current ? "jetzt: " + current.t : null, next ? "danach: " + next.t + " " + ttFmt(tt.slots[next.s].s) : null].filter(Boolean).join(" · ");
+    current ? "jetzt: " + current.t : null, next ? "danach: " + next.t + " " + ttFmt(next.from) : null].filter(Boolean).join(" · ");
 }
 function timetableText(content) {
   const tt = timetableParse(content);
   const out = [];
   for (const d of tt.days) {
-    const list = tt.entries.filter(e => e.d === d && e.s < tt.slots.length).sort((a, b) => a.s - b.s);
+    const list = ttEntriesOn(tt, d, null);
     if (!list.length) continue;
     out.push(TT_DAYS_LONG[d - 1]);
     for (const e of list) {
       const extra = [e.who, e.room, e.tag, e.w ? "Woche " + e.w : ""].filter(Boolean).join(", ");
-      out.push("  " + ttFmt(tt.slots[e.s].s) + "–" + ttFmt(ttEnd(tt, e)) + " " + e.t + (extra ? " (" + extra + ")" : ""));
+      out.push("  " + ttFmt(e.from) + "–" + ttFmt(e.to) + " " + e.t + (extra ? " (" + extra + ")" : ""));
     }
   }
   return out.join("\n") || "🗓 Stundenplan (leer)";
 }
 
-/** Raster wie am Handy: Tage × Zeitblöcke, parallele Einträge nebeneinander, Jetzt-Linie */
+/**
+ * Wochenansicht wie am Handy: Höhe = Dauer, Zeitraster als Linien (Blockgrenzen kräftig, Pausen schattiert),
+ * lange Einträge blass im Hintergrund, gleichzeitige nebeneinander, rote Jetzt-Linie. Nur lesen.
+ */
 function timetableEl(content) {
   const tt = timetableParse(content);
   const box = h("div", { class: "b-tt" });
-  if (!tt.slots.length) { box.appendChild(h("div", { class: "muted small" }, "🗓 Stundenplan – noch nicht eingerichtet (am Handy).")); return box; }
+  if (!tt.slots.length && !tt.entries.length) {
+    box.appendChild(h("div", { class: "muted small" }, "🗓 Stundenplan – noch nicht eingerichtet (am Handy).")); return box;
+  }
   const thisWeek = ttWeekOf(tt);
   let week = thisWeek;
+  const PX = 1.05; // Pixel pro Minute
   const draw = () => {
     clear(box);
     const now = new Date();
     const { current, next } = ttNowNext(tt, now);
     const head = h("div", { class: "tt-head" }, h("b", null, "🗓 Stundenplan"),
-      h("span", { class: "small muted grow" }, [current ? "Jetzt: " + current.t + (current.room ? " (" + current.room + ")" : "") : null,
-        next ? "danach " + ttFmt(tt.slots[next.s].s) + ": " + next.t : null].filter(Boolean).join(" · ")));
+      h("span", { class: "small muted grow" }, [current ? "Jetzt: " + current.t + (current.room ? " (" + current.room + ")" : "") + " bis " + ttFmt(current.to) : null,
+        next ? "danach " + ttFmt(next.from) + ": " + next.t : null].filter(Boolean).join(" · ")));
     if (tt.ab) {
       head.appendChild(seg([["A", "Woche A" + (thisWeek === "A" ? " · jetzt" : "")], ["B", "Woche B" + (thisWeek === "B" ? " · jetzt" : "")], ["*", "Alle"]],
         week == null ? "*" : week, v => { week = v === "*" ? null : v; draw(); }));
     }
     box.appendChild(head);
-    const entries = ttVisible(tt, week);
-    const lanes = ttLanes(entries);
+    const [from, to] = ttRange(tt);
+    const y = min => ((min - from) * PX).toFixed(1) + "px";
     const monday = ttMonday(now);
     const todayD = ((now.getDay() + 6) % 7) + 1;
-    const grid = h("div", { class: "tt-grid", vars: { "--tt-days": String(tt.days.length), "--tt-rows": String(tt.slots.length) } });
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const grid = h("div", { class: "tt-grid", vars: { "--tt-days": String(tt.days.length), "--tt-h": ((to - from) * PX).toFixed(0) + "px" } });
     grid.appendChild(h("div", { class: "tt-corner" }));
     tt.days.forEach(d => {
       const date = new Date(monday); date.setDate(monday.getDate() + d - 1);
       grid.appendChild(h("div", { class: "tt-day" + (d === todayD ? " today" : "") }, TT_DAYS[d - 1] + " " + date.getDate() + "."));
     });
+    // Zeitspalte: Blockanfang unter der Linie, Blockende darüber, Pausen klein (wie in der Skizze)
     const times = h("div", { class: "tt-times" });
-    tt.slots.forEach(sl => times.appendChild(h("div", { class: "tt-time" }, h("b", null, ttFmt(sl.s)), sl.l ? h("span", { class: "l" }, sl.l) : null, h("span", null, ttFmt(sl.e)))));
+    if (!tt.slots.length) {
+      for (let hh = from / 60; hh < to / 60; hh++) times.appendChild(h("span", { class: "tt-tl below", vars: { "--y": y(hh * 60) } }, hh + ":00"));
+    }
+    tt.slots.forEach(sl => {
+      times.appendChild(h("span", { class: "tt-tl below strong", vars: { "--y": y(sl.s) } }, ttFmt(sl.s)));
+      times.appendChild(h("span", { class: "tt-tl above", vars: { "--y": y(sl.e) } }, ttFmt(sl.e)));
+      sl.b.forEach(b => {
+        times.appendChild(h("span", { class: "tt-tl above tiny", vars: { "--y": y(b.s) } }, ttFmt(b.s)));
+        times.appendChild(h("span", { class: "tt-tl below tiny", vars: { "--y": y(b.e) } }, ttFmt(b.e)));
+      });
+    });
     grid.appendChild(times);
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-    let nowPos = null;
-    tt.slots.forEach((sl, i) => { const a = ttMin(sl.s), b = ttMin(sl.e); if (nowMin >= a && nowMin < b) nowPos = i + (nowMin - a) / Math.max(1, b - a); });
     tt.days.forEach(d => {
       const col = h("div", { class: "tt-col" + (d === todayD ? " today" : "") });
-      for (const e of entries.filter(x => x.d === d)) {
-        const [lane, n] = lanes.get(e.id) || [0, 1];
-        const span = Math.min(e.n, tt.slots.length - e.s);
+      for (let hh = Math.ceil(from / 60); hh <= to / 60; hh++) col.appendChild(h("div", { class: "tt-hour", vars: { "--y": y(hh * 60) } }));
+      tt.slots.forEach(sl => {
+        sl.b.forEach(b => col.appendChild(h("div", { class: "tt-break", vars: { "--y": y(b.s), "--h": ((b.e - b.s) * PX).toFixed(1) + "px" } })));
+        col.appendChild(h("div", { class: "tt-line", vars: { "--y": y(sl.s) } }));
+        col.appendChild(h("div", { class: "tt-line", vars: { "--y": y(sl.e) } }));
+      });
+      const list = ttEntriesOn(tt, d, week);
+      const layout = ttLayout(list);
+      list.sort((a, b) => (layout.get(a.id)?.bg ? 0 : 1) - (layout.get(b.id)?.bg ? 0 : 1));
+      for (const e of list) {
+        const p = layout.get(e.id) || { lane: 0, lanes: 1, bg: false, over: false };
+        const inset = !p.bg && p.over ? 16 : 0;
+        const w = (100 - inset) / p.lanes;
         const bg = ttColor(e.c);
-        const running = d === todayD && (!e.w || e.w === thisWeek) && nowMin >= ttMin(tt.slots[e.s].s) && nowMin < ttMin(ttEnd(tt, e));
+        const running = d === todayD && (!e.w || e.w === thisWeek) && nowMin >= e.from && nowMin < e.to;
+        const short = (e.to - e.from) * PX < 46;
         const el = h("div", {
-          class: "tt-entry" + (isLight(bg) ? "" : " dark") + (n > 1 ? " multi" : "") + (running ? " running" : "") + (e.info ? " has-info" : ""), tabindex: "0",
-          title: [e.t, ttFmt(tt.slots[e.s].s) + "–" + ttFmt(ttEnd(tt, e)), e.who, e.room, e.tag, e.w ? "Woche " + e.w : "", e.info].filter(Boolean).join("\n"),
-          vars: { "--top": String(e.s), "--span": String(span), "--lane": String(lane), "--lanes": String(n), "--tt-bg": bg }
+          class: "tt-entry" + (p.bg ? " bg" : isLight(bg) ? "" : " dark") + (p.lanes > 1 ? " multi" : "") + (short ? " short" : "") +
+            (running ? " running" : "") + (e.info ? " has-info" : ""), tabindex: "0",
+          title: [e.t, ttFmt(e.from) + "–" + ttFmt(e.to), e.who, e.room, e.tag, e.w ? "Woche " + e.w : "", e.info].filter(Boolean).join("\n"),
+          vars: {
+            "--y": y(e.from), "--h": Math.max(18, (e.to - e.from) * PX).toFixed(1) + "px",
+            "--x": (inset + w * p.lane).toFixed(2) + "%", "--w": w.toFixed(2) + "%", "--tt-bg": bg,
+            "--label": ((p.label || 0) * PX).toFixed(1) + "px"
+          }
         },
-        e.who ? h("span", { class: "who" }, e.who) : null,
-        e.tag ? h("span", { class: "tag" }, e.tag) : null,
+        !p.bg && !short && (e.who || e.tag) ? h("span", { class: "top" }, h("span", { class: "who" }, e.who), e.tag ? h("span", { class: "tag" }, e.tag) : null) : null,
         h("span", { class: "t" }, e.t + (e.w ? " (" + e.w + ")" : "")),
-        e.room ? h("span", { class: "room" }, e.room) : null);
+        e.room && !short ? h("span", { class: "room" }, e.room) : null);
         col.appendChild(el);
       }
-      if (d === todayD && nowPos != null) col.appendChild(h("div", { class: "tt-now", vars: { "--pos": String(nowPos) } }));
+      if (d === todayD && nowMin >= from && nowMin < to) col.appendChild(h("div", { class: "tt-now", vars: { "--y": y(nowMin) } }));
       grid.appendChild(col);
     });
     box.appendChild(h("div", { class: "tt-scroll" }, grid));
@@ -3124,7 +3223,7 @@ function renderDashboard(main) {
 
   // Erinnerungen
   const rem = [...db.notes.values()].filter(n => n.reminder && !n.deleted && !n.template && n.reminder > now - 7 * 86_400_000).sort((a, b) => a.reminder - b.reminder).slice(0, 7);
-  // NEU (AR): Stundenplan – was läuft gerade, was kommt als Nächstes (wie am Handy)
+  // NEU (AZ): Stundenplan – was läuft gerade, was kommt als Nächstes (wie am Handy)
   const ttRows = [];
   for (const n of active) {
     for (const b of n.blocks) {
@@ -3132,15 +3231,15 @@ function renderDashboard(main) {
       let raw = {};
       try { raw = JSON.parse(b.content || "{}"); } catch (_) {}
       if (raw.home === false) continue;
-      const tt = timetableParse(b.content);
-      if (!tt.slots.length) continue;
+      const tt = timetableParse(b.content); // GEÄNDERT (AZ): echte Uhrzeiten
+      if (!tt.entries.length) continue;
       const { current, next } = ttNowNext(tt);
       if (!current && !next) continue;
       const e = current || next;
       ttRows.push(h("button", { class: "row-link tt-now-row", onclick: () => openNote(n.id) },
         h("span", { class: "dot", style: { background: ttColor(e.c) } }),
         h("span", { class: "t" }, current ? "Jetzt: " + current.t + (current.room ? " (" + current.room + ")" : "") : "Als Nächstes: " + next.t + (next.room ? " (" + next.room + ")" : "")),
-        h("span", { class: "d" }, current ? "bis " + ttFmt(ttEnd(tt, current)) + (next ? " · danach " + next.t : "") : ttFmt(tt.slots[next.s].s))));
+        h("span", { class: "d" }, current ? "bis " + ttFmt(current.to) + (next ? " · danach " + next.t : "") : ttFmt(next.from))));
     }
   }
   grid.appendChild(h("div", { class: "panel" }, h("h3", null, icon("bell"), h("span", { class: "grow" }, "Anstehend"),
@@ -4886,7 +4985,7 @@ async function boot() {
   applySettings();
   if (DEMO) {
     try {
-      await import("./demo.js?v=2");
+      await import("./demo.js?v=3");
       const d = window.MyNotesDemo.setup();
       S.user = d.user;
       S.db = buildDb(d.snapshot);
@@ -4895,7 +4994,7 @@ async function boot() {
       S.inbox = { notes: parseInbox(d.inbox).notes, checks: [], edits: parseInbox(d.inbox).edits, fileId: "demo", modifiedTime: "demo", base: new Map(), readable: true, taken: [], state: null };
       S.inbox.base = inboxBase();
       S.done = new Set(d.done || []);
-      window.MyNotesTest = { effectiveNote, buildEdit, timetableParse, timetableText, ttLanes, folderTotal, openNote, go, readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
+      window.MyNotesTest = { effectiveNote, buildEdit, timetableParse, timetableText, ttLayout, folderTotal, openNote, go, readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
       startApp();
     } catch (e) {
       gate(h("h1", null, "Demo konnte nicht starten"), h("div", { class: "gate-msg bad" }, String(e && e.stack || e)));
