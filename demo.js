@@ -296,7 +296,7 @@
     }
   };
   const inbox = {
-    format: "mynotes-pc-inbox", v: 1,
+    format: "mynotes-pc-inbox", v: 3, // GEÄNDERT (BB): Änderungen als Schritte („ops“)
     notes: [
       { id: "demo-pc-1", title: "Link für später", created: now - 2 * 3600_000, modified: now - 2 * 3600_000, md: "https://developer.android.com/jetpack/compose\n\n- [ ] Am Wochenende lesen", blocks: [] },
       { id: "demo-pc-2", title: "Antwort an Vermieter", created: now - DAY, modified: now - 20 * 3600_000, md: "Sehr geehrter Herr Schmidt,\n\nvielen Dank für Ihre Nachricht. Der Übergabetermin am 31.10. passt mir gut.\n\nMit freundlichen Grüßen", blocks: [] },
@@ -304,9 +304,11 @@
       { id: "demo-pc-4", title: "Literatur Seminar", created: now - 40 * MIN, modified: now - 40 * MIN, md: "## Quellen\n- [ ] Buch aus der Bibliothek holen", blocks: [], folderId: 4 }
     ],
     edits: [{
-      id: "demo-edit-1", noteId: 1, noteTitle: "Einkaufsliste", at: now - 10 * MIN, base: now - 4 * MIN, title: null,
-      sets: [{ blockId: 101, from: "Milch", to: "Hafermilch (2 Packungen)", checked: false, level: null }],
-      dels: [], adds: [{ tmp: "demoadd1", after: 106, page: 0, type: "CHECKLIST_ITEM", content: "Batterien AA", checked: false, level: null }]
+      id: "demo-edit-1", noteId: 1, noteTitle: "Einkaufsliste", at: now - 10 * MIN, base: now - 4 * MIN,
+      ops: [
+        { op: "set", blockId: 101, from: "Milch", to: "Hafermilch (2 Packungen)", checked: false, level: null },
+        { op: "add", tmp: "demoadd1", after: 106, page: 0, type: "CHECKLIST_ITEM", content: "Batterien AA", checked: false, level: null }
+      ]
     }]
   };
   window.MyNotesDemo = {
