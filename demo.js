@@ -222,6 +222,21 @@
       ]
     }))
   ]);
+  // NEU (AZ): Stundenplan im neuen Format – Uhrzeiten, mehrere Tage, Arbeit als Hintergrund
+  note(50, "Stundenplan (neues Format)", { folders: [4], modifiedAt: now - 20 * MIN }, [
+    B("TIMETABLE", JSON.stringify({
+      v: 2, days: [1, 2, 3, 4, 5], ab: false, aMon: null, home: true,
+      slots: [{ s: "07:45", e: "10:50", l: "", b: [["09:15", "09:30"]] }, { s: "11:00", e: "14:30", l: "", b: [["12:30", "13:00"]] }, { s: "14:35", e: "17:45", l: "", b: [["16:00", "16:10"]] }],
+      entries: [
+        { id: "w", t: "Arbeit", c: 0xFFA8EFEA, days: [1, 3, 5], from: "07:45", to: "14:30" },
+        { id: "m", t: "Mathe", c: 0xFF9BA2F7, days: [1], from: "11:00", to: "12:30", who: "Fr. Beispiel", room: "A 1.01" },
+        { id: "p", t: "Projekt", c: 0xFFFFF27A, days: [2], from: "07:45", to: "10:50", tag: "Projekt" },
+        { id: "l1", t: "Labor", c: 0xFF8A8A8A, days: [2], from: "11:00", to: "14:30", room: "B 2.04" },
+        { id: "l2", t: "Übung", c: 0xFF86E879, days: [2], from: "11:00", to: "12:30", room: "B 0.10" },
+        { id: "s", t: "Sprachkurs", c: 0xFFD9A0F5, days: [3], from: "15:00", to: "16:30", info: "Vokabeln" }
+      ]
+    }))
+  ]);
   // NEU (AO): Wochenplan mit Über-Überschrift
   note(49, "Wochenplan", { folders: [5], modifiedAt: now - 80 * MIN }, [
     B("HEADING", "KW 41 · 05.10.2026 – 11.10.2026", { priority: 1, collapsed: true }),
