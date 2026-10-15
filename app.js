@@ -1957,10 +1957,13 @@ function renderBlock(b, opts) {
       const subtitle = fields.filter(f => PROFILE_SUB.has(f.l.trim().toLowerCase()) && f.v.trim()).map(f => f.v.trim()).join(" · ");
       const rest = fields.filter(f => f.v.trim() && f.l.toLowerCase() !== "name" && !PROFILE_SUB.has(f.l.trim().toLowerCase()));
       let reveal = false;
+      // GEÄNDERT (BC2): am PC bearbeitbar (✎ im Kopf), wenn das Handy es versteht
+      const editable = !opts.preview && opts.note && typeof b.id === "number" && canEditFromPc(opts.note) && phoneCanOp("profile");
       const card = h("div", { class: "b-profile" },
         h("div", { class: "profile-head" }, h("div", { class: "avatar" }, initials(name)),
           h("div", { class: "grow" }, h("h3", null, name || "Steckbrief"),
-            h("div", { class: "small muted" }, subtitle || "Zeile anklicken = kopieren"))));
+            h("div", { class: "small muted" }, subtitle || "Zeile anklicken = kopieren")),
+          editable ? h("button", { class: "btn subtle small", type: "button", onclick: e => { e.stopPropagation(); profileDialog(opts.note, b); } }, icon("edit", "sm"), "Bearbeiten") : null));
       const groups = new Map();
       for (const f of rest) { const g = profileGroup(f.l); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(f); }
       const valueEls = [];
@@ -2022,7 +2025,7 @@ function renderBlock(b, opts) {
       return wrapBlock(b, box, opts);
     }
     case "TIMETABLE": // NEU (AZ)
-      return wrapBlock(b, timetableEl(b.content), opts, { text: () => timetableText(b.content), title: "Stundenplan als Text kopieren" });
+      return wrapBlock(b, timetableEl(b.content, b, opts), opts, { text: () => timetableText(b.content), title: "Stundenplan als Text kopieren" }); // GEÄNDERT (BC2)
     default:
       return wrapBlock(b, h("div", { class: "unknown-block" }, "Dieser Inhalt („" + b.type + "“) wird am PC noch nicht angezeigt."), opts);
   }
@@ -2404,11 +2407,19 @@ function timetableText(content) {
  * Wochenansicht wie am Handy: Höhe = Dauer, Zeitraster als Linien (Blockgrenzen kräftig, Pausen schattiert),
  * lange Einträge blass im Hintergrund, gleichzeitige nebeneinander, rote Jetzt-Linie. Nur lesen.
  */
-function timetableEl(content) {
+function timetableEl(content, b = null, opts = {}) {
   const tt = timetableParse(content);
   const box = h("div", { class: "b-tt" });
+  // NEU (BC2): am PC bearbeiten – Eintrag anklicken, freie Stelle anklicken, + und ⚙
+  const note = opts.note;
+  const v2 = ttIsV2(content);
+  const live = !!b && !opts.preview && note && typeof b.id === "number" && canEditFromPc(note) && phoneCanOp("tt") && v2;
+  const tools = live ? h("span", { class: "tt-tools" },
+    iconBtn("add", "Eintrag hinzufügen", () => ttEntryDialog(note, b, tt, null, { day: tt.days[0] || 1, from: 8 * 60 }), "sm"),
+    iconBtn("settings", "Stundenplan einrichten", () => ttSettingsDialog(note, b, tt), "sm")) : null;
   if (!tt.slots.length && !tt.entries.length) {
-    box.appendChild(h("div", { class: "muted small" }, "🗓 Stundenplan – noch nicht eingerichtet (am Handy).")); return box;
+    box.appendChild(h("div", { class: "tt-head" }, h("span", { class: "muted small grow" }, "🗓 Stundenplan – noch nicht eingerichtet" + (live ? "" : " (am Handy).")), tools));
+    return box;
   }
   const thisWeek = ttWeekOf(tt);
   let week = thisWeek;
@@ -2419,7 +2430,7 @@ function timetableEl(content) {
     const { current, next } = ttNowNext(tt, now);
     const head = h("div", { class: "tt-head" }, h("b", null, "🗓 Stundenplan"),
       h("span", { class: "small muted grow" }, [current ? "Jetzt: " + current.t + (current.room ? " (" + current.room + ")" : "") + " bis " + ttFmt(current.to) : null,
-        next ? "danach " + ttFmt(next.from) + ": " + next.t : null].filter(Boolean).join(" · ")));
+        next ? "danach " + ttFmt(next.from) + ": " + next.t : null].filter(Boolean).join(" · ")), tools);
     if (tt.ab) {
       head.appendChild(seg([["A", "Woche A" + (thisWeek === "A" ? " · jetzt" : "")], ["B", "Woche B" + (thisWeek === "B" ? " · jetzt" : "")], ["*", "Alle"]],
         week == null ? "*" : week, v => { week = v === "*" ? null : v; draw(); }));
@@ -2451,7 +2462,15 @@ function timetableEl(content) {
     });
     grid.appendChild(times);
     tt.days.forEach(d => {
-      const col = h("div", { class: "tt-col" + (d === todayD ? " today" : "") });
+      const col = h("div", { class: "tt-col" + (d === todayD ? " today" : "") + (live ? " live" : "") });
+      // NEU (BC2): freie Stelle anklicken → neuer Eintrag (rastet auf Blockanfang bzw. 5 Minuten ein)
+      if (live) col.addEventListener("click", ev => {
+        if (ev.target !== col && !ev.target.classList.contains("tt-hour") && !ev.target.classList.contains("tt-line") && !ev.target.classList.contains("tt-break")) return;
+        const rect = col.getBoundingClientRect();
+        const min = from + (ev.clientY - rect.top) / PX;
+        const slot = tt.slots.find(sl => min >= sl.s && min < sl.e);
+        ttEntryDialog(note, b, tt, null, slot ? { day: d, from: slot.s, to: slot.e } : { day: d, from: Math.round(min / 15) * 15 });
+      });
       for (let hh = Math.ceil(from / 60); hh <= to / 60; hh++) col.appendChild(h("div", { class: "tt-hour", vars: { "--y": y(hh * 60) } }));
       tt.slots.forEach(sl => {
         sl.b.forEach(b => col.appendChild(h("div", { class: "tt-break", vars: { "--y": y(b.s), "--h": ((b.e - b.s) * PX).toFixed(1) + "px" } })));
@@ -2470,7 +2489,9 @@ function timetableEl(content) {
         const short = (e.to - e.from) * PX < 46;
         const el = h("div", {
           class: "tt-entry" + (p.bg ? " bg" : isLight(bg) ? "" : " dark") + (p.lanes > 1 ? " multi" : "") + (short ? " short" : "") +
-            (running ? " running" : "") + (e.info ? " has-info" : ""), tabindex: "0",
+            (running ? " running" : "") + (e.info ? " has-info" : "") + (live ? " live" : ""), tabindex: "0",
+          onclick: live ? ev => { ev.stopPropagation(); ttEntryDialog(note, b, tt, e, { day: d }); } : null, // NEU (BC2)
+          onkeydown: live ? ev => { if (ev.key === "Enter") ttEntryDialog(note, b, tt, e, { day: d }); } : null,
           title: [e.t, ttFmt(e.from) + "–" + ttFmt(e.to), e.who, e.room, e.tag, e.w ? "Woche " + e.w : "", e.info].filter(Boolean).join("\n"),
           vars: {
             "--y": y(e.from), "--h": Math.max(18, (e.to - e.from) * PX).toFixed(1) + "px",
@@ -2487,9 +2508,163 @@ function timetableEl(content) {
       grid.appendChild(col);
     });
     box.appendChild(h("div", { class: "tt-scroll" }, grid));
+    if (b && !opts.preview && note && canEditFromPc(note) && phoneCanOp("tt") && !v2) {
+      box.appendChild(h("div", { class: "small muted", style: { marginTop: "6px" } }, "Zum Bearbeiten am PC den Stundenplan einmal am Handy öffnen (er wird dabei ins neue Format umgestellt)."));
+    }
   };
   draw();
   return box;
+}
+
+// =====================================================================
+// NEU (BC2): Stundenplan am PC bearbeiten. Jede Änderung = ein Schritt „tt“ (ein Eintrag) bzw.
+// „ttcfg“ (Tage, Raster, A/B, Startseite) – das Handy übernimmt sie Eintrag für Eintrag.
+// =====================================================================
+const TT_COLORS = [0xFFA8EFEA, 0xFFFFF27A, 0xFF9BA2F7, 0xFF8A8A8A, 0xFFD9A0F5, 0xFF86E879, 0xFFF78B8B, 0xFFC2A07F, 0xFFFFC07A, 0xFFF7A8C8];
+function ttIsV2(content) {
+  if (!content || !content.trim()) return true;
+  try { return JSON.parse(content).v === 2; } catch (_) { return false; }
+}
+const ttHm = min => String(Math.floor(min / 60)).padStart(2, "0") + ":" + String(min % 60).padStart(2, "0");
+/** Eintrag im Format des Blocks (wie TimetableData.toJson) */
+function ttEntryOut(e) {
+  return e ? { id: e.id, t: e.t, c: e.c, days: [...e.days].sort((a, b) => a - b), from: ttHm(e.from), to: ttHm(e.to), who: e.who, room: e.room, tag: e.tag, w: e.w, info: e.info } : null;
+}
+function ttCfgOut(tt) {
+  return { days: [...tt.days], slots: tt.slots.map(sl => ({ s: ttHm(sl.s), e: ttHm(sl.e), l: sl.l || "", b: sl.b.map(x => [ttHm(x.s), ttHm(x.e)]) })), ab: tt.ab, aMon: tt.aMon, home: tt.home };
+}
+/** Eintrag anlegen/bearbeiten (wie am Handy) */
+function ttEntryDialog(note, b, tt, entry, at) {
+  const isNew = !entry;
+  const e = entry ? { ...entry, days: [...entry.days] } : {
+    id: uuid().replace(/-/g, "").slice(0, 8), t: "", c: TT_COLORS[tt.entries.length % TT_COLORS.length], days: [at.day],
+    from: at.from, to: at.to ?? Math.min(at.from + 90, 23 * 60 + 59), who: "", room: "", tag: "", w: "", info: ""
+  };
+  const title = h("input", { class: "field", placeholder: "Titel, z. B. Mathe 2", value: e.t });
+  const fromIn = h("input", { class: "field", type: "time", value: ttHm(e.from) });
+  const toIn = h("input", { class: "field", type: "time", value: ttHm(e.to) });
+  const who = h("input", { class: "field", placeholder: "Person", value: e.who });
+  const room = h("input", { class: "field", placeholder: "Raum", value: e.room });
+  const tag = h("input", { class: "field", placeholder: "Etikett, z. B. Labor", value: e.tag });
+  const info = h("textarea", { class: "field", rows: "2", placeholder: "Notiz, z. B. Hausaufgaben" });
+  info.value = e.info;
+  const days = new Set(e.days);
+  const dayChips = h("div", { class: "chips" });
+  const drawDays = () => replace(dayChips, ...[1, 2, 3, 4, 5, 6, 7].filter(d => tt.days.includes(d) || days.has(d)).map(d =>
+    h("button", { class: "chip" + (days.has(d) ? " accent" : ""), type: "button", onclick: () => { days.has(d) ? days.delete(d) : days.add(d); drawDays(); } }, TT_DAYS[d - 1])));
+  drawDays();
+  const slotChips = tt.slots.length ? h("div", { class: "chips" }, tt.slots.map((sl, i) => h("button", {
+    class: "chip", type: "button", title: "Zeit dieses Blocks übernehmen", onclick: () => { fromIn.value = ttHm(sl.s); toIn.value = ttHm(sl.e); }
+  }, (i + 1) + ". " + ttFmt(sl.s) + "–" + ttFmt(sl.e)))) : null;
+  let color = e.c;
+  const colors = h("div", { class: "tt-colors" });
+  const drawColors = () => replace(colors, ...TT_COLORS.map(c => h("button", {
+    class: "tt-swatch" + (c === color ? " on" : ""), type: "button", style: { background: ttColor(c) }, title: "Farbe", onclick: () => { color = c; drawColors(); }
+  })));
+  drawColors();
+  let week = e.w;
+  const weekSeg = tt.ab ? seg([["", "Jede Woche"], ["A", "Woche A"], ["B", "Woche B"]], week, v => { week = v; }) : null;
+  const save = () => {
+    const f = ttMin(fromIn.value), t = ttMin(toIn.value);
+    if (!Number.isFinite(f) || !Number.isFinite(t) || t <= f) { toast("Bitte Beginn vor Ende wählen", { bad: true }); return; }
+    if (!days.size) { toast("Bitte mindestens einen Tag wählen", { bad: true }); return; }
+    const to = { ...e, t: title.value.trim() || "Eintrag", c: color, days: [...days], from: f, to: t, who: who.value.trim(), room: room.value.trim(), tag: tag.value.trim(), w: week, info: info.value.trim() };
+    closeDialog();
+    queueModuleOp(note, { op: "tt", blockId: b.id, id: e.id, from: ttEntryOut(entry), to: ttEntryOut(to) }, (isNew ? "Eintrag angelegt" : "Eintrag gespeichert"));
+  };
+  openDialog([h("h2", null, isNew ? "Neuer Eintrag" : "Eintrag bearbeiten"), title,
+    h("div", { class: "wt-field" }, "Tage", dayChips),
+    h("div", { class: "wt-times" }, h("label", null, "Beginn", fromIn), h("label", null, "Ende", toIn), h("span")),
+    slotChips ? h("div", { class: "wt-field" }, "Zeitblock", slotChips) : null,
+    h("div", { class: "wt-times" }, h("label", null, "Person", who), h("label", null, "Raum", room), h("label", null, "Etikett", tag)),
+    weekSeg ? h("div", { class: "wt-field" }, "Woche", weekSeg) : null,
+    h("div", { class: "wt-field" }, "Farbe", colors),
+    h("label", { class: "wt-field" }, "Notiz", info),
+    h("div", { class: "actions" },
+      !isNew ? h("button", { class: "btn danger", onclick: async () => {
+        closeDialog();
+        if (!await confirmDialog("Eintrag löschen?", "„" + (entry.t || "Eintrag") + "“ wird an allen Tagen gelöscht.", "Löschen", true)) return;
+        queueModuleOp(note, { op: "tt", blockId: b.id, id: entry.id, from: ttEntryOut(entry), to: null }, "Eintrag gelöscht");
+      } }, "Löschen") : null,
+      h("span", { class: "grow" }),
+      h("button", { class: "btn ghost", onclick: () => closeDialog() }, "Abbrechen"), h("button", { class: "btn", onclick: save }, "Speichern"))], { wide: true });
+  setTimeout(() => title.focus(), 30);
+}
+/** Stundenplan einrichten: Tage, Zeitraster mit Pausen, A/B-Wochen, Startseite (wie am Handy) */
+function ttSettingsDialog(note, b, tt) {
+  const days = new Set(tt.days);
+  const dayChips = h("div", { class: "chips" });
+  const drawDays = () => replace(dayChips, ...TT_DAYS.map((l, i) => h("button", { class: "chip" + (days.has(i + 1) ? " accent" : ""), type: "button", onclick: () => { days.has(i + 1) ? days.delete(i + 1) : days.add(i + 1); drawDays(); } }, l)));
+  drawDays();
+  const slots = tt.slots.map(sl => ({ s: sl.s, e: sl.e, l: sl.l, b: sl.b.map(x => ({ ...x })) }));
+  const list = h("div", { class: "tt-slots" });
+  const timeIn = (min, set) => { const i = h("input", { class: "field", type: "time", value: ttHm(min) }); i.addEventListener("change", () => { const v = ttMin(i.value); if (Number.isFinite(v)) set(v); }); return i; };
+  const drawSlots = () => {
+    replace(list, ...slots.map((sl, i) => h("div", { class: "tt-slot" },
+      h("div", { class: "tt-slot-row" }, h("b", null, (i + 1) + "."), timeIn(sl.s, v => sl.s = v), h("span", null, "–"), timeIn(sl.e, v => sl.e = v),
+        h("button", { class: "btn ghost small", type: "button", onclick: () => { const m = Math.round((sl.s + sl.e) / 2); sl.b.push({ s: m, e: m + 15 }); drawSlots(); } }, "+ Pause"),
+        iconBtn("close", "Block entfernen", () => { slots.splice(i, 1); drawSlots(); }, "sm")),
+      ...sl.b.map((x, k) => h("div", { class: "tt-slot-row brk" }, h("span", { class: "small muted" }, "Pause"), timeIn(x.s, v => x.s = v), h("span", null, "–"), timeIn(x.e, v => x.e = v),
+        iconBtn("close", "Pause entfernen", () => { sl.b.splice(k, 1); drawSlots(); }, "sm"))))),
+      slots.length ? null : h("div", { class: "small muted" }, "Kein Raster – Einträge haben nur ihre Uhrzeiten."));
+  };
+  drawSlots();
+  const addSlot = h("button", { class: "btn ghost small", type: "button", onclick: () => { const last = slots[slots.length - 1]; const s0 = last ? last.e + 15 : 8 * 60; slots.push({ s: s0, e: Math.min(s0 + 90, 23 * 60 + 59), l: "", b: [] }); drawSlots(); } }, "+ Block");
+  const ab = h("input", { type: "checkbox", checked: tt.ab });
+  let current = ttWeekOf(tt) || "A";
+  const weekSeg = seg([["A", "Diese Woche ist A"], ["B", "Diese Woche ist B"]], current, v => { current = v; });
+  const home = h("input", { type: "checkbox", checked: tt.home });
+  const save = () => {
+    if (!days.size) { toast("Bitte mindestens einen Tag wählen", { bad: true }); return; }
+    if (slots.some(sl => sl.e <= sl.s)) { toast("Bei jedem Block „bis“ nach „von“ setzen", { bad: true }); return; }
+    const monday = ttMonday();
+    if (current === "B") monday.setDate(monday.getDate() - 7);
+    const aMon = ab.checked ? WT.key(monday) : tt.aMon;
+    const to = { days: [...days].sort((a, c) => a - c), slots: slots.slice().sort((a, c) => a.s - c.s).map(sl => ({ s: ttHm(sl.s), e: ttHm(sl.e), l: sl.l || "", b: sl.b.filter(x => x.e > x.s && x.s >= sl.s && x.e <= sl.e).sort((a, c) => a.s - c.s).map(x => [ttHm(x.s), ttHm(x.e)]) })), ab: ab.checked, aMon, home: home.checked };
+    closeDialog();
+    queueModuleOp(note, { op: "ttcfg", blockId: b.id, from: ttCfgOut(tt), to }, "Stundenplan eingerichtet");
+  };
+  openDialog([h("h2", null, "Stundenplan einrichten"),
+    h("div", { class: "wt-field" }, "Tage", dayChips),
+    h("div", { class: "wt-field" }, "Zeitraster", h("div", { class: "small muted" }, "Hilfslinien für Blöcke und Pausen. Ändern verschiebt oder löscht keine Einträge."), list, addSlot),
+    h("label", { class: "wt-field row" }, ab, " A/B-Wochen (Fächer, die nur jede zweite Woche sind)"), weekSeg,
+    h("label", { class: "wt-field row" }, home, " Auf der Startseite zeigen („Jetzt / danach“)"),
+    h("div", { class: "actions" }, h("button", { class: "btn ghost", onclick: () => closeDialog() }, "Abbrechen"), h("button", { class: "btn", onclick: save }, "Speichern"))], { wide: true });
+}
+
+// =====================================================================
+// NEU (BC2): Steckbrief am PC bearbeiten (Schritt „profile“ – das Handy übernimmt Feld für Feld)
+// =====================================================================
+const PROFILE_SUGGEST = ["Name", "Beruf", "Firma", "Geburtstag", "E-Mail", "Telefon", "Handy", "Anschrift", "Webseite", "IBAN", "Matrikelnummer", "Kundennummer", "Steuer-ID"];
+function profileDialog(note, b) {
+  const before = parseProfile(b.content);
+  const rows = before.map(f => ({ l: f.l, v: f.v }));
+  const list = h("div", { class: "pf-rows" });
+  const draw = () => {
+    replace(list, ...rows.map((r, i) => {
+      const l = h("input", { class: "field pf-l", value: r.l, placeholder: "Feld", autocomplete: "off" });
+      const multi = profileKey(r.l) === "anschrift" || profileKey(r.l) === "adresse" || r.v.includes("\n");
+      const v = multi ? h("textarea", { class: "field", rows: "2", autocomplete: "off" }) : h("input", { class: "field", autocomplete: "off", type: "text" });
+      v.value = r.v;
+      l.addEventListener("input", () => { r.l = l.value; });
+      v.addEventListener("input", () => { r.v = v.value; });
+      return h("div", { class: "pf-row" }, l, v, iconBtn("close", "Feld entfernen", () => { rows.splice(i, 1); draw(); }, "sm"));
+    }));
+  };
+  draw();
+  const used = () => new Set(rows.map(r => profileKey(r.l)));
+  const add = h("button", { class: "btn ghost small", type: "button", onclick: ev => {
+    openMenu(ev.currentTarget, [{ hd: "Feld hinzufügen" }, ...PROFILE_SUGGEST.filter(x => !used().has(profileKey(x))).map(x => ({ label: x, run: () => { rows.push({ l: x, v: "" }); draw(); } })),
+      { sep: true }, { label: "Eigenes Feld", icon: "add", run: () => { rows.push({ l: "", v: "" }); draw(); setTimeout(() => $$(".pf-l").pop()?.focus(), 20); } }]);
+  } }, icon("add", "sm"), "Feld");
+  const save = () => {
+    const to = rows.map(r => ({ l: r.l.replace(/\n/g, " ").trim(), v: r.v })).filter(r => r.l || r.v.trim());
+    closeDialog();
+    if (JSON.stringify(to) === JSON.stringify(before)) { toast("Keine Änderungen"); return; }
+    queueModuleOp(note, { op: "profile", blockId: b.id, from: before, to }, "Steckbrief gespeichert");
+  };
+  openDialog([h("h2", null, "Steckbrief bearbeiten"), list, add,
+    h("div", { class: "actions" }, h("button", { class: "btn ghost", onclick: () => closeDialog() }, "Abbrechen"), h("button", { class: "btn", onclick: save }, "Speichern"))], { wide: true });
 }
 // =====================================================================
 // Navigation (Adresse enthält nur Nummern – keine Titel, keine Inhalte, keine Suchbegriffe)
@@ -4416,9 +4591,9 @@ function effectiveNote(note) {
         if (i < 0) continue;
         const b = blocks[i];
         blocks[i] = { ...b, content: o.to, origContent: b.origContent ?? b.content, checked: o.checked != null ? o.checked : b.checked, priority: b.type === "HEADING" && o.level != null ? levelToPrio(o.level) : b.priority, pendingEdit: state };
-      } else if (o.op === "work" || o.op === "workcfg") { // NEU (BC): Arbeitszeit
+      } else if (MODULE_OPS.has(o.op)) { // NEU (BC): Arbeitszeit · GEÄNDERT (BC2): + Steckbrief, Stundenplan
         const i = find(o.blockId);
-        if (i >= 0) blocks[i] = { ...blocks[i], content: WT.apply(blocks[i].content, o), pendingEdit: state };
+        if (i >= 0) blocks[i] = { ...blocks[i], content: applyModuleOp(blocks[i].content, o), pendingEdit: state };
       } else if (o.op === "del") {
         const i = find(o.blockId);
         if (i >= 0) blocks.splice(i, 1);
@@ -4460,6 +4635,24 @@ function undoEditsButton(note) {
       S.inbox.dirty = true; saveInboxSoon(); renderMain(); toast("Änderungen zurückgenommen");
     }
   }, "Zurücknehmen");
+}
+
+// ---------------------------------------------------------------------
+// NEU (BC2): Modul-Schritte auf einen Block-Inhalt anwenden (Anzeige offener Änderungen)
+// ---------------------------------------------------------------------
+const MODULE_OPS = new Set(["work", "workcfg", "profile", "tt", "ttcfg"]);
+function applyModuleOp(content, op) {
+  if (op.op === "work" || op.op === "workcfg") return WT.apply(content, op);
+  if (op.op === "profile") return JSON.stringify({ fields: op.to.map(f => ({ l: f.l, v: f.v })) });
+  let j = {};
+  try { j = content && content.trim() ? JSON.parse(content) : {}; } catch (_) { j = {}; }
+  if (op.op === "tt") {
+    const list = (j.entries || []).filter(e => e && e.id !== op.id);
+    if (op.to) list.push({ ...op.to, id: op.id });
+    return JSON.stringify({ ...j, v: 2, entries: list });
+  }
+  if (op.op === "ttcfg") return JSON.stringify({ ...j, v: 2, days: op.to.days, slots: op.to.slots, ab: op.to.ab, aMon: op.to.aMon, home: op.to.home, entries: j.entries || [] });
+  return content;
 }
 
 // ---------------------------------------------------------------------
@@ -5413,7 +5606,7 @@ async function boot() {
   applySettings();
   if (DEMO) {
     try {
-      await import("./demo.js?v=5");
+      await import("./demo.js?v=6");
       const d = window.MyNotesDemo.setup();
       S.user = d.user;
       S.db = buildDb(d.snapshot);
