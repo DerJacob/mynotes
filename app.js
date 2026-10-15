@@ -21,7 +21,9 @@ const CLIENT_ID = "723061989132-tu2nrvj1vvsbgmk6e03vf1g6gf6tsdmi.apps.googleuser
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
-const FOLDER_NAME = "MyNotes PC";
+// GEÄNDERT (BB): „?test“ öffnet den Ordner der Test-App („MyNotes Dev“) – getrennt von der echten App
+const TEST_APP = new URLSearchParams(location.search).has("test");
+const FOLDER_NAME = TEST_APP ? "MyNotes PC (Test-App)" : "MyNotes PC";
 const F_MIRROR = "mynotes-pc.zip";
 const F_INBOX = "mynotes-inbox.enc";
 const F_DONE = "mynotes-inbox-done.enc";
@@ -1673,8 +1675,9 @@ function renderBlocks(blocks, opts = {}) {
 }
 
 function wrapBlock(b, inner, opts, copy) {
-  const el = h("div", { class: "blk" + (b.pendingEdit ? " pending-edit" : ""), id: b.id != null ? "b" + b.id : null });
-  if (b.pendingEdit) el.title = "Am PC geändert – wartet aufs Handy";
+  // GEÄNDERT (BB): „offen“ (wartet aufs Handy) und „übernommen“ (neuer Stand kommt gleich) unterscheiden
+  const el = h("div", { class: "blk" + (b.pendingEdit ? " pending-edit" + (b.pendingEdit === "applied" ? " applied" : "") : ""), id: b.id != null ? "b" + b.id : null });
+  if (b.pendingEdit) el.title = b.pendingEdit === "applied" ? "Am Handy übernommen – der neue Stand kommt gleich" : "Am PC geändert – wartet aufs Handy";
   const hl = highlightColor(b.highlight);
   if (hl) { el.classList.add("hlbg"); el.style.setProperty("--hl", hl); }
   el.appendChild(inner);
@@ -1896,7 +1899,7 @@ function vCard(fields) {
 // Karten in Listen
 // =====================================================================
 function noteCard(note, opts = {}) {
-  note = effectiveNote(note); // NEU (AS): offene Änderungen vom PC auch in der Vorschau
+  note = effectiveNote(note); // offene Änderungen vom PC auch in der Vorschau (BB)
   const card = h("div", {
     class: "card" + (note.color ? " colored" : "") + (S.noteId === note.id ? " on" : ""),
     tabindex: "0", role: "button", dataset: { note: String(note.id) },
@@ -2454,6 +2457,7 @@ function renderShell() {
     h("main", { class: "main" }));
   app.appendChild(shell);
   if (DEMO) app.appendChild(h("div", { class: "demo-flag" }, "DEMO · Beispieldaten"));
+  else if (TEST_APP) app.appendChild(h("div", { class: "demo-flag" }, "TEST-APP · MyNotes Dev")); // NEU (BB)
   renderSidebar();
   renderList();
   renderMain();
@@ -2713,12 +2717,12 @@ function renderList() {
   if (m.folder && m.folder.project) {
     tools.appendChild(h("button", { class: "chip accent", onclick: () => { if (S.noteId != null) closeNote(); else renderMain(); } }, icon("project", "sm"), "Projekt-Board"));
   }
-  // NEU (AS): neue Notiz direkt in diesem Ordner
+  // Neue Notiz direkt in diesem Ordner (BB: am Handy über „Vom PC“)
   if (m.folder && S.inbox.readable !== false) {
-    tools.appendChild(h("button", { class: "chip", title: "Neue Notiz in diesem Ordner – kommt am Handy direkt hierher", onclick: () => newNoteInFolder(m.folder.id) }, icon("add", "sm"), "Neue Notiz"));
+    tools.appendChild(h("button", { class: "chip", title: "Neue Notiz in diesem Ordner – am Handy unter „Vom PC“ übernehmen, dann landet sie hier", onclick: () => newNoteInFolder(m.folder.id) }, icon("add", "sm"), "Neue Notiz"));
   }
   replace(list, listHead(m.title, m.sub, m.color, m.entries.filter(e => e.kind === "note").length), tools, body);
-  // NEU (AS): am PC in diesem Ordner angelegt, noch nicht am Handy
+  // Am PC in diesem Ordner angelegt, noch nicht am Handy (BB)
   const pend = m.folder ? pcVisible().filter(n => n.folderId === m.folder.id) : [];
   if (pend.length) {
     body.appendChild(h("div", { class: "group-title" }, "Vom PC – kommt gleich", h("span", { class: "line" })));
@@ -2980,7 +2984,7 @@ function watchScroll(scroller, bar) {
 // Notiz ansehen
 // ---------------------------------------------------------------------
 function renderNote(main, opts = {}, { noteId = S.noteId, pane = null } = {}) {
-  // GEÄNDERT (AS): offene Änderungen vom PC schon anzeigen; (AT): auch als Spalte (pane „a“/„b“)
+  // GEÄNDERT (BB): offene Änderungen vom PC schon anzeigen; (AT): auch als Spalte (pane „a“/„b“)
   const raw = noteById(noteId);
   if (raw && S.edit && S.edit.noteId === raw.id) return renderNoteEditor(main, raw);
   const note = effectiveNote(raw);
@@ -3049,7 +3053,7 @@ function renderNote(main, opts = {}, { noteId = S.noteId, pane = null } = {}) {
   meta.appendChild(h("span", { class: "chip", title: "Erstellt " + fullTime(note.createdAt) + "\nGeändert " + fullTime(note.modifiedAt) }, icon("clock", "sm"), "Geändert " + relTime(note.modifiedAt)));
   if (S.fresh.has(note.id)) meta.appendChild(h("span", { class: "chip accent" }, "● Neu seit dem Öffnen"));
   paper.appendChild(meta);
-  const eb = pendingEditBanner(note); // NEU (AS)
+  const eb = pendingEditBanner(note); // GEÄNDERT (BB)
   if (eb) paper.appendChild(eb);
   if (note.template) {
     paper.appendChild(h("div", { class: "panel", style: { marginBottom: "18px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" } },
@@ -3619,11 +3623,14 @@ function parseInbox(json) {
     return {
       id: String(n.id), title: n.title || "", created: n.created || 0, modified: n.modified || 0,
       md: typeof n.md === "string" ? n.md : blocksToMarkup(blocks), blocks,
-      folderId: n.folderId != null ? Number(n.folderId) : null // NEU (AS): direkt im Ordner angelegt
+      folderId: n.folderId != null ? Number(n.folderId) : null // am PC direkt im Ordner angelegt
     };
   });
-  // NEU (AS): Änderungen an vorhandenen Notizen
-  const edits = (json.edits || []).filter(e => e && e.id && e.noteId != null).map(e => ({ ...e, id: String(e.id), noteId: Number(e.noteId), at: e.at || 0 }));
+  // GEÄNDERT (BB): Änderungen an vorhandenen Notizen – intern immer als Schritte (alte Dateien: title/sets/dels/adds)
+  const edits = (json.edits || []).filter(e => e && e.id && e.noteId != null).map(e => ({
+    id: String(e.id), noteId: Number(e.noteId), noteTitle: e.noteTitle || "", at: e.at || 0, base: e.base ?? null,
+    ops: Array.isArray(e.ops) ? e.ops : legacyOps(e)
+  }));
   // NEU (AH-3): Haken, die am PC gesetzt wurden (das Handy übernimmt sie)
   const checks = (json.checks || []).filter(c => c && c.id && c.blockId != null)
     .map(c => ({ id: String(c.id), blockId: Number(c.blockId), noteId: Number(c.noteId) || null, checked: !!c.checked, at: c.at || 0 }));
@@ -3651,12 +3658,14 @@ async function loadInbox(file) {
   S.inbox.base = inboxBase();
 }
 async function loadDone(file) {
-  if (!file) { S.done = new Set(); S.rejected = new Set(); S.doneModified = null; return; }
+  if (!file) { S.done = new Set(); S.rejected = new Set(); S.conflicts = new Set(); S.waiting = new Set(); S.doneModified = null; return; }
   if (file.modifiedTime === S.doneModified) return;
   try {
     const json = await decryptJson(await downloadFile(file.id), S.key);
     S.done = new Set((json.done || []).map(String));
-    S.rejected = new Set((json.rejected || []).map(String)); // NEU (AS): am Handy verworfen
+    S.rejected = new Set((json.rejected || []).map(String));   // am Handy verworfen
+    S.conflicts = new Set((json.conflicts || []).map(String)); // NEU (BB): mit Konflikt-Notiz übernommen
+    S.waiting = new Set((json.waiting || []).map(String));     // NEU (BB): Handy braucht ein Update
   } catch (e) {
     if (!(e instanceof WrongKeyError)) throw e;
   }
@@ -3670,7 +3679,7 @@ function inboxBase() {
 }
 function mergeInbox(remoteNotes, remoteChecks = [], remoteEdits = []) {
   const base = S.inbox.base;
-  // NEU (AS): Edits wie Haken – neu hier/woanders bleibt, hier/woanders gelöscht verschwindet
+  // Änderungen wie Haken – neu hier/woanders bleibt, hier/woanders gelöscht verschwindet
   const le = new Map((S.inbox.edits || []).map(e => [e.id, e])), re = new Map(remoteEdits.map(e => [e.id, e]));
   const edits = [];
   for (const id of new Set([...le.keys(), ...re.keys()])) {
@@ -3738,13 +3747,14 @@ async function saveInbox() {
       if (taken.length) S.inbox.taken = [...(S.inbox.taken || []).filter(t => !taken.some(x => x.id === t.id)), ...taken];
       S.inbox.notes = S.inbox.notes.filter(n => !S.done.has(n.id));
       S.inbox.checks = (S.inbox.checks || []).filter(c => !S.done.has(c.id)); // vom Handy übernommen
-      moveAppliedEdits(); // NEU (AS): übernommene Edits bleiben sichtbar, bis der neue Stand da ist
+      announceEditResults(); // NEU (BB): Konflikte/Verworfenes einmal melden
+      moveAppliedEdits();    // übernommene Änderungen bleiben sichtbar, bis der neue Stand da ist
       // 3) Verschlüsselt hochladen
       const payload = {
-        format: "mynotes-pc-inbox", v: 2,
+        format: "mynotes-pc-inbox", v: INBOX_VERSION, // GEÄNDERT (BB): v3 (Schritte) + alte Felder für 1.3
         notes: S.inbox.notes.map(n => ({ id: n.id, title: n.title, created: n.created, modified: n.modified, blocks: n.blocks, md: n.md, folderId: n.folderId ?? null })),
         checks: S.inbox.checks || [], // NEU (AH-3)
-        edits: S.inbox.edits || [],   // NEU (AS)
+        edits: (S.inbox.edits || []).map(editForFile),
         web: { ...S.settings, v: 1 }
       };
       const plain = TE.encode(JSON.stringify(payload));
@@ -3802,7 +3812,7 @@ function pcStatusContent(n) {
   if (S.rejected && S.rejected.has(n.id)) return [icon("close", "sm"), "Am Handy verworfen"];
   if (S.done.has(n.id) || (S.inbox.taken || []).some(t => t.id === n.id)) return [icon("phone", "sm"), "Am Handy übernommen"];
   if (DEMO) return [icon("cloud", "sm"), "Demo"];
-  if (S.inbox.base.get(n.id) === n.modified) return [icon("cloud", "sm"), n.folderId != null && phoneAuto() ? "Im Drive – kommt automatisch in den Ordner" : "Im Drive – wartet aufs Handy"];
+  if (S.inbox.base.get(n.id) === n.modified) return [icon("cloud", "sm"), "Im Drive – am Handy unter „Vom PC“ übernehmen"]; // GEÄNDERT (BB)
   return [icon("edit", "sm"), "Noch nicht gespeichert"];
 }
 function pcCard(n) {
@@ -4114,53 +4124,115 @@ function dropSatisfiedChecks() {
   return S.inbox.checks.length !== before;
 }
 // =====================================================================
-// NEU (AS): Am PC direkt in Notizen schreiben
+// NEU AUFGEBAUT (BB): Am PC direkt in Notizen schreiben
 //
-// Der PC ändert NIE selbst die Notizen – er schickt dem Handy nur „Edits“ (die geänderten
-// Stellen, mit dem Stand, den er gesehen hat). Das Handy übernimmt sie automatisch oder nach
-// Bestätigung (Einstellung am Handy). Hat sich eine Stelle am Handy inzwischen geändert, bleibt
-// die Handy-Fassung und die PC-Fassung kommt als eigene Notiz dazu – nichts geht verloren.
+// Der PC ändert NIE selbst die Notizen – er schickt dem Handy „Änderungen“ (Liste von Schritten
+// „ops“: title / set / del / add, jeweils mit dem Stand, den der PC gesehen hat). Das Handy übernimmt
+// sie in einer Transaktion (automatisch oder nach Bestätigung). War eine Stelle am Handy inzwischen
+// anders, bleibt die Handy-Fassung und die PC-Fassung liegt als „⚠ Konflikt vom PC“ daneben.
 //
-// Bis das Handy den neuen Stand hochgeladen hat, zeigt der PC die Änderungen schon an
-// (gestrichelt markiert, „→ Handy“).
+// Zustand einer Änderung am PC:
+//   offen        → noch nicht am Handy: gestrichelt markiert, „wartet aufs Handy“
+//   übernommen   → Handy meldet „done“, der neue Stand ist aber noch nicht da: weiter angezeigt
+//   fertig       → der Stand vom Handy enthält sie (pcextras „applied“) → Markierung weg
+// 1.3 hat „fertig“ geschätzt und blieb manchmal für immer auf „wartet aufs Handy“ stehen.
+//
+// Format (v3): siehe PcFormat.kt am Handy. Für Handys mit 1.3 werden die alten Felder
+// (title/sets/dels/adds) zusätzlich mitgeschrieben – so geht nichts verloren, falls das Handy
+// später aktualisiert wird als die Web-App.
 // =====================================================================
-const EDITABLE = new Set(["TEXT", "CHECKLIST_ITEM", "HEADING", "CODE"]);
-S.appliedEdits = [];   // vom Handy übernommen, neuer Stand aber noch nicht da
-S.edit = null;         // laufende Bearbeitung { noteId, page, title, rows, dirty }
+const INBOX_VERSION = 3;
+/** Was ein Handy ohne Angabe kann (1.3) */
+const CAPS_V2 = { inbox: 2, ops: ["title", "set", "del", "add"], set: ["CHECKLIST_ITEM", "CODE", "HEADING", "TEXT"], add: ["CHECKLIST_ITEM", "CODE", "DIVIDER", "HEADING", "TEXT"] };
+S.appliedEdits = new Map(); // id → { edit, mirrorAt, at } – übernommen, neuer Stand noch nicht da
+S.edit = null;              // laufende Bearbeitung { noteId, page, title, rows, dirty }
+S.waiting = new Set();      // Änderungen, für die das Handy ein Update braucht
+S.conflicts = new Set();    // mit Konflikt übernommen
+S.seenDone = new Set();     // schon gemeldet (Toast nur einmal)
 
-/** Übernimmt das Handy Änderungen automatisch? (steht in pcextras.enc) */
+/** Was das Handy vom PC versteht (steht in pcextras) */
+function phoneCaps() { return (S.extras && S.extras.caps) || CAPS_V2; }
+function canSetType(type) { return phoneCaps().set.includes(type); }
+function canAddType(type) { return phoneCaps().add.includes(type); }
+/** Übernimmt das Handy Änderungen automatisch? (steht in pcextras) */
 function phoneAuto() { return !(S.extras && S.extras.settings && S.extras.settings.auto === false); }
 const levelToPrio = l => (l === 1 || l === 3 ? l : 0);
 
+/** Alte Felder (1.3) → Schritte */
+function legacyOps(e) {
+  const ops = [];
+  if (e.title && e.title.to != null) ops.push({ op: "title", from: e.title.from ?? null, to: e.title.to });
+  for (const st of e.sets || []) ops.push({ op: "set", blockId: st.blockId, from: st.from || "", to: st.to || "", checked: st.checked ?? null, level: st.level ?? null });
+  for (const d of e.dels || []) ops.push({ op: "del", blockId: d.blockId, from: d.from || "" });
+  for (const a of e.adds || []) ops.push({ op: "add", tmp: a.tmp, after: a.after ?? null, page: a.page || 0, type: a.type, content: a.content || "", checked: !!a.checked, level: a.level ?? null });
+  return ops;
+}
+/** Schritte → alte Felder (für Handys mit 1.3). null, wenn ein Schritt dort nicht ausdrückbar ist. */
+function opsToLegacy(ops) {
+  const out = { title: null, sets: [], dels: [], adds: [] };
+  for (const o of ops) {
+    if (o.op === "title") out.title = { from: o.from, to: o.to };
+    else if (o.op === "set") out.sets.push({ blockId: o.blockId, from: o.from, to: o.to, checked: o.checked ?? null, level: o.level ?? null });
+    else if (o.op === "del") out.dels.push({ blockId: o.blockId, from: o.from });
+    else if (o.op === "add") out.adds.push({ tmp: o.tmp, after: o.after, page: o.page, type: o.type, content: o.content, checked: o.checked, level: o.level ?? null });
+    else return null;
+  }
+  return out;
+}
+/** Eine Änderung so, wie sie in „Vom PC“ gespeichert wird */
+function editForFile(e) {
+  const legacy = opsToLegacy(e.ops);
+  return { id: e.id, noteId: e.noteId, noteTitle: e.noteTitle, at: e.at, base: e.base ?? null, ops: e.ops, ...(legacy || {}) };
+}
+
+/** Offene und übernommene (noch nicht im Stand enthaltene) Änderungen einer Notiz, älteste zuerst */
 function pendingEditsFor(noteId) {
   const open = (S.inbox.edits || []).filter(e => e.noteId === noteId && !S.done.has(e.id));
-  const applied = S.appliedEdits.filter(x => x.edit.noteId === noteId).map(x => x.edit);
+  const applied = [...S.appliedEdits.values()].filter(x => x.edit.noteId === noteId).map(x => x.edit);
   return [...applied, ...open].sort((a, b) => a.at - b.at);
 }
-/** Übernommene Edits merken, bis der neue Stand vom Handy da ist (sonst flackert der alte Text kurz auf) */
+/** Vom Handy übernommene Änderungen aus „Vom PC“ nehmen – sie bleiben sichtbar, bis der neue Stand da ist */
 function moveAppliedEdits() {
   const edits = S.inbox.edits || [];
   const taken = edits.filter(e => S.done.has(e.id));
   if (!taken.length) return;
-  let rejected = 0;
   for (const e of taken) {
-    if (S.rejected && S.rejected.has(e.id)) { rejected++; continue; } // am Handy verworfen → nicht mehr anzeigen
-    if (S.appliedEdits.some(x => x.edit.id === e.id)) continue;
-    S.appliedEdits.push({ edit: e, mod: noteById(e.noteId)?.modifiedAt ?? null, at: Date.now() });
+    if (S.rejected.has(e.id)) continue; // am Handy verworfen → nicht mehr anzeigen
+    if (!S.appliedEdits.has(e.id)) S.appliedEdits.set(e.id, { edit: e, mirrorAt: S.mirror && S.mirror.modifiedTime, at: Date.now() });
   }
   S.inbox.edits = edits.filter(e => !S.done.has(e.id));
+  dropAppliedEdits();
+}
+/**
+ * Übernommene Änderungen, die im Stand vom Handy angekommen sind, nicht mehr extra anzeigen.
+ * Neues Handy: Liste „applied“ in pcextras (sicher). Handy mit 1.3: sobald danach ein neuer Stand kam.
+ * Spätestens nach 10 Minuten – damit nichts hängen bleibt.
+ */
+function dropAppliedEdits() {
+  const applied = S.extras && Array.isArray(S.extras.applied) ? new Set(S.extras.applied.map(String)) : null;
+  const now = Date.now();
+  let changed = false;
+  for (const [id, x] of S.appliedEdits) {
+    const inMirror = applied ? applied.has(id) : (S.mirror && x.mirrorAt !== S.mirror.modifiedTime);
+    if (inMirror || now - x.at > 10 * 60_000) { S.appliedEdits.delete(id); changed = true; }
+  }
+  return changed;
+}
+/** Neu gemeldete Ergebnisse vom Handy einmal ansagen (Konflikt, verworfen) */
+function announceEditResults() {
+  const doneEdits = [...S.appliedEdits.values()].map(x => x.edit).concat((S.inbox.edits || []).filter(e => S.done.has(e.id)));
+  let conflicts = 0, rejected = 0;
+  for (const e of doneEdits) {
+    if (S.seenDone.has(e.id)) continue;
+    S.seenDone.add(e.id);
+    if (S.conflicts.has(e.id)) conflicts++;
+    if (S.rejected.has(e.id)) rejected++;
+  }
+  if (conflicts) toast(plural(conflicts, "Änderung", "Änderungen") + " mit Konflikt übernommen: Stellen, die am Handy inzwischen anders waren, blieben dort – deine PC-Fassung liegt als „⚠ Konflikt vom PC“ neben der Notiz", { ms: 9000 });
   if (rejected) toast(plural(rejected, "Änderung wurde", "Änderungen wurden") + " am Handy verworfen");
 }
-/** Nach neuem Stand vom Handy: erledigte Edits wegwerfen */
-function dropAppliedEdits() {
-  const now = Date.now();
-  S.appliedEdits = S.appliedEdits.filter(x => {
-    const n = noteById(x.edit.noteId);
-    return n && n.modifiedAt === x.mod && now - x.at < 10 * 60_000;
-  });
-}
 
-/** Notiz so, wie sie nach den offenen Edits aussieht (für Anzeige und Editor) */
+/** Notiz so, wie sie nach offenen/übernommenen Änderungen aussieht (für Anzeige und Editor) */
 function effectiveNote(note) {
   if (!note) return note;
   const edits = pendingEditsFor(note.id);
@@ -4169,20 +4241,24 @@ function effectiveNote(note) {
   let blocks = note.blocks.map(b => ({ ...b }));
   const find = id => blocks.findIndex(b => String(b.id) === String(id));
   for (const e of edits) {
-    if (e.title && e.title.to != null) title = e.title.to;
-    for (const st of e.sets || []) {
-      const i = find(st.blockId);
-      if (i < 0) continue;
-      const b = blocks[i];
-      blocks[i] = { ...b, content: st.to, checked: st.checked != null ? st.checked : b.checked, priority: b.type === "HEADING" && st.level != null ? levelToPrio(st.level) : b.priority, pendingEdit: true };
-    }
-    for (const d of e.dels || []) { const i = find(d.blockId); if (i >= 0) blocks.splice(i, 1); }
-    for (const a of e.adds || []) {
-      const nb = { id: "t:" + a.tmp, noteId: note.id, type: a.type, content: a.content || "", checked: !!a.checked, priority: a.type === "HEADING" ? levelToPrio(a.level) : 0, highlight: null, collapsed: false, page: a.page || 0, pendingEdit: true };
-      let i = a.after != null ? find(a.after) : -1;
-      if (i >= 0) blocks.splice(i + 1, 0, nb);
-      else if (a.after == null) { const first = blocks.findIndex(b => b.page === nb.page); blocks.splice(first < 0 ? blocks.length : first, 0, nb); }
-      else { let last = -1; blocks.forEach((b, k) => { if (b.page === nb.page) last = k; }); blocks.splice(last < 0 ? blocks.length : last + 1, 0, nb); }
+    const state = S.appliedEdits.has(e.id) || S.done.has(e.id) ? "applied" : "open";
+    for (const o of e.ops) {
+      if (o.op === "title" && o.to != null) title = o.to;
+      else if (o.op === "set") {
+        const i = find(o.blockId);
+        if (i < 0) continue;
+        const b = blocks[i];
+        blocks[i] = { ...b, content: o.to, checked: o.checked != null ? o.checked : b.checked, priority: b.type === "HEADING" && o.level != null ? levelToPrio(o.level) : b.priority, pendingEdit: state };
+      } else if (o.op === "del") {
+        const i = find(o.blockId);
+        if (i >= 0) blocks.splice(i, 1);
+      } else if (o.op === "add") {
+        const nb = { id: "t:" + o.tmp, noteId: note.id, type: o.type, content: o.content || "", checked: !!o.checked, priority: o.type === "HEADING" ? levelToPrio(o.level) : 0, highlight: null, collapsed: false, page: o.page || 0, pendingEdit: state };
+        const i = o.after != null ? find(o.after) : -1;
+        if (i >= 0) blocks.splice(i + 1, 0, nb);
+        else if (o.after == null) { const first = blocks.findIndex(b => b.page === nb.page); blocks.splice(first < 0 ? blocks.length : first, 0, nb); }
+        else { let last = -1; blocks.forEach((b, k) => { if (b.page === nb.page) last = k; }); blocks.splice(last < 0 ? blocks.length : last + 1, 0, nb); }
+      }
     }
   }
   return { ...note, title, blocks, _pending: edits };
@@ -4192,21 +4268,28 @@ function canEditFromPc(note) { return !!note && !note.deleted && S.inbox.readabl
 /** Hinweis über der Notiz, solange Änderungen unterwegs sind */
 function pendingEditBanner(note) {
   const open = (S.inbox.edits || []).filter(e => e.noteId === note.id && !S.done.has(e.id));
-  const applied = S.appliedEdits.some(x => x.edit.noteId === note.id);
+  const applied = [...S.appliedEdits.values()].some(x => x.edit.noteId === note.id);
   if (!open.length && !applied) return null;
   if (!open.length) return h("div", { class: "edit-banner ok" }, icon("phone", "sm"), h("span", { class: "grow" }, "Am Handy übernommen – der neue Stand kommt gleich."));
+  if (open.some(e => S.waiting.has(e.id))) {
+    return h("div", { class: "edit-banner bad" }, icon("warn", "sm"),
+      h("span", { class: "grow" }, "Das Handy braucht ein Update, um diese Änderung zu übernehmen. Bis dahin wartet sie."), undoEditsButton(note));
+  }
   const saved = open.every(e => S.inbox.base.get("e:" + e.id) === e.at) || DEMO;
   return h("div", { class: "edit-banner" }, icon("edit", "sm"),
     h("span", { class: "grow" }, !saved ? "Am PC geändert – wird gespeichert …"
-      : phoneAuto() ? "Am PC geändert – das Handy übernimmt es beim nächsten Abgleich (App öffnen oder alle ~15 Min.)."
+      : phoneAuto() ? "Am PC geändert – das Handy übernimmt es beim nächsten Abgleich (App öffnen, Cloud-Knopf → „Jetzt abgleichen“ oder von selbst alle ~15 Min.)."
         : "Am PC geändert – am Handy unter „Vom PC“ bestätigen."),
-    h("button", {
-      class: "btn subtle small", onclick: async () => {
-        if (!await confirmDialog("Änderungen zurücknehmen?", "Die Änderungen vom PC an dieser Notiz werden verworfen, bevor das Handy sie übernimmt.", "Zurücknehmen", true)) return;
-        S.inbox.edits = (S.inbox.edits || []).filter(e => !(e.noteId === note.id && !S.done.has(e.id)));
-        S.inbox.dirty = true; saveInboxSoon(); renderMain(); toast("Änderungen zurückgenommen");
-      }
-    }, "Zurücknehmen"));
+    undoEditsButton(note));
+}
+function undoEditsButton(note) {
+  return h("button", {
+    class: "btn subtle small", onclick: async () => {
+      if (!await confirmDialog("Änderungen zurücknehmen?", "Die Änderungen vom PC an dieser Notiz werden verworfen, bevor das Handy sie übernimmt.", "Zurücknehmen", true)) return;
+      S.inbox.edits = (S.inbox.edits || []).filter(e => !(e.noteId === note.id && !S.done.has(e.id)));
+      S.inbox.dirty = true; saveInboxSoon(); renderMain(); toast("Änderungen zurückgenommen");
+    }
+  }, "Zurücknehmen");
 }
 
 // ---------------------------------------------------------------------
@@ -4231,7 +4314,7 @@ function cancelEdit(force) {
 }
 function editMarkDirty() { if (S.edit) S.edit.dirty = true; }
 
-/** Edit aus dem Editor-Stand bauen (nur echte Änderungen) */
+/** Änderung aus dem Editor-Stand bauen (nur echte Änderungen) */
 function buildEdit(note) {
   const ed = S.edit;
   const origById = new Map(ed.orig.map(o => [String(o.id), o]));
@@ -4242,7 +4325,7 @@ function buildEdit(note) {
     if (r.origId != null) {
       const o = origById.get(String(r.origId));
       present.add(String(r.origId));
-      if (o && EDITABLE.has(o.type)) {
+      if (o && canSetType(o.type)) {
         const changed = o.content !== r.content || o.checked !== r.checked || (o.type === "HEADING" && o.level !== r.level);
         if (changed) sets.push({ blockId: o.id, from: o.content, to: r.content, checked: o.type === "CHECKLIST_ITEM" ? r.checked : null, level: o.type === "HEADING" ? r.level : null });
       }
@@ -4255,10 +4338,15 @@ function buildEdit(note) {
       prevRef = "t:" + tmp;
     }
   }
-  for (const o of ed.orig) if (!present.has(String(o.id)) && (EDITABLE.has(o.type) || o.type === "DIVIDER")) dels.push({ blockId: o.id, from: o.content });
-  const title = ed.title !== ed.titleOrig ? { from: ed.titleOrig, to: ed.title } : null;
-  if (!title && !sets.length && !dels.length && !adds.length) return null;
-  return { id: uuid(), noteId: note.id, noteTitle: ed.title || note.title, at: Date.now(), base: note.modifiedAt, title, sets, dels, adds };
+  for (const o of ed.orig) if (!present.has(String(o.id)) && canAddType(o.type)) dels.push({ blockId: o.id, from: o.content });
+  // GEÄNDERT (BB): als Schritte („ops“)
+  const ops = [];
+  if (ed.title !== ed.titleOrig) ops.push({ op: "title", from: ed.titleOrig, to: ed.title });
+  for (const st of sets) ops.push({ op: "set", ...st });
+  for (const d of dels) ops.push({ op: "del", ...d });
+  for (const a of adds) ops.push({ op: "add", ...a });
+  if (!ops.length) return null;
+  return { id: uuid(), noteId: note.id, noteTitle: ed.title || note.title, at: Date.now(), base: note.modifiedAt, ops };
 }
 async function saveEdit(note) {
   const edit = buildEdit(note);
@@ -4269,7 +4357,7 @@ async function saveEdit(note) {
   renderMain();
   renderSidebarCounts();
   await saveInbox();
-  toast(phoneAuto() ? "Gespeichert ✓ – das Handy übernimmt die Änderungen automatisch" : "Gespeichert ✓ – am Handy unter „Vom PC“ bestätigen");
+  toast(phoneAuto() ? "Gespeichert ✓ – das Handy übernimmt die Änderungen beim nächsten Abgleich" : "Gespeichert ✓ – am Handy unter „Vom PC“ bestätigen");
 }
 
 function renderNoteEditor(main, note) {
@@ -4330,7 +4418,7 @@ function renderNoteEditor(main, note) {
   function rowEl(r, i) {
     const tools = h("div", { class: "erow-tools" },
       h("button", { class: "icon-btn sm", title: "Darunter einfügen", type: "button", onclick: e => addMenu(e.currentTarget, i + 1) }, icon("add", "sm")));
-    if (!EDITABLE.has(r.type) && r.type !== "DIVIDER") {
+    if (!canSetType(r.type) && r.type !== "DIVIDER") { // GEÄNDERT (BB): richtet sich danach, was das Handy kann
       // Sonderblock: nur anzeigen
       const prev = renderBlock(r.block, { note, preview: true, pageBlocks: ed.rows.map(x => x.block).filter(Boolean) });
       return h("div", { class: "erow locked", title: "Am Handy bearbeiten" }, h("div", { class: "erow-lock" }, icon("phone", "sm")), h("div", { class: "grow" }, prev || h("span", { class: "muted small" }, "(" + r.type + ")")), tools);
@@ -4376,19 +4464,19 @@ function renderNoteEditor(main, note) {
       .map(([t, ic, l]) => h("button", { class: "chip", type: "button", onclick: () => insertRow(ed.rows.length, t, "", t !== "DIVIDER") }, icon(ic, "sm"), l)));
   wrap.append(h("div", { class: "editor-head" }, titleIn), info, list, adders,
     h("div", { class: "edit-foot small muted" }, icon("shield", "sm"),
-      " Das Handy ändert nur Stellen, die dort noch so sind wie hier zu sehen. Wurde etwas am Handy inzwischen geändert, bleibt das – deine PC-Fassung kommt dann als eigene Notiz „⚠ Vom PC (Konflikt)“ dazu."));
+      " Das Handy ändert nur Stellen, die dort noch so sind wie hier zu sehen. Wurde etwas am Handy inzwischen geändert, bleibt das – deine PC-Fassung kommt dann als eigene Notiz „⚠ Konflikt vom PC“ in denselben Ordner."));
   scroller.appendChild(wrap);
   replace(main, bar, scroller);
   if (!ed.rows.length) titleIn.focus();
 }
 
 // ---------------------------------------------------------------------
-// Neue Notiz direkt in einem Ordner (am Handy automatisch oder nach Bestätigung im Ordner)
+// Neue Notiz direkt in einem Ordner (am Handy unter „Vom PC“ übernehmen → landet im Ordner)
 // ---------------------------------------------------------------------
 function newNoteInFolder(folderId) {
   if (S.inbox.readable === false) { toast("„Vom PC“ ist gerade nicht lesbar", { bad: true }); return; }
   newPcNote("", "", folderId);
-  toast(phoneAuto() ? "Neue Notiz – kommt am Handy automatisch in diesen Ordner" : "Neue Notiz – am Handy unter „Vom PC“ bestätigen");
+  toast("Neue Notiz – am Handy unter „Vom PC“ übernehmen, dann landet sie in diesem Ordner"); // GEÄNDERT (BB): neue Notizen immer über „Vom PC“
 }
 window.addEventListener("beforeunload", e => {
   if (S.unlocked && S.edit && S.edit.dirty) { e.preventDefault(); e.returnValue = ""; }
@@ -4640,7 +4728,7 @@ async function unlock(secret) {
   S.key = key;
   S.extras = { calc: {}, work: {} };
   if (S.zip["pcextras.enc"]) {
-    try { const x = await decryptJson(S.zip["pcextras.enc"], key); S.extras = { calc: x.calc || {}, work: x.work || {}, settings: x.settings || {} }; } catch (_) {}
+    try { S.extras = extrasFrom(await decryptJson(S.zip["pcextras.enc"], key)); } catch (_) {}
   }
   S.db = buildDb(snap);
   // „Vom PC“ + übernommen
@@ -4673,8 +4761,10 @@ function startApp() {
   S.lockTimer = setInterval(checkIdle, 20_000);
   clearInterval(S.clockTimer);
   S.clockTimer = setInterval(updateSyncLine, 30_000);
-  // abgeschlossene „Vom PC“-Notizen aufräumen
-  if (!DEMO && S.inbox.notes.some(n => S.done.has(n.id))) saveInbox();
+  // abgeschlossene „Vom PC“-Notizen und Änderungen aufräumen – GEÄNDERT (BB): auch Änderungen
+  const editsDone = (S.inbox.edits || []).some(e => S.done.has(e.id));
+  if (!DEMO && editsDone) { S.seenDone = new Set([...S.done]); moveAppliedEdits(); } // früher Gemeldetes nicht erneut ansagen
+  if (!DEMO && (editsDone || S.inbox.notes.some(n => S.done.has(n.id)) || (S.inbox.checks || []).some(c => S.done.has(c.id)))) saveInbox();
 }
 
 // =====================================================================
@@ -4716,11 +4806,11 @@ async function poll(manual) {
       await loadInbox(inbox);
       if (S.route.view === "pc" && !S.pcId) renderList();
     }
-    // NEU (AH-3): übernommene Haken aufräumen
-    if (((S.inbox.checks || []).some(c => S.done.has(c.id)) || (S.inbox.edits || []).some(e => S.done.has(e.id))) && !saving) {
-      saveInbox();
-      if (S.noteId != null && !S.edit) renderMain(); // NEU (AS): Hinweis „übernommen“ zeigen
-    }
+    // Übernommene Haken und Änderungen aufräumen (AH-3) – GEÄNDERT (BB): auch ohne Speichern sofort richtig anzeigen
+    const editsDone = (S.inbox.edits || []).some(e => S.done.has(e.id));
+    if (editsDone) { announceEditResults(); moveAppliedEdits(); }
+    if (((S.inbox.checks || []).some(c => S.done.has(c.id)) || editsDone) && !saving) saveInbox();
+    if ((editsDone || dropAppliedEdits()) && S.noteId != null && !S.edit) renderMain();
     if (S.done.size !== doneBefore || S.inbox.notes.some(n => S.done.has(n.id))) {
       const newlyTaken = S.inbox.notes.filter(n => S.done.has(n.id));
       if (newlyTaken.length) {
@@ -4747,6 +4837,14 @@ async function poll(manual) {
     schedulePoll();
   }
 }
+/** Fertige Ergebnisse vom Handy (pcextras) – GEÄNDERT (BB): plus „applied“ und „caps“ */
+function extrasFrom(x) {
+  return {
+    calc: x.calc || {}, work: x.work || {}, settings: x.settings || {},
+    applied: Array.isArray(x.applied) ? x.applied.map(String) : null,
+    caps: x.caps && Array.isArray(x.caps.ops) && Array.isArray(x.caps.set) && Array.isArray(x.caps.add) ? x.caps : null
+  };
+}
 /** Neue PC-Kopie laden und Ansicht aktualisieren. Liefert die Zahl geänderter Notizen. */
 async function refreshMirror(file) {
   const zip = await readZip(await downloadFile(file.id));
@@ -4759,7 +4857,7 @@ async function refreshMirror(file) {
   }
   const snap = await decryptJson(zip["backup.enc"], S.key);
   let extras = { calc: {}, work: {} };
-  if (zip["pcextras.enc"]) { try { const x = await decryptJson(zip["pcextras.enc"], S.key); extras = { calc: x.calc || {}, work: x.work || {}, settings: x.settings || {} }; } catch (_) {} }
+  if (zip["pcextras.enc"]) { try { extras = extrasFrom(await decryptJson(zip["pcextras.enc"], S.key)); } catch (_) {} }
   const old = S.db;
   const db = buildDb(snap);
   let changed = 0;
@@ -4771,7 +4869,7 @@ async function refreshMirror(file) {
   S.db = db;
   S.extras = extras;
   delete S.db._totals; // NEU (AM)
-  dropAppliedEdits();  // NEU (AS): übernommene Änderungen sind jetzt im neuen Stand
+  dropAppliedEdits();  // GEÄNDERT (BB): übernommene Änderungen sind jetzt im neuen Stand (pcextras „applied“)
   if (dropSatisfiedChecks()) { S.inbox.dirty = true; saveInboxSoon(); } // NEU (AH-3)
   S.meta = meta;
   S.zip = zip;
@@ -4927,7 +5025,7 @@ addEventListener("keydown", e => {
     return;
   }
   if (mod || e.altKey) return;
-  // NEU (AS): Während des Bearbeitens keine Ein-Buchstaben-Kürzel (nur Esc)
+  // Während des Bearbeitens keine Ein-Buchstaben-Kürzel (nur Esc) – BB
   if (S.edit && S.noteId != null && e.key !== "Escape") return;
   switch (e.key) {
     case "/": e.preventDefault(); focusSearch(); break;
@@ -4938,7 +5036,7 @@ addEventListener("keydown", e => {
     case "g": case "G": go({ view: "home" }, null); break;
     case "v": case "V": S.settings.view = S.settings.view === "tiles" ? "list" : "tiles"; saveSettingsSoon(); renderList(); renderMain(); break;
     case "c": case "C": { const n = noteById(S.noteId); if (n) copyText(notePlainText(n), "Notiz kopiert"); break; }
-    case "e": case "E": { // NEU (AS): bearbeiten
+    case "e": case "E": { // bearbeiten (BB)
       const id = splitActive() && S.split.active === "b" ? S.split.noteId : S.noteId;
       const n = noteById(id);
       if (n && canEditFromPc(n) && !S.pcId) { e.preventDefault(); startEdit(n, S.page.get(n.id) || 0); }
@@ -4947,7 +5045,7 @@ addEventListener("keydown", e => {
     case "j": case "k": case "J": case "K": stepNote(e.key.toLowerCase() === "j" ? 1 : -1); break;
     case "Enter": if (S.findNext && document.activeElement === document.body) S.findNext(); break;
     case "Escape":
-      if (S.edit && S.noteId != null) cancelEdit(false); // NEU (AS)
+      if (S.edit && S.noteId != null) cancelEdit(false); // BB
       else if (S.findTerms) { S.findTerms = null; renderMain(); }
       else if ($(".shell.nav-open")) closeNav();
       else if (S.noteId != null || S.pcId) closeNote();
@@ -4985,7 +5083,7 @@ async function boot() {
   applySettings();
   if (DEMO) {
     try {
-      await import("./demo.js?v=3");
+      await import("./demo.js?v=4");
       const d = window.MyNotesDemo.setup();
       S.user = d.user;
       S.db = buildDb(d.snapshot);
@@ -4994,7 +5092,7 @@ async function boot() {
       S.inbox = { notes: parseInbox(d.inbox).notes, checks: [], edits: parseInbox(d.inbox).edits, fileId: "demo", modifiedTime: "demo", base: new Map(), readable: true, taken: [], state: null };
       S.inbox.base = inboxBase();
       S.done = new Set(d.done || []);
-      window.MyNotesTest = { effectiveNote, buildEdit, timetableParse, timetableText, ttLayout, folderTotal, openNote, go, readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
+      window.MyNotesTest = { effectiveNote, buildEdit, legacyOps, opsToLegacy, editForFile, parseInbox, extrasFrom, dropAppliedEdits, moveAppliedEdits, pendingEditsFor, timetableParse, timetableText, ttLayout, folderTotal, openNote, go, readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
       startApp();
     } catch (e) {
       gate(h("h1", null, "Demo konnte nicht starten"), h("div", { class: "gate-msg bad" }, String(e && e.stack || e)));
