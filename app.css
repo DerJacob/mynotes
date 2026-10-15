@@ -781,7 +781,7 @@ a.url { color: var(--link); overflow-wrap: anywhere; }
 .edit-foot { display: flex; gap: 6px; align-items: flex-start; margin-top: 18px; padding-top: 10px; border-top: 1px dashed var(--line); }
 
 /* =====================================================================
-   NEU (AT): zwei Notizen nebeneinander
+   NEU AUFGEBAUT (BD): zwei Notizen nebeneinander
    ===================================================================== */
 .shell.split-on { grid-template-columns: var(--side-w) 0 minmax(0, 1fr); }
 .shell.split-on .list { display: none; }
@@ -809,7 +809,7 @@ a.url { color: var(--link); overflow-wrap: anywhere; }
 .split-root.narrow .pane.active .note-bar { box-shadow: none; }
 
 /* =====================================================================
-   NEU (AR): Stundenplan
+   Stundenplan (AZ)
    ===================================================================== */
 .b-tt { margin: 8px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 14px; }
 .tt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -896,3 +896,17 @@ a.url { color: var(--link); overflow-wrap: anywhere; }
 .board-done:hover { border-color: var(--accent); }
 .board-done.on { background: var(--ok); border-color: var(--ok); }
 .board-done.on::after { content: ""; width: 5px; height: 10px; border: solid var(--bg); border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
+
+/* ---------------- NEU (BD): Ziehen beim Nebeneinander ---------------- */
+.split-drop { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; z-index: 30; pointer-events: none; }
+.split-drop-zone { pointer-events: auto; border: 2px dashed var(--line-strong); border-radius: 16px; display: grid; place-items: center; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--muted); font-weight: 600; transition: background .12s, border-color .12s; }
+.split-drop-zone span { display: inline-flex; align-items: center; gap: 8px; }
+.split-drop-zone.ghost { visibility: hidden; pointer-events: none; }
+.split-drop-zone.on { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.blk.has-grip { padding-left: 22px; }
+.blk-grip { position: absolute; left: 2px; top: 4px; width: 16px; height: 22px; display: grid; place-items: center; color: var(--muted); cursor: grab; opacity: 0; border-radius: 4px; font-size: 14px; line-height: 1; user-select: none; transition: opacity .12s; }
+.blk:hover > .blk-grip, .blk-grip:focus { opacity: .9; }
+.blk-grip:hover { background: var(--hover); color: var(--text); }
+.blk.dragging { opacity: .45; }
+.drop-line { height: 0; border-top: 3px solid var(--accent); border-radius: 2px; margin: 2px 0; pointer-events: none; }
+body.dragging-block .pane .note-wrap { outline: 1px dashed transparent; }

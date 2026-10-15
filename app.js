@@ -16,7 +16,7 @@
  * ===================================================================== */
 "use strict";
 
-const APP_VERSION = "1.0";
+const APP_VERSION = "1.4"; // GEÄNDERT (BD): passt zur App (vorher „1.0“)
 const CLIENT_ID = "723061989132-tu2nrvj1vvsbgmk6e03vf1g6gf6tsdmi.apps.googleusercontent.com";
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 const API = "https://www.googleapis.com/drive/v3";
@@ -43,7 +43,8 @@ const DEFAULT_SETTINGS = {
   hideDone: false,      // erledigte Checklisten-Punkte ausblenden
   view: "list",         // list | tiles
   sort: "custom",       // custom | modified | created | title
-  previewPane: true     // Vorschau im PC-Editor
+  previewPane: true,    // Vorschau im PC-Editor
+  splitRatio: 0.5       // NEU (BD): Breite der linken Notiz beim Nebeneinander
 };
 
 /** Alles, was die App weiß – nur im Arbeitsspeicher */
@@ -1844,6 +1845,8 @@ function wrapBlock(b, inner, opts, copy) {
   if (b.pendingEdit) el.title = b.pendingEdit === "applied" ? "Am Handy übernommen – der neue Stand kommt gleich" : "Am PC geändert – wartet aufs Handy";
   const hl = highlightColor(b.highlight);
   if (hl) { el.classList.add("hlbg"); el.style.setProperty("--hl", hl); }
+  // NEU (BD): nebeneinander – Griff, um den Block in die andere Notiz zu ziehen
+  if (opts.pane && opts.note && !opts.preview && blockMovable(b)) { el.classList.add("has-grip"); el.appendChild(blockGrip(b, opts.note)); }
   el.appendChild(inner);
   if (opts.tools && !opts.preview) {
     const tools = h("div", { class: "blk-tools" });
@@ -2076,13 +2079,14 @@ function noteCard(note, opts = {}) {
   const card = h("div", {
     class: "card" + (note.color ? " colored" : "") + (S.noteId === note.id ? " on" : ""),
     tabindex: "0", role: "button", dataset: { note: String(note.id) },
-    // GEÄNDERT (AT): Strg/⌘-Klick oder Mittelklick = daneben öffnen, Rechtsklick = Menü
+    // Strg/⌘-Klick oder Mittelklick = daneben öffnen, Rechtsklick = Menü (BD)
     onclick: e => { if (e.ctrlKey || e.metaKey) openSplit(note.id); else openNote(note.id, { ts: opts.ts }); },
     onauxclick: e => { if (e.button === 1) { e.preventDefault(); openSplit(note.id); } },
     oncontextmenu: e => noteContextMenu(e, note),
     onkeydown: e => { if (e.key === "Enter") { e.preventDefault(); if (e.ctrlKey || e.metaKey) openSplit(note.id); else openNote(note.id, { ts: opts.ts }); } }
   });
   if (note.color) card.style.setProperty("--note-color", note.color);
+  if (!opts.project) makeCardOpenDraggable(card, note); // NEU (BD): an den rechten Rand ziehen = daneben öffnen
   const title = h("div", { class: "card-title" },
     S.fresh.has(note.id) ? h("span", { class: "fresh", title: "Seit dem Öffnen geändert" }) : null,
     h("span", { class: "t" + (note.title.trim() ? "" : " muted") }));
@@ -2738,7 +2742,7 @@ function openNote(id, { anchor = null, ts = null, blockId = null } = {}) {
   const note = noteById(id);
   if (!note) { toast("Notiz nicht gefunden"); return; }
   rememberScroll();
-  // NEU (AT): Nebeneinander – in der gerade aktiven Spalte öffnen
+  // Nebeneinander – in der gerade aktiven Spalte öffnen (BD)
   if (splitActive() && S.split.active === "b" && note.id !== S.noteId) {
     S.split.noteId = note.id;
     renderMain({ anchor: anchor || blockId });
@@ -2765,7 +2769,7 @@ function openPc(id) {
   setMobilePane("main");
 }
 function closeNote() {
-  if (splitActive()) { closeSplit(S.split.active); return; } // NEU (AT)
+  if (splitActive()) { closeSplit(S.split.active); return; } // BD
   S.noteId = null; S.pcId = null; S.findTerms = null;
   history.pushState(null, "", routeHash());
   markListSelection();
@@ -3294,12 +3298,12 @@ function renderMain(opts = {}) {
   if (!main) return;
   const shell = $(".shell");
   shell && shell.classList.toggle("tiles", tilesActive() && S.noteId == null && !S.pcId);
-  // NEU (AT): Aufräumen nach der Nebeneinander-Ansicht
+  // Aufräumen nach der Nebeneinander-Ansicht (BD)
   main.classList.remove("split");
   if (main._splitObs && !splitActive()) { main._splitObs.disconnect(); main._splitObs = null; }
   renderShellSplit();
   if (S.route.view === "pc" || S.pcId) return renderPcMain(main);
-  if (splitActive()) return renderSplit(main); // NEU (AT)
+  if (splitActive()) return renderSplit(main); // BD
   if (S.noteId != null) return renderNote(main, opts);
   if (tilesActive()) return renderTiles(main);
   if (S.route.view === "home") return renderDashboard(main);
@@ -3330,7 +3334,7 @@ function watchScroll(scroller, bar) {
 // Notiz ansehen
 // ---------------------------------------------------------------------
 function renderNote(main, opts = {}, { noteId = S.noteId, pane = null } = {}) {
-  // GEÄNDERT (BB): offene Änderungen vom PC schon anzeigen; (AT): auch als Spalte (pane „a“/„b“)
+  // GEÄNDERT (BB): offene Änderungen vom PC schon anzeigen; (BD): auch als Spalte (pane „a“/„b“)
   const raw = noteById(noteId);
   if (raw && S.edit && S.edit.noteId === raw.id) return renderNoteEditor(main, raw);
   const note = effectiveNote(raw);
@@ -3431,7 +3435,7 @@ function renderNote(main, opts = {}, { noteId = S.noteId, pane = null } = {}) {
     heads.forEach(b => ol.appendChild(h("li", { class: "lv" + headingLevel(b) }, h("a", { href: "#", onclick: e => { e.preventDefault(); scrollToBlock(b.id); } }, readable(b.content)))));
     paper.appendChild(h("details", { class: "toc" }, h("summary", null, "Inhalt (" + heads.length + " Abschnitte)"), ol));
   }
-  const blocksEl = renderBlocks(blocks, { ts, note, tools: true, pageBlocks: blocks });
+  const blocksEl = renderBlocks(blocks, { ts, note, tools: true, pageBlocks: blocks, pane }); // GEÄNDERT (BD): pane → Griff zum Ziehen
   paper.appendChild(blocksEl);
   if (!blocks.length && !hiddenCount) paper.appendChild(h("div", { class: "muted" }, "(leer)"));
   if (hiddenCount) {
@@ -5110,25 +5114,33 @@ window.addEventListener("beforeunload", e => {
   if (S.unlocked && S.edit && S.edit.dirty) { e.preventDefault(); e.returnValue = ""; }
 });
 // =====================================================================
-// NEU (AT): Zwei Notizen nebeneinander
-//  - Notiz-Karte mit Strg/⌘-Klick oder Mittelklick, Rechtsklick → „Daneben öffnen“,
-//    oder in der Notiz ⋯ → „Daneben öffnen …“
-//  - Breit genug: zwei Spalten, jede mit eigener Leiste und eigenem Scrollen, Trenner verschiebbar.
-//    Schmal: Reiter oben, es ist immer nur eine Notiz zu sehen – nichts überlappt.
-//  - Die Liste wird dafür ausgeblendet (mehr Platz); Schließen bringt sie zurück.
+// NEU AUFGEBAUT (BD): Zwei Notizen nebeneinander (ersetzt AT aus 1.3)
+//
+// Öffnen:   Strg/⌘-Klick oder Mittelklick auf eine Karte · Rechtsklick → „Daneben öffnen“ ·
+//           in der Notiz ⋯ → „Daneben öffnen …“ (oder Taste D) · Karte aus der Liste an den
+//           rechten Rand ziehen („Hier daneben öffnen“)
+// Ansicht:  zwei Spalten mit eigener Leiste und eigenem Scrollen, Trenner ziehen (Doppelklick = Mitte,
+//           Breite wird mit den Einstellungen gespeichert), Seiten tauschen, jede Seite schließen.
+//           Schmal (< 880 px): Reiter oben, immer nur eine Notiz – nichts überlappt.
+// Blöcke:   am Griff ⠿ in die andere Notiz ziehen = verschieben, mit Strg = kopieren. Geht als
+//           Änderung ans Handy (neu in der Ziel-Notiz, gelöscht in der Quell-Notiz) – Rückgängig möglich.
 // =====================================================================
-S.split = { noteId: null, ratio: 0.5, active: "a" };
+S.split = { noteId: null, active: "a" };
 const SPLIT_MIN_W = 880;   // darunter Reiter statt Spalten
+const DND_NOTE = "text/x-mynotes-open";   // Karte aus der Liste
+const DND_BLOCK = "text/x-mynotes-block"; // Block aus einer Notiz
 
 function splitActive() {
   return S.split.noteId != null && S.noteId != null && !S.pcId && !!noteById(S.split.noteId) && S.split.noteId !== S.noteId;
 }
+function splitRatio() { const r = Number(S.settings.splitRatio); return r >= 0.25 && r <= 0.75 ? r : 0.5; }
 function openSplit(id) {
   const note = noteById(id);
   if (!note) { toast("Notiz nicht gefunden"); return; }
   if (matchMedia("(max-width: 760px)").matches) { openNote(id); return; } // Handy-Breite: normal öffnen
   if (S.noteId == null || S.pcId) { openNote(id); toast("Tipp: Mit Strg + Klick auf eine zweite Notiz öffnest du sie daneben"); return; }
   if (S.noteId === note.id) { toast("Diese Notiz ist schon offen"); return; }
+  if (S.edit && S.edit.noteId === S.split.noteId && S.edit.dirty) { toast("Erst die Bearbeitung rechts speichern oder abbrechen", { bad: true }); return; }
   S.split.noteId = note.id;
   S.split.active = "b";
   renderShellSplit();
@@ -5136,10 +5148,12 @@ function openSplit(id) {
 }
 function closeSplit(which = "b") {
   const closed = which === "a" ? S.noteId : S.split.noteId;
-  if (S.edit && S.edit.noteId === closed && !S.edit.dirty) S.edit = null;
+  if (S.edit && S.edit.noteId === closed) {
+    if (S.edit.dirty) { cancelEdit(false); return; }
+    S.edit = null;
+  }
   if (which === "a" && S.split.noteId != null) {
-    // linke schließen → rechte rückt nach
-    S.noteId = S.split.noteId;
+    S.noteId = S.split.noteId; // linke schließen → rechte rückt nach
     history.replaceState(null, "", routeHash());
   }
   S.split.noteId = null;
@@ -5150,9 +5164,8 @@ function closeSplit(which = "b") {
 }
 function swapSplit() {
   if (!splitActive()) return;
-  const a = S.noteId;
-  S.noteId = S.split.noteId;
-  S.split.noteId = a;
+  [S.noteId, S.split.noteId] = [S.split.noteId, S.noteId];
+  S.split.active = S.split.active === "a" ? "b" : "a";
   history.replaceState(null, "", routeHash());
   renderMain();
 }
@@ -5161,31 +5174,35 @@ function renderShellSplit() {
   if (shell) shell.classList.toggle("split-on", splitActive());
 }
 function pickSplitNote() {
-  const notes = [...S.db.notes.values()].filter(n => !n.deleted && n.id !== S.noteId).sort((a, b) => b.modifiedAt - a.modifiedAt);
+  const notes = [...S.db.notes.values()].filter(n => !n.deleted && n.id !== S.noteId && n.id !== S.split.noteId).sort((a, b) => b.modifiedAt - a.modifiedAt);
   notePicker("Daneben öffnen", notes, n => openSplit(n.id), { placeholder: "Notiz suchen …", sub: n => n.folderIds.length ? (folderById(n.folderIds[0])?.name || "") : "" });
 }
 
 /** Hauptbereich mit zwei Notizen */
 function renderSplit(main) {
   renderShellSplit();
-  const paneA = h("div", { class: "pane pane-a" + (S.split.active === "a" ? " active" : ""), onpointerdown: () => setActivePane("a") });
-  const paneB = h("div", { class: "pane pane-b" + (S.split.active === "b" ? " active" : ""), onpointerdown: () => setActivePane("b") });
-  const handle = h("div", { class: "split-handle", title: "Ziehen zum Verschieben · Doppelklick: Mitte", role: "separator", "aria-orientation": "vertical" });
+  const paneA = h("div", { class: "pane pane-a" + (S.split.active === "a" ? " active" : ""), dataset: { pane: "a" }, onpointerdown: () => setActivePane("a") });
+  const paneB = h("div", { class: "pane pane-b" + (S.split.active === "b" ? " active" : ""), dataset: { pane: "b" }, onpointerdown: () => setActivePane("b") });
+  const handle = h("div", { class: "split-handle", title: "Ziehen zum Verschieben · Doppelklick: Mitte", role: "separator", "aria-orientation": "vertical", tabindex: "0" });
   const tabs = h("div", { class: "split-tabs", role: "tablist" });
   const box = h("div", { class: "split-box" }, paneA, handle, paneB);
   const root = h("div", { class: "split-root" }, tabs, box);
   replace(main, root);
   main.classList.add("split");
-  const applyRatio = () => box.style.setProperty("--split-a", (S.split.ratio * 100).toFixed(2) + "%");
+  let ratio = splitRatio();
+  const applyRatio = () => box.style.setProperty("--split-a", (ratio * 100).toFixed(2) + "%");
   applyRatio();
   const noteA = noteById(S.noteId), noteB = noteById(S.split.noteId);
   renderNote(paneA, {}, { noteId: S.noteId, pane: "a" });
   renderNote(paneB, {}, { noteId: S.split.noteId, pane: "b" });
+  enableBlockDrop(paneA, noteA);
+  enableBlockDrop(paneB, noteB);
   const tab = (key, n) => h("button", { class: S.split.active === key ? "on" : "", role: "tab", onclick: () => setActivePane(key) },
     h("span", { class: "ellipsis" }, n?.title || "Ohne Titel"));
   replace(tabs, tab("a", noteA), tab("b", noteB),
     iconBtn("swap", "Seiten tauschen", swapSplit, "sm"), iconBtn("close", "Zweite Notiz schließen", () => closeSplit("b"), "sm"));
-  // Trenner ziehen
+  // Trenner ziehen (Maus/Finger) oder mit ←/→
+  const saveRatio = () => { S.settings.splitRatio = Math.round(ratio * 1000) / 1000; saveSettingsSoon(); };
   let drag = null;
   handle.addEventListener("pointerdown", e => {
     e.preventDefault();
@@ -5195,13 +5212,19 @@ function renderSplit(main) {
   });
   handle.addEventListener("pointermove", e => {
     if (!drag) return;
-    S.split.ratio = Math.min(0.75, Math.max(0.25, (e.clientX - drag.left) / drag.width));
+    ratio = Math.min(0.75, Math.max(0.25, (e.clientX - drag.left) / drag.width));
     applyRatio();
   });
-  const end = () => { if (!drag) return; drag = null; box.classList.remove("dragging"); };
+  const end = () => { if (!drag) return; drag = null; box.classList.remove("dragging"); saveRatio(); };
   handle.addEventListener("pointerup", end);
   handle.addEventListener("pointercancel", end);
-  handle.addEventListener("dblclick", () => { S.split.ratio = 0.5; applyRatio(); });
+  handle.addEventListener("dblclick", () => { ratio = 0.5; applyRatio(); saveRatio(); });
+  handle.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    ratio = Math.min(0.75, Math.max(0.25, ratio + (e.key === "ArrowLeft" ? -0.05 : 0.05)));
+    applyRatio(); saveRatio();
+  });
   // Breite beobachten: zu schmal → Reiter
   const fit = () => root.classList.toggle("narrow", main.clientWidth < SPLIT_MIN_W);
   fit();
@@ -5227,6 +5250,135 @@ function noteContextMenu(e, note) {
     { label: "Link kopieren (für „Vom PC“)", icon: "link", run: () => copyText(linkMarkup(note.title || "Notiz", note.id), "Link kopiert") },
     canEditFromPc(note) ? { label: "Am PC bearbeiten", icon: "edit", run: () => { openNote(note.id); startEdit(note, 0); } } : null
   ]);
+}
+
+// ---------------- Karte an den Rand ziehen → daneben öffnen ----------------
+/** Karten in der Liste ziehbar machen (aufgerufen von noteCard) */
+function makeCardOpenDraggable(card, note) {
+  card.draggable = true;
+  card.addEventListener("dragstart", e => {
+    if (e.dataTransfer.types.length) return; // z. B. Projekt-Board hat schon eigene Daten gesetzt
+    e.dataTransfer.setData(DND_NOTE, String(note.id));
+    e.dataTransfer.effectAllowed = "copyMove";
+  });
+}
+/** Ziel-Flächen im Hauptbereich, solange eine Karte gezogen wird */
+function splitDropZones() {
+  const main = $(".main");
+  if (!main || S.noteId == null || S.pcId || matchMedia("(max-width: 760px)").matches) return null;
+  const zones = h("div", { class: "split-drop" });
+  const zone = (label, cls, onDrop) => {
+    const z = h("div", { class: "split-drop-zone " + cls }, h("span", null, icon("split", "sm"), label));
+    z.addEventListener("dragover", e => { if (e.dataTransfer.types.includes(DND_NOTE)) { e.preventDefault(); z.classList.add("on"); } });
+    z.addEventListener("dragleave", () => z.classList.remove("on"));
+    z.addEventListener("drop", e => { e.preventDefault(); const id = Number(e.dataTransfer.getData(DND_NOTE)); hideSplitDrop(); if (id) onDrop(id); });
+    return z;
+  };
+  if (splitActive()) {
+    zones.append(zone("Links öffnen", "left", id => { if (id !== S.split.noteId) { S.noteId = id; history.replaceState(null, "", routeHash()); markListSelection(); renderMain(); } }),
+      zone("Rechts öffnen", "right", id => { if (id !== S.noteId) { S.split.noteId = id; renderMain(); } }));
+  } else {
+    zones.append(h("div", { class: "split-drop-zone ghost" }), zone("Hier daneben öffnen", "right", id => openSplit(id)));
+  }
+  main.appendChild(zones);
+  return zones;
+}
+function hideSplitDrop() { $$(".split-drop").forEach(z => z.remove()); }
+document.addEventListener("dragstart", e => {
+  if (!S.unlocked) return;
+  // erst nach dem dragstart der Karte ist bekannt, was gezogen wird
+  setTimeout(() => { if (e.dataTransfer && [...e.dataTransfer.types].includes(DND_NOTE) && !$(".split-drop")) splitDropZones(); }, 0);
+});
+document.addEventListener("dragend", () => hideSplitDrop());
+document.addEventListener("drop", () => setTimeout(hideSplitDrop, 0));
+
+// ---------------- Blöcke zwischen den Notizen ziehen ----------------
+/** Kann dieser Block in die andere Notiz wandern? (am Handy vorhanden, ein Typ, den das Handy anlegen kann) */
+function blockMovable(b) {
+  return typeof b.id === "number" && !b.pendingEdit && !b.hidden && canAddType(b.type) && S.inbox.readable !== false;
+}
+/** Griff ⠿ an einem Block (nur in der Nebeneinander-Ansicht) */
+function blockGrip(b, note) {
+  const grip = h("span", { class: "blk-grip", draggable: "true", title: "In die andere Notiz ziehen (Strg = kopieren)", "aria-hidden": "true" }, "⠿");
+  grip.addEventListener("dragstart", e => {
+    e.stopPropagation();
+    e.dataTransfer.setData(DND_BLOCK, JSON.stringify({ noteId: note.id, blockId: b.id }));
+    e.dataTransfer.effectAllowed = "copyMove";
+    const blk = grip.closest(".blk");
+    if (blk) { e.dataTransfer.setDragImage(blk, 12, 12); blk.classList.add("dragging"); }
+    document.body.classList.add("dragging-block");
+  });
+  grip.addEventListener("dragend", () => { grip.closest(".blk")?.classList.remove("dragging"); document.body.classList.remove("dragging-block"); $$(".drop-line").forEach(x => x.remove()); });
+  return grip;
+}
+/** Eine Spalte nimmt Blöcke aus der anderen an – Linie zeigt, wo er landet */
+function enableBlockDrop(pane, note) {
+  if (!note || !canEditFromPc(note)) return;
+  let line = null, target = null;
+  const blocksOf = () => $$(".note-wrap .blocks .blk[id^='b']", pane).filter(el => el.offsetParent !== null);
+  const place = e => {
+    const els = blocksOf();
+    let after = null, ref = null;
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      if (e.clientY > r.top + r.height / 2) { after = el; } else { ref = el; break; }
+    }
+    if (!line) { line = h("div", { class: "drop-line" }); }
+    const host = (after || ref)?.parentNode || $(".note-wrap .blocks", pane);
+    if (!host) return null;
+    if (after) after.after(line); else if (ref) ref.before(line); else host.appendChild(line);
+    return { afterId: after ? after.id.slice(1) : null, page: Math.min(S.page.get(note.id) || 0, note.pages ? note.pages.length - 1 : 0) };
+  };
+  pane.addEventListener("dragover", e => {
+    if (!e.dataTransfer.types.includes(DND_BLOCK)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = e.ctrlKey || e.metaKey || e.altKey ? "copy" : "move";
+    target = place(e);
+  });
+  pane.addEventListener("dragleave", e => { if (!pane.contains(e.relatedTarget)) { line?.remove(); line = null; } });
+  pane.addEventListener("drop", e => {
+    if (!e.dataTransfer.types.includes(DND_BLOCK)) return;
+    e.preventDefault();
+    line?.remove(); line = null;
+    let src;
+    try { src = JSON.parse(e.dataTransfer.getData(DND_BLOCK)); } catch (_) { return; }
+    if (!src || !target) return;
+    if (src.noteId === note.id) { toast("Innerhalb einer Notiz bitte am Handy umsortieren"); return; }
+    moveBlockToNote(src.noteId, src.blockId, note, target, e.ctrlKey || e.metaKey || e.altKey);
+  });
+}
+/** Block in die andere Notiz übertragen: dort neu anlegen (und hier löschen, wenn verschoben) */
+function moveBlockToNote(srcNoteId, blockId, dst, at, copy) {
+  const srcRaw = noteById(srcNoteId);
+  const src = effectiveNote(srcRaw);
+  const b = src && src.blocks.find(x => x.id === blockId);
+  if (!b || !blockMovable(b)) { toast("Dieser Block lässt sich nicht verschieben", { bad: true }); return; }
+  if (!phoneCanOp("add")) return;
+  const after = at.afterId == null ? null : (/^\d+$/.test(at.afterId) ? Number(at.afterId) : at.afterId);
+  const tmp = uuid().replace(/-/g, "").slice(0, 12);
+  const now = Date.now();
+  const added = {
+    id: uuid(), noteId: dst.id, noteTitle: dst.title, at: now, base: dst.modifiedAt,
+    ops: [{ op: "add", tmp, after, page: at.page, type: b.type, content: b.type === "DIVIDER" ? "" : b.content, checked: !!b.checked, level: b.type === "HEADING" ? headingLevel(b) : null }]
+  };
+  const removed = copy ? null : {
+    id: uuid(), noteId: srcRaw.id, noteTitle: srcRaw.title, at: now + 1, base: srcRaw.modifiedAt,
+    ops: [{ op: "del", blockId: b.id, from: b.content }]
+  };
+  const ids = [added.id, removed?.id].filter(Boolean);
+  S.inbox.edits = [...(S.inbox.edits || []), added, ...(removed ? [removed] : [])];
+  S.inbox.dirty = true;
+  saveInboxSoon();
+  renderSidebarCounts();
+  renderMain();
+  toast((copy ? "Kopiert" : "Verschoben") + " nach „" + (dst.title || "Notiz") + "“ – kommt so aufs Handy", {
+    action: {
+      label: "Rückgängig", run: () => {
+        S.inbox.edits = (S.inbox.edits || []).filter(e => !ids.includes(e.id) || S.done.has(e.id));
+        S.inbox.dirty = true; saveInboxSoon(); renderSidebarCounts(); renderMain();
+      }
+    }
+  });
 }
 // =====================================================================
 // Anmelden → PC-Kopie finden → Passwort → App
@@ -5540,7 +5692,8 @@ async function lock(message) {
   closeDialog(); closeLightbox(); closeMenu();
   S.key = null; S.db = null; S.extras = { calc: {}, work: {} };
   S.inbox = { notes: [], checks: [], edits: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
-  S.appliedEdits = []; S.edit = null; S.split.noteId = null; // NEU (AS/AT)
+  // GEÄNDERT (BD): appliedEdits ist seit BB eine Map (vorher wurde hier ein Array gesetzt → Fehler nach Entsperren)
+  S.appliedEdits = new Map(); S.waiting = new Set(); S.conflicts = new Set(); S.seenDone = new Set(); S.edit = null; S.split.noteId = null;
   S.done = new Set(); S.rejected = new Set(); S.doneModified = null;
   S.fresh.clear(); S.collapsed.clear(); S.page.clear(); S.query = ""; S.findTerms = null;
   clearImages();
@@ -5620,6 +5773,7 @@ function openShortcuts() {
       k("C"), h("span", null, "Geöffnete Notiz als Text kopieren"),
       k("E"), h("span", null, "Geöffnete Notiz am PC bearbeiten (kommt aufs Handy)"),
       k("Strg", "Klick"), h("span", null, "Notiz daneben öffnen (zwei Notizen nebeneinander)"),
+      k("D"), h("span", null, "Daneben öffnen … (Notiz suchen) – oder Karte an den rechten Rand ziehen"),
       k("V"), h("span", null, "Liste ⇄ Kacheln"),
       k("L"), h("span", null, "Sperren"),
       k("Esc"), h("span", null, "Schließen / zurück"),
@@ -5630,7 +5784,8 @@ function openShortcuts() {
     h("ul", { class: "small", style: { margin: 0, paddingLeft: "18px", display: "grid", gap: "6px", color: "var(--muted)" } },
       h("li", null, "Das Handy lädt Änderungen etwa 1 Minute nach dem Bearbeiten hoch. Die Web-App schaut jede Minute nach."),
       h("li", null, "Am PC kannst du Notizen bearbeiten (E), neue Notizen in Ordnern anlegen und abhaken. Der PC schickt dem Handy nur Vorschläge – das Handy übernimmt sie automatisch oder nach Bestätigung (Einstellung am Handy). Was am Handy inzwischen anders ist, wird nie überschrieben."),
-      h("li", null, "Rechnungen und Arbeitszeit zeigen die Ergebnisse, die das Handy berechnet hat."),
+      h("li", null, "Rechnungen zeigen die Ergebnisse, die das Handy berechnet hat."),
+      h("li", null, "Nebeneinander: Blöcke am Griff ⠿ in die andere Notiz ziehen = verschieben, mit Strg = kopieren."),
       h("li", null, "Der versteckte Bereich ist nie auf dem PC."),
       h("li", null, "Über Kopier-Symbole neben Blöcken: Tabellen gehen direkt in Excel, Links auf Stellen in „Vom PC“."))
   ], { wide: true });
@@ -5664,6 +5819,7 @@ addEventListener("keydown", e => {
     case "g": case "G": go({ view: "home" }, null); break;
     case "v": case "V": S.settings.view = S.settings.view === "tiles" ? "list" : "tiles"; saveSettingsSoon(); renderList(); renderMain(); break;
     case "c": case "C": { const n = noteById(S.noteId); if (n) copyText(notePlainText(n), "Notiz kopiert"); break; }
+    case "d": case "D": if (S.noteId != null && !S.pcId) pickSplitNote(); break; // NEU (BD): Daneben öffnen
     case "e": case "E": { // bearbeiten (BB)
       const id = splitActive() && S.split.active === "b" ? S.split.noteId : S.noteId;
       const n = noteById(id);
