@@ -877,3 +877,22 @@ a.url { color: var(--link); overflow-wrap: anywhere; }
 .pf-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 8px; align-items: start; }
 .pf-row .pf-l { font-weight: 600; }
 @media (max-width: 560px) { .pf-row { grid-template-columns: 1fr auto; } .pf-row .pf-l { grid-column: 1 / -1; } }
+
+/* =====================================================================
+   NEU (BC3): Tabelle bearbeiten, Projekt-Board am PC
+   ===================================================================== */
+.tbl-edit { overflow-x: auto; margin-top: 10px; }
+.tbl-edit table { border-collapse: collapse; }
+.tbl-edit td { padding: 2px; }
+.tbl-edit input.field { min-width: 120px; padding: 7px 9px; border-radius: 6px; }
+.tbl-edit input.field.th { font-weight: 650; background: var(--surface2); }
+.tbl-edit .tbl-x { text-align: center; }
+.board-col.drop { outline: 2px dashed var(--accent); outline-offset: 2px; background: var(--accent-soft); }
+.board-col .card[draggable="true"] { cursor: grab; }
+.board-col .card.dragging { opacity: .5; }
+.board-col .card.pending-move { box-shadow: inset 3px 0 0 var(--accent); }
+.board-done { margin-right: 8px; flex: 0 0 auto; }
+.board-done { width: 18px; height: 18px; border: 2px solid var(--muted); border-radius: 4px; display: inline-grid; place-items: center; padding: 0; background: transparent; cursor: pointer; vertical-align: -3px; }
+.board-done:hover { border-color: var(--accent); }
+.board-done.on { background: var(--ok); border-color: var(--ok); }
+.board-done.on::after { content: ""; width: 5px; height: 10px; border: solid var(--bg); border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }

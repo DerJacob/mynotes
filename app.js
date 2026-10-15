@@ -1066,6 +1066,15 @@ function noteProgress(note, item) {
   const progress = item && item.done ? 1 : st.total > 0 ? st.done / st.total : 0;
   return { complete, progress, ...st };
 }
+/** NEU (BC3): Stand einer Notiz im Projekt-Ordner inkl. offener Änderungen vom PC */
+function pendingItem(folderId, noteId, item) {
+  let cur = item ? { ...item } : null;
+  for (const e of pendingEditsFor(noteId)) for (const o of e.ops) {
+    if (o.op !== "pitem" || o.folderId !== folderId) continue;
+    cur = { phaseId: o.to.phase, done: o.to.done, position: cur ? cur.position : 1e8, pending: true };
+  }
+  return cur;
+}
 /** Projekt-Ordner: Phasen mit ihren Notizen */
 function projectBoard(folder) {
   const p = folder.project;
@@ -1074,7 +1083,7 @@ function projectBoard(folder) {
   for (const noteId of folder.noteIds) {
     const note = noteById(noteId);
     if (!note) continue;
-    const item = p.items.get(noteId);
+    const item = pendingItem(folder.id, noteId, p.items.get(noteId)); // GEÄNDERT (BC3): offene Änderungen vom PC
     const phaseId = item && cols.has(item.phaseId) ? item.phaseId : phases[0].id;
     cols.get(phaseId).push({ note, item, pos: item ? item.position : 1e9 + note.sort, ...noteProgress(note, item) });
   }
@@ -1909,6 +1918,12 @@ function renderBlock(b, opts) {
           e.stopPropagation();
           downloadBlob(new Blob([tableCsv(b.content)], { type: "text/csv;charset=utf-8" }), safeFileName(opts.note?.title || "Tabelle") + ".csv");
         }, "sm"));
+        // NEU (BC3): Tabelle am PC bearbeiten (Doppelklick oder ✎)
+        if (opts.note && typeof b.id === "number" && canEditFromPc(opts.note) && canSetType("TABLE")) {
+          $(".blk-tools", el)?.appendChild(iconBtn("edit", "Tabelle bearbeiten", e => { e.stopPropagation(); tableDialog(opts.note, b); }, "sm"));
+          wrap.addEventListener("dblclick", () => tableDialog(opts.note, b));
+          wrap.title = "Doppelklick: bearbeiten";
+        }
       }
       return el;
     }
@@ -3644,6 +3659,66 @@ function stat(n, label, onclick) {
 }
 
 // ---------------------------------------------------------------------
+// NEU (BC3): Projekt-Ordner am PC – Phase wechseln, erledigt setzen
+// ---------------------------------------------------------------------
+function canMoveInProject(folder) { return !!folder.project && S.inbox.readable !== false && phoneCanOp("pitem"); }
+function moveProjectItem(folder, note, phaseId, done) {
+  const raw = pendingItem(folder.id, note.id, folder.project.items.get(note.id));
+  const from = { phase: raw && raw.phaseId != null ? raw.phaseId : null, done: !!(raw && raw.done) };
+  const to = { phase: phaseId === -1 ? null : phaseId, done };
+  if (from.phase === to.phase && from.done === to.done) return;
+  const ph = folder.project.phases.find(x => x.id === phaseId);
+  queueModuleOp(note, { op: "pitem", folderId: folder.id, from, to },
+    from.done !== to.done ? (done ? "„" + (note.title || "Notiz") + "“ erledigt" : "„" + (note.title || "Notiz") + "“ wieder offen")
+      : "„" + (note.title || "Notiz") + "“ → " + (ph ? ph.name : "Phase"));
+}
+
+// ---------------------------------------------------------------------
+// NEU (BC3): Tabelle bearbeiten – Zellen, Zeilen, Spalten (gespeichert wie am Handy: „a|b\nc|d“)
+// ---------------------------------------------------------------------
+function tableDialog(note, b) {
+  const rows = parseTable(b.content).map(r => r.map(c => c.trim()));
+  if (!rows.length) rows.push(["", ""], ["", ""]);
+  const width = () => Math.max(1, ...rows.map(r => r.length));
+  const grid = h("div", { class: "tbl-edit" });
+  const clean = v => v.replace(/[|]/g, "/").replace(/\n/g, " ");
+  const draw = () => {
+    const w = width();
+    rows.forEach(r => { while (r.length < w) r.push(""); });
+    const table = h("table");
+    rows.forEach((r, i) => {
+      const tr = h("tr");
+      r.forEach((v, c) => {
+        const inp = h("input", { class: "field" + (i === 0 ? " th" : ""), value: v, "aria-label": "Zeile " + (i + 1) + ", Spalte " + (c + 1) });
+        inp.addEventListener("input", () => { r[c] = clean(inp.value); });
+        inp.addEventListener("keydown", ev => {
+          if (ev.key === "Enter") { ev.preventDefault(); if (i === rows.length - 1) { rows.push(Array(w).fill("")); draw(); } $$(".tbl-edit tr")[i + 1]?.querySelectorAll("input")[c]?.focus(); }
+        });
+        tr.appendChild(h("td", null, inp));
+      });
+      tr.appendChild(h("td", { class: "tbl-x" }, rows.length > 1 ? iconBtn("close", "Zeile löschen", () => { rows.splice(i, 1); draw(); }, "sm") : null));
+      table.appendChild(tr);
+    });
+    const foot = h("tr");
+    for (let c = 0; c < w; c++) foot.appendChild(h("td", { class: "tbl-x" }, w > 1 ? iconBtn("close", "Spalte löschen", () => { rows.forEach(r => r.splice(c, 1)); draw(); }, "sm") : null));
+    table.appendChild(foot);
+    replace(grid, table);
+  };
+  draw();
+  const save = () => {
+    const to = rows.map(r => r.map(clean).join("|")).join("\n");
+    closeDialog();
+    if (to === b.content) { toast("Keine Änderungen"); return; }
+    queueModuleOp(note, { op: "set", blockId: b.id, from: b.content, to, checked: null, level: null }, "Tabelle gespeichert");
+  };
+  openDialog([h("h2", null, "Tabelle bearbeiten"), h("div", { class: "small muted" }, "Erste Zeile = Überschrift. Enter springt in die Zeile darunter."), grid,
+    h("div", { class: "chips", style: { marginTop: "10px" } },
+      h("button", { class: "btn ghost small", type: "button", onclick: () => { rows.push(Array(width()).fill("")); draw(); } }, icon("add", "sm"), "Zeile"),
+      h("button", { class: "btn ghost small", type: "button", onclick: () => { rows.forEach(r => r.push("")); draw(); } }, icon("add", "sm"), "Spalte")),
+    h("div", { class: "actions" }, h("button", { class: "btn ghost", onclick: () => closeDialog() }, "Abbrechen"), h("button", { class: "btn", onclick: save }, "Speichern"))], { wide: true });
+}
+
+// ---------------------------------------------------------------------
 // Projekt-Board (Projekt-Ordner)
 // ---------------------------------------------------------------------
 function renderBoard(main, folder) {
@@ -3661,7 +3736,37 @@ function renderBoard(main, folder) {
     const doneN = col.entries.filter(e => e.complete).length;
     const c = h("div", { class: "board-col", vars: col.phase.color ? { "--phase-color": col.phase.color } : null },
       h("h3", null, col.phase.name, h("span", null, `${doneN}/${col.entries.length}`)));
-    for (const e of col.entries) c.appendChild(noteCard(e.note, { project: e }));
+    // NEU (BC3): Karten zwischen Phasen ziehen, „erledigt“ abhaken – geht als Schritt „pitem“ ans Handy
+    const live = canMoveInProject(folder);
+    for (const e of col.entries) {
+      const card = noteCard(e.note, { project: e });
+      if (live) {
+        card.draggable = true;
+        card.addEventListener("dragstart", ev => { ev.dataTransfer.setData("text/mynotes-note", String(e.note.id)); ev.dataTransfer.effectAllowed = "move"; card.classList.add("dragging"); });
+        card.addEventListener("dragend", () => card.classList.remove("dragging"));
+        const done = !!(e.item && e.item.done);
+        card.querySelector(".card-title")?.prepend(h("button", {
+          class: "box live board-done" + (done ? " on" : ""), type: "button", role: "checkbox", "aria-checked": String(done),
+          title: done ? "Als offen markieren" : "Als erledigt markieren",
+          onclick: ev => { ev.stopPropagation(); moveProjectItem(folder, e.note, col.phase.id, !done); }
+        }));
+        if (e.item && e.item.pending) card.classList.add("pending-move");
+      }
+      c.appendChild(card);
+    }
+    if (live && col.phase.id !== -1) {
+      c.addEventListener("dragover", ev => { if (ev.dataTransfer.types.includes("text/mynotes-note")) { ev.preventDefault(); c.classList.add("drop"); } });
+      c.addEventListener("dragleave", ev => { if (!c.contains(ev.relatedTarget)) c.classList.remove("drop"); });
+      c.addEventListener("drop", ev => {
+        ev.preventDefault(); c.classList.remove("drop");
+        const note = noteById(Number(ev.dataTransfer.getData("text/mynotes-note")));
+        if (!note) return;
+        const cur = pendingItem(folder.id, note.id, folder.project.items.get(note.id));
+        const curPhase = cur && pb.phases.some(x => x.phase.id === cur.phaseId) ? cur.phaseId : pb.phases[0].phase.id;
+        if (curPhase === col.phase.id) return;
+        moveProjectItem(folder, note, col.phase.id, !!(cur && cur.done));
+      });
+    }
     if (!col.entries.length) c.appendChild(h("div", { class: "small muted", style: { padding: "6px 4px" } }, "Leer"));
     board.appendChild(c);
   }
@@ -4846,7 +4951,7 @@ function buildEdit(note) {
     if (r.origId != null) {
       const o = origById.get(String(r.origId));
       present.add(String(r.origId));
-      if (o && canSetType(o.type)) {
+      if (o && canSetType(o.type) && o.type !== "TABLE") {
         const changed = o.content !== r.content || o.checked !== r.checked || (o.type === "HEADING" && o.level !== r.level);
         if (changed) sets.push({ blockId: o.id, from: o.content, to: r.content, checked: o.type === "CHECKLIST_ITEM" ? r.checked : null, level: o.type === "HEADING" ? r.level : null });
       }
@@ -4941,7 +5046,7 @@ function renderNoteEditor(main, note) {
   function rowEl(r, i) {
     const tools = h("div", { class: "erow-tools" },
       h("button", { class: "icon-btn sm", title: "Darunter einfügen", type: "button", onclick: e => addMenu(e.currentTarget, i + 1) }, icon("add", "sm")));
-    if (!canSetType(r.type) && r.type !== "DIVIDER") { // GEÄNDERT (BB): richtet sich danach, was das Handy kann
+    if ((!canSetType(r.type) || r.type === "TABLE") && r.type !== "DIVIDER") { // GEÄNDERT (BB/BC3): was das Handy kann; Tabelle hat einen eigenen Dialog
       // Sonderblock: nur anzeigen
       const prev = renderBlock(r.block, { note, preview: true, pageBlocks: ed.rows.map(x => x.block).filter(Boolean) });
       return h("div", { class: "erow locked", title: "Am Handy bearbeiten" }, h("div", { class: "erow-lock" }, icon("phone", "sm")), h("div", { class: "grow" }, prev || h("span", { class: "muted small" }, "(" + r.type + ")")), tools);
@@ -5606,7 +5711,7 @@ async function boot() {
   applySettings();
   if (DEMO) {
     try {
-      await import("./demo.js?v=6");
+      await import("./demo.js?v=7");
       const d = window.MyNotesDemo.setup();
       S.user = d.user;
       S.db = buildDb(d.snapshot);

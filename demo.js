@@ -305,8 +305,8 @@
   const extras = {
     settings: { auto: true },
     applied: [],
-    // NEU (BC): was das (Demo-)Handy vom PC versteht – wie PcFormat.caps() in 1.4-BC2
-    caps: { inbox: 3, ops: ["title", "set", "del", "add", "work", "workcfg", "profile", "tt", "ttcfg"], set: ["CALC", "CHECKLIST_ITEM", "CODE", "HEADING", "TEXT"], add: ["CALC", "CHECKLIST_ITEM", "CODE", "DIVIDER", "HEADING", "TEXT"] },
+    // NEU (BC): was das (Demo-)Handy vom PC versteht – wie PcFormat.caps() in 1.4-BC3
+    caps: { inbox: 3, ops: ["title", "set", "del", "add", "work", "workcfg", "profile", "tt", "ttcfg", "pitem"], set: ["CALC", "CHECKLIST_ITEM", "CODE", "HEADING", "TABLE", "TEXT"], add: ["CALC", "CHECKLIST_ITEM", "CODE", "DIVIDER", "HEADING", "TABLE", "TEXT"] },
     calc: {
       [calcBlock.id]: [{ h: true }, { v: "2.450,00 €", a: false }, { v: "380,00 €", a: false }, null, { h: true }, { v: "820,00 €", a: false }, { v: "65,00 €", a: false }, { v: "18,00 €", a: false }, { v: "340,00 €", a: false }, { v: "1.243,00 €", a: true }, null, { v: "1.587,00 €", a: false }]
     },
