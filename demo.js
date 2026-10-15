@@ -139,8 +139,28 @@
     B("PROFILE", JSON.stringify({ fields: [{ l: "Name", v: "Max Mustermann" }, { l: "Geburtstag", v: "14.03.1995" }, { l: "E-Mail", v: "max@example.org" }, { l: "Telefon", v: "+49 170 1234567" }, { l: "Anschrift", v: "Musterstraße 1\n12345 Musterstadt" }, { l: "IBAN", v: "DE00 0000 0000 0000 0000 00" }] })),
     B("TEXT", "Ansprechpartner für alles rund ums Backend.")
   ]);
-  // 8 Arbeitszeit
-  note(8, "Arbeitszeit", { folders: [1], modifiedAt: now - 9 * 3600_000 }, [B("WORKTIME", "{}")]);
+  // 8 Arbeitszeit – GEÄNDERT (BC): echte Beispieldaten (die Web-App rechnet jetzt selbst), dazu ein ausgeblendeter Block
+  function demoWork() {
+    const t = new Date(), y = t.getFullYear(), m = t.getMonth();
+    const key = d => y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+    const times = [["08:02", "16:45"], ["08:15", "15:30"], ["07:50", "17:10"], ["08:30", "16:30"], ["08:00", "17:12"], ["07:45", "16:05"]];
+    const entries = [];
+    let n = 0;
+    for (let d = 1; d < t.getDate(); d++) {
+      const dow = new Date(y, m, d).getDay();
+      if (dow === 0 || dow === 6) continue;
+      if (n === 2) entries.push({ d: key(d), s: null, e: null, p: null, st: "VACATION" });
+      else { const [s, e] = times[n % times.length]; entries.push({ d: key(d), s, e, p: null, st: "REGULAR" }); }
+      n++;
+    }
+    entries.push({ d: key(t.getDate()), s: "08:10", e: null, p: null, st: "REGULAR" });
+    return JSON.stringify({ v: 1, weekMin: 40 * 60, days: [1, 2, 3, 4, 5], pauseMin: 30, startSaldo: 150, nrw: true, entries });
+  }
+  note(8, "Arbeitszeit", { folders: [1], modifiedAt: now - 9 * 3600_000 }, [
+    B("WORKTIME", demoWork()),
+    B("TEXT", "Stundenzettel immer bis zum 5. abgeben."),
+    B("TEXT", "Alte Regel aus 2024 – am Handy ausgeblendet.", { hiddenInNote: true })
+  ]);
   // 9 Projekt-Notiz
   note(9, "App-Release", { folders: [1], labels: [1], modifiedAt: now - 50 * MIN }, [
     B("PROJECT", "projekt"),
@@ -284,6 +304,9 @@
   const workBlock = blocks.find(b => b.type === "WORKTIME");
   const extras = {
     settings: { auto: true },
+    applied: [],
+    // NEU (BC): was das (Demo-)Handy vom PC versteht – wie PcFormat.caps() in 1.4-BC
+    caps: { inbox: 3, ops: ["title", "set", "del", "add", "work", "workcfg"], set: ["CALC", "CHECKLIST_ITEM", "CODE", "HEADING", "TEXT"], add: ["CALC", "CHECKLIST_ITEM", "CODE", "DIVIDER", "HEADING", "TEXT"] },
     calc: {
       [calcBlock.id]: [{ h: true }, { v: "2.450,00 €", a: false }, { v: "380,00 €", a: false }, null, { h: true }, { v: "820,00 €", a: false }, { v: "65,00 €", a: false }, { v: "18,00 €", a: false }, { v: "340,00 €", a: false }, { v: "1.243,00 €", a: true }, null, { v: "1.587,00 €", a: false }]
     },

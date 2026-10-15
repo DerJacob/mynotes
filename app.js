@@ -639,7 +639,8 @@ function buildDb(snap) {
     note.blocks.push({
       id: b.id, noteId: b.noteId, type: b.type || "TEXT", content: b.content || "", checked: !!b.checked,
       position: b.position || 0, priority: b.priority || 0, highlight: b.highlight || null,
-      collapsed: !!b.collapsed, page: b.page || 0
+      collapsed: !!b.collapsed, page: b.page || 0,
+      hidden: !!b.hiddenInNote // NEU (BC): am Handy ausgeblendet (AY) → hier auch
     });
   }
   for (const note of db.notes.values()) {
@@ -787,7 +788,7 @@ function blockText(b) {
   switch (b.type) {
     case "TABLE": return parseTable(b.content).map(r => r.join("  ")).join("\n");
     case "PROFILE": return parseProfile(b.content).filter(f => f.v).map(f => f.l + ": " + f.v).join("\n");
-    case "WORKTIME": { const w = S.extras.work[b.id]; return w ? w.summary : "Arbeitszeit"; }
+    case "WORKTIME": return workLines(b.content).summary; // GEÄNDERT (BC): rechnet selbst
     case "DRAWING": return drawingTexts(b.content).join("\n");
     case "IMAGE": case "PROJECT": case "DIVIDER": return "";
     case "TIMETABLE": return timetableText(b.content); // NEU (AZ)
@@ -818,7 +819,7 @@ function blockPlainLines(b, note) {
     case "TABLE": return parseTable(b.content).map(r => r.map(c => c.trim()).join(" | "));
     case "CALC": return calcLines(b).map(l => l.res ? l.src + "  = " + l.res : l.src);
     case "PROFILE": return parseProfile(b.content).filter(f => f.v).map(f => f.l + ": " + f.v);
-    case "WORKTIME": { const w = S.extras.work[b.id]; return w ? [w.summary, ...w.lines] : ["⏱ Arbeitszeit"]; }
+    case "WORKTIME": { const w = workLines(b.content); return [w.summary, ...w.lines]; } // GEÄNDERT (BC)
     case "DRAWING": return ["(Zeichnung)"];
     case "IMAGE": return ["(Bild)"];
     case "PROJECT": return [projectSummaryText(note, b.page)];
@@ -858,7 +859,7 @@ function noteMarkdown(note) {
         break;
       }
       case "PROFILE": parseProfile(b.content).filter(f => f.v).forEach(f => out.push(`- **${f.l}:** ${f.v}`)); break;
-      case "WORKTIME": { const w = S.extras.work[b.id]; out.push(w ? w.summary : "⏱ Arbeitszeit"); break; }
+      case "WORKTIME": out.push(workLines(b.content).summary); break; // GEÄNDERT (BC)
       case "PROJECT": out.push("**" + projectSummaryText(note, b.page) + "**"); break;
       case "DRAWING": out.push("*(Zeichnung)*"); break;
       case "TIMETABLE": out.push(timetableText(b.content)); break; // NEU (AZ)
@@ -886,15 +887,169 @@ function tableCsv(content) {
 // ---------------------------------------------------------------------
 // Rechnungen (Ergebnisse kommen fertig vom Handy: pcextras.enc)
 // ---------------------------------------------------------------------
+/**
+ * Ergebnisse einer Rechnung (rechnet das Handy, kommen über pcextras).
+ * GEÄNDERT (BC): Wurde die Rechnung am PC geändert (b.origContent), gelten die Ergebnisse nur bis zur
+ * ersten geänderten Zeile – alles danach könnte sich verschoben haben („…“, das Handy rechnet neu).
+ */
 function calcLines(b) {
   const results = S.extras.calc[b.id] || [];
+  const old = b.origContent != null ? b.origContent.split("\n") : null;
+  let stale = false;
   return b.content.split("\n").map((src, i) => {
-    const r = results[i];
+    if (old && !stale && old[i] !== src) stale = true;
+    const r = stale ? null : results[i];
     return {
       src, res: r && r.v != null ? r.v : null, agg: !!(r && r.a), err: r && r.err ? r.err : null,
-      head: !!(r && r.h) || /^\s*#/.test(src)
+      head: !!(r && r.h) || /^\s*#/.test(src), pending: stale && !!src.trim() && !/^\s*#/.test(src)
     };
   });
+}
+
+// =====================================================================
+// NEU (BC): Arbeitszeit – rechnet hier genauso wie am Handy (WorkTime.kt), damit man am PC
+// sofort sieht, was ein Eintrag bewirkt. Gespeichert wird über „Vom PC“ (Schritte „work“ /
+// „workcfg“): Jeder Tag einzeln – was am Handy am selben Tag eingetragen wurde, bleibt.
+// =====================================================================
+const WT_DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const WT_STATUS = { REGULAR: "Regulär", VACATION: "Urlaub", SICK: "Krank", HOLIDAY: "Feiertag", FLEX: "Gleitzeittag", OFF: "Frei" };
+const WT = {
+  /** Block-Inhalt → Daten (wie WorkTimeData.parse; kaputt/leer → Standard) */
+  parse(json) {
+    const d = { weekMin: 20 * 60, days: [1, 3, 5], pauseMin: 30, startSaldo: 0, nrw: true, entries: new Map() };
+    if (!json || !json.trim()) return d;
+    let m;
+    try { m = JSON.parse(json); } catch (_) { return d; }
+    if (!m || typeof m !== "object") return d;
+    if (Number.isFinite(m.weekMin)) d.weekMin = m.weekMin;
+    if (Array.isArray(m.days)) d.days = m.days.filter(Number.isFinite);
+    if (Number.isFinite(m.pauseMin)) d.pauseMin = m.pauseMin;
+    if (Number.isFinite(m.startSaldo)) d.startSaldo = m.startSaldo;
+    if (typeof m.nrw === "boolean") d.nrw = m.nrw;
+    for (const e of Array.isArray(m.entries) ? m.entries : []) {
+      if (!e || !/^\d{4}-\d{2}-\d{2}$/.test(e.d || "")) continue;
+      d.entries.set(e.d, { s: WT.time(e.s), e: WT.time(e.e), p: Number.isFinite(e.p) ? e.p : null, st: WT_STATUS[e.st] ? e.st : "REGULAR" });
+    }
+    return d;
+  },
+  /** Daten → Block-Inhalt (gleiches Format wie am Handy) */
+  json(d) {
+    return JSON.stringify({
+      v: 1, weekMin: d.weekMin, days: [...d.days].sort((a, b) => a - b), pauseMin: d.pauseMin, startSaldo: d.startSaldo, nrw: d.nrw,
+      entries: [...d.entries.keys()].sort().map(k => { const e = d.entries.get(k); return { d: k, s: e.s, e: e.e, p: e.p, st: e.st }; })
+    });
+  },
+  /** „8:00“ / „08:00:00“ → „08:00“ (null bei Unsinn) */
+  time(t) {
+    const m = /^(\d{1,2}):(\d{2})/.exec(t || "");
+    if (!m || +m[1] > 23 || +m[2] > 59) return null;
+    return String(+m[1]).padStart(2, "0") + ":" + m[2];
+  },
+  min(t) { return t ? +t.slice(0, 2) * 60 + +t.slice(3, 5) : null; },
+  hm(min) { min = ((min % 1440) + 1440) % 1440; return String(Math.floor(min / 60)).padStart(2, "0") + ":" + String(min % 60).padStart(2, "0"); },
+  daily(d) { return d.days.length ? Math.round(d.weekMin / d.days.length) : 0; },
+  // --- Datum als „JJJJ-MM-TT“ (Ortszeit) ---
+  key(date) { return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0"); },
+  date(key) { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d); },
+  isoDow(key) { return ((WT.date(key).getDay() + 6) % 7) + 1; },
+  addDays(key, n) { const t = WT.date(key); t.setDate(t.getDate() + n); return WT.key(t); },
+  _holidays: new Map(),
+  /** Gesetzliche Feiertage NRW (wie Holidays.nrw) */
+  holidays(year) {
+    if (WT._holidays.has(year)) return WT._holidays.get(year);
+    const a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4;
+    const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), hh = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - hh - k) % 7, m = Math.floor((a + 11 * hh + 22 * l) / 451);
+    const month = Math.floor((hh + l - 7 * m + 114) / 31), day = ((hh + l - 7 * m + 114) % 31) + 1;
+    const easter = WT.key(new Date(year, month - 1, day));
+    const map = new Map([
+      [`${year}-01-01`, "Neujahr"], [WT.addDays(easter, -2), "Karfreitag"], [WT.addDays(easter, 1), "Ostermontag"],
+      [`${year}-05-01`, "Tag der Arbeit"], [WT.addDays(easter, 39), "Christi Himmelfahrt"], [WT.addDays(easter, 50), "Pfingstmontag"],
+      [WT.addDays(easter, 60), "Fronleichnam"], [`${year}-10-03`, "Tag der Deutschen Einheit"], [`${year}-11-01`, "Allerheiligen"],
+      [`${year}-12-25`, "1. Weihnachtstag"], [`${year}-12-26`, "2. Weihnachtstag"]
+    ]);
+    WT._holidays.set(year, map);
+    return map;
+  },
+  /** Ein Tag (wie WorkTimeMath.day) */
+  day(d, key) {
+    const entry = d.entries.get(key) || null;
+    const holiday = d.nrw ? WT.holidays(+key.slice(0, 4)).get(key) || null : null;
+    const scheduled = d.days.includes(WT.isoDow(key));
+    const status = entry ? entry.st : holiday && scheduled ? "HOLIDAY" : !scheduled ? "OFF" : "REGULAR";
+    const soll = !scheduled || status === "OFF" ? 0 : WT.daily(d);
+    const pause = entry && entry.p != null ? entry.p : d.pauseMin;
+    let ist = null;
+    if (status === "VACATION" || status === "SICK" || status === "HOLIDAY") ist = entry || holiday ? soll : null;
+    else if (status === "FLEX") ist = 0;
+    else if (entry && entry.s && entry.e) {
+      let m = WT.min(entry.e) - WT.min(entry.s);
+      if (m < 0) m += 1440;
+      ist = Math.max(0, m - pause);
+    }
+    const plannedEnd = entry && entry.s && !entry.e && status === "REGULAR" ? WT.hm(WT.min(entry.s) + soll + pause) : null;
+    return { key, entry, status, isWorkDay: scheduled, holiday, soll, ist, saldo: ist == null ? null : ist - soll, plannedEnd };
+  },
+  saldoBefore(d, key) {
+    let sum = d.startSaldo;
+    for (const k of d.entries.keys()) if (k < key) sum += WT.day(d, k).saldo || 0;
+    return sum;
+  },
+  total(d, today) { return WT.saldoBefore(d, today) + (WT.day(d, today).saldo || 0); },
+  endForTotalZero(d, today) {
+    const t = WT.day(d, today);
+    if (!t.entry || !t.entry.s) return null;
+    const pause = t.entry.p != null ? t.entry.p : d.pauseMin;
+    const needed = t.soll - WT.saldoBefore(d, today);
+    if (needed <= 0) return t.entry.s;
+    return WT.hm(WT.min(t.entry.s) + needed + pause);
+  },
+  /** Monat (wie WorkTimeMath.month); ym = „JJJJ-MM“ */
+  month(d, ym, today) {
+    const [y, m] = ym.split("-").map(Number);
+    const len = new Date(y, m, 0).getDate();
+    const days = [];
+    for (let i = 1; i <= len; i++) days.push(WT.day(d, `${ym}-${String(i).padStart(2, "0")}`));
+    const counted = days.filter(x => x.ist != null);
+    const open = days.filter(x => x.ist == null && x.soll > 0 && x.key >= today);
+    const saldo = counted.reduce((a, x) => a + x.saldo, 0);
+    const carry = WT.saldoBefore(d, `${ym}-01`);
+    return {
+      ym, days, soll: days.reduce((a, x) => a + x.soll, 0), ist: counted.reduce((a, x) => a + x.ist, 0), saldo, carry,
+      total: carry + saldo, remainingSoll: open.reduce((a, x) => a + x.soll, 0), remainingDays: open.length
+    };
+  },
+  dur(min, signed = false) {
+    const sign = !signed ? (min < 0 ? "−" : "") : min > 0 ? "+" : min < 0 ? "−" : "±";
+    const a = Math.abs(min);
+    return `${sign}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")} h`;
+  },
+  dayLabel(key) { return WT_DAYS[WT.isoDow(key) - 1] + " " + key.slice(8, 10) + "." + key.slice(5, 7) + "."; },
+  monthLabel(ym) { const [y, m] = ym.split("-").map(Number); return new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" }).format(new Date(y, m - 1, 1)); },
+  summary(d, today) { return "⏱ Arbeitszeit · Saldo " + WT.dur(WT.total(d, today), true); },
+  /** Eintrag in Übertragungsform (Schritt „work“) – genau wie gespeichert */
+  entryOut(e) { return e ? { s: e.s, e: e.e, p: e.p, st: e.st } : null; },
+  cfgOut(d) { return { weekMin: d.weekMin, days: [...d.days].sort((a, b) => a - b), pauseMin: d.pauseMin, startSaldo: d.startSaldo, nrw: d.nrw }; },
+  /** Schritt anwenden (für die Anzeige offener Änderungen) */
+  apply(content, op) {
+    const d = WT.parse(content);
+    if (op.op === "work") { if (op.to) d.entries.set(op.date, { ...op.to }); else d.entries.delete(op.date); }
+    else if (op.op === "workcfg") Object.assign(d, { weekMin: op.to.weekMin, days: op.to.days, pauseMin: op.to.pauseMin, startSaldo: op.to.startSaldo, nrw: op.to.nrw });
+    return WT.json(d);
+  }
+};
+function todayKey() { return WT.key(new Date()); }
+/** Zeilen wie in der PC-Kopie (Export, Kopieren) */
+function workLines(content) {
+  const d = WT.parse(content), today = todayKey(), mo = WT.month(d, today.slice(0, 7), today);
+  const lines = [WT.monthLabel(mo.ym) + ": Soll " + WT.dur(mo.soll) + " · Ist " + WT.dur(mo.ist) + " · Monat " + WT.dur(mo.saldo, true),
+    "Übertrag " + WT.dur(mo.carry, true) + " · Gesamt " + WT.dur(mo.total, true)];
+  if (mo.remainingDays > 0) lines.push("Noch " + mo.remainingDays + " Arbeitstage (Soll " + WT.dur(mo.remainingSoll) + ")");
+  for (const x of mo.days) if (x.ist != null || x.entry) {
+    const time = x.entry && x.entry.s ? " " + x.entry.s + "–" + (x.entry.e || "–") : "";
+    lines.push(WT.dayLabel(x.key) + time + (x.status !== "REGULAR" ? " · " + WT_STATUS[x.status] : "") + (x.ist != null ? " · " + WT.dur(x.ist) : "") + (x.saldo != null ? " (" + WT.dur(x.saldo, true) + ")" : ""));
+  }
+  return { summary: WT.summary(d, today), lines };
 }
 
 // ---------------------------------------------------------------------
@@ -1676,7 +1831,7 @@ function renderBlocks(blocks, opts = {}) {
 
 function wrapBlock(b, inner, opts, copy) {
   // GEÄNDERT (BB): „offen“ (wartet aufs Handy) und „übernommen“ (neuer Stand kommt gleich) unterscheiden
-  const el = h("div", { class: "blk" + (b.pendingEdit ? " pending-edit" + (b.pendingEdit === "applied" ? " applied" : "") : ""), id: b.id != null ? "b" + b.id : null });
+  const el = h("div", { class: "blk" + (b.pendingEdit ? " pending-edit" + (b.pendingEdit === "applied" ? " applied" : "") : "") + (b.hidden ? " is-hidden" : ""), id: b.id != null ? "b" + b.id : null });
   if (b.pendingEdit) el.title = b.pendingEdit === "applied" ? "Am Handy übernommen – der neue Stand kommt gleich" : "Am PC geändert – wartet aufs Handy";
   const hl = highlightColor(b.highlight);
   if (hl) { el.classList.add("hlbg"); el.style.setProperty("--hl", hl); }
@@ -1766,9 +1921,12 @@ function renderBlock(b, opts) {
         const src = h("div", { class: "src" });
         appendMarked(src, l.src, ts);
         box.appendChild(h("div", { class: "calc-row" + (l.agg ? " agg" : "") + (l.head ? " head" : "") },
-          src, l.err ? h("div", { class: "err", title: l.err }, "⚠ " + l.err) : h("div", { class: "res" }, l.res ? "= " + l.res : "")));
+          src, l.err ? h("div", { class: "err", title: l.err }, "⚠ " + l.err)
+            : h("div", { class: "res" + (l.pending ? " pending" : "") }, l.res ? "= " + l.res : l.pending ? "= …" : "")));
       }
-      if (!hasResults && b.content.trim()) box.appendChild(h("div", { class: "calc-foot" }, h("span", { class: "small muted" }, "Ergebnisse kommen mit dem nächsten Abgleich vom Handy")));
+      // GEÄNDERT (BC): am PC geändert → Ergebnisse ab der ersten geänderten Zeile rechnet das Handy neu
+      if (b.origContent != null) box.appendChild(h("div", { class: "calc-foot" }, h("span", { class: "small muted" }, "Am PC geändert – die neuen Ergebnisse rechnet das Handy beim nächsten Abgleich")));
+      else if (!hasResults && b.content.trim()) box.appendChild(h("div", { class: "calc-foot" }, h("span", { class: "small muted" }, "Ergebnisse kommen mit dem nächsten Abgleich vom Handy")));
       return wrapBlock(b, box, opts, {
         text: () => lines.map(l => l.res ? `${l.src} = ${l.res}` : l.src).join("\n"), title: "Rechnung mit Ergebnissen kopieren"
       });
@@ -1837,12 +1995,9 @@ function renderBlock(b, opts) {
       }
       return el;
     }
-    case "WORKTIME": {
-      const w = S.extras.work[b.id];
-      const box = h("div", { class: "b-work" },
-        h("div", { class: "sum" }, w ? w.summary : "⏱ Arbeitszeit"),
-        w ? h("ul", null, w.lines.map(l => h("li", null, l))) : h("div", { class: "small muted" }, "Die Auswertung kommt mit dem nächsten Abgleich vom Handy."));
-      return wrapBlock(b, box, opts, w ? { text: () => [w.summary, ...w.lines].join("\n"), title: "Arbeitszeit kopieren" } : null);
+    case "WORKTIME": { // GEÄNDERT (BC): wie am Handy – und am PC bedienbar
+      const box = workTimeEl(b, opts);
+      return wrapBlock(b, box, opts, { text: () => { const w = workLines(b.content); return [w.summary, ...w.lines].join("\n"); }, title: "Arbeitszeit kopieren" });
     }
     case "PROJECT": {
       const pageBlocks = opts.pageBlocks || [];
@@ -1969,6 +2124,7 @@ function cardPreview(note, budget, tile) {
   const box = h("div", { class: "card-prev" });
   let lines = 0, checks = 0, moreChecks = 0, thumb = null;
   for (const b of blocks) {
+    if (b.hidden) continue; // NEU (BC): ausgeblendete Blöcke nicht in der Vorschau
     if (lines >= budget) { if (b.type === "CHECKLIST_ITEM") moreChecks++; continue; }
     switch (b.type) {
       case "TEXT": {
@@ -1998,7 +2154,7 @@ function cardPreview(note, budget, tile) {
         if (f.length) { box.appendChild(h("div", { class: "ln" }, f.slice(0, 3).map(x => x.l.toLowerCase() === "name" ? "🪪 " + x.v : x.l + ": " + x.v).join("\n"))); lines += 2; }
         break;
       }
-      case "WORKTIME": { const w = S.extras.work[b.id]; box.appendChild(h("div", { class: "ln" }, w ? w.summary : "⏱ Arbeitszeit")); lines++; break; }
+      case "WORKTIME": box.appendChild(h("div", { class: "ln" }, workLines(b.content).summary)); lines++; break; // GEÄNDERT (BC)
       case "PROJECT": box.appendChild(h("div", { class: "ln" }, projectSummaryText(note, b.page))); lines++; break;
       case "TIMETABLE": box.appendChild(h("div", { class: "ln" }, timetableSummary(b.content))); lines++; break; // NEU (AZ)
       case "DRAWING": if (!thumb && b.content.trim()) thumb = { type: "d", b }; break;
@@ -3073,7 +3229,11 @@ function renderNote(main, opts = {}, { noteId = S.noteId, pane = null } = {}) {
     });
     paper.appendChild(tabs);
   }
-  const blocks = blocksOfPage(note, page);
+  // GEÄNDERT (BC): ausgeblendete Blöcke (am Handy über ⋮⋮ → Ausblenden) wie am Handy verstecken
+  const pageAll = blocksOfPage(note, page);
+  const hiddenCount = pageAll.filter(b => b.hidden).length;
+  const showHidden = S.showHidden.has(note.id);
+  const blocks = showHidden ? pageAll : pageAll.filter(b => !b.hidden);
   // Inhaltsverzeichnis bei längeren Notizen
   const heads = blocks.filter(b => b.type === "HEADING" && b.content.trim());
   if (heads.length >= 3) {
@@ -3083,7 +3243,13 @@ function renderNote(main, opts = {}, { noteId = S.noteId, pane = null } = {}) {
   }
   const blocksEl = renderBlocks(blocks, { ts, note, tools: true, pageBlocks: blocks });
   paper.appendChild(blocksEl);
-  if (!blocks.length) paper.appendChild(h("div", { class: "muted" }, "(leer)"));
+  if (!blocks.length && !hiddenCount) paper.appendChild(h("div", { class: "muted" }, "(leer)"));
+  if (hiddenCount) {
+    paper.appendChild(h("button", {
+      class: "chip hidden-chip", type: "button",
+      onclick: () => { if (showHidden) S.showHidden.delete(note.id); else S.showHidden.add(note.id); renderMain(); }
+    }, icon("eye", "sm"), showHidden ? "Ausgeblendete wieder verbergen" : plural(hiddenCount, "Block ausgeblendet", "Blöcke ausgeblendet") + " – anzeigen"));
+  }
 
   // Rückverweise
   const back = [...(S.db.backlinks.get(note.id) || [])].map(id => noteById(id)).filter(n => n && !n.deleted);
@@ -4148,6 +4314,7 @@ S.appliedEdits = new Map(); // id → { edit, mirrorAt, at } – übernommen, ne
 S.edit = null;              // laufende Bearbeitung { noteId, page, title, rows, dirty }
 S.waiting = new Set();      // Änderungen, für die das Handy ein Update braucht
 S.conflicts = new Set();    // mit Konflikt übernommen
+S.showHidden = new Set();   // NEU (BC): Notizen, in denen Ausgeblendetes gerade gezeigt wird
 S.seenDone = new Set();     // schon gemeldet (Toast nur einmal)
 
 /** Was das Handy vom PC versteht (steht in pcextras) */
@@ -4248,7 +4415,10 @@ function effectiveNote(note) {
         const i = find(o.blockId);
         if (i < 0) continue;
         const b = blocks[i];
-        blocks[i] = { ...b, content: o.to, checked: o.checked != null ? o.checked : b.checked, priority: b.type === "HEADING" && o.level != null ? levelToPrio(o.level) : b.priority, pendingEdit: state };
+        blocks[i] = { ...b, content: o.to, origContent: b.origContent ?? b.content, checked: o.checked != null ? o.checked : b.checked, priority: b.type === "HEADING" && o.level != null ? levelToPrio(o.level) : b.priority, pendingEdit: state };
+      } else if (o.op === "work" || o.op === "workcfg") { // NEU (BC): Arbeitszeit
+        const i = find(o.blockId);
+        if (i >= 0) blocks[i] = { ...blocks[i], content: WT.apply(blocks[i].content, o), pendingEdit: state };
       } else if (o.op === "del") {
         const i = find(o.blockId);
         if (i >= 0) blocks.splice(i, 1);
@@ -4293,12 +4463,170 @@ function undoEditsButton(note) {
 }
 
 // ---------------------------------------------------------------------
+// NEU (BC): Module direkt in der Ansicht bedienen (ohne „Bearbeiten“) – jede Aktion wird eine
+// eigene kleine Änderung mit einem Schritt und sofort gespeichert (wie Haken am PC).
+// ---------------------------------------------------------------------
+/** Kann das Handy diesen Schritt? Sonst Hinweis aufs Update. */
+function phoneCanOp(op) { return phoneCaps().ops.includes(op); }
+function queueModuleOp(note, op, done) {
+  if (!canEditFromPc(note)) { toast("Diese Notiz lässt sich am PC nicht bearbeiten", { bad: true }); return false; }
+  if (!phoneCanOp(op.op)) { toast("Dafür braucht das Handy MyNotes 1.4-BC – bitte erst dort aktualisieren", { bad: true }); return false; }
+  S.inbox.edits = [...(S.inbox.edits || []), { id: uuid(), noteId: note.id, noteTitle: note.title, at: Date.now(), base: note.modifiedAt, ops: [op] }];
+  S.inbox.dirty = true;
+  saveInboxSoon();
+  renderSidebarCounts();
+  renderMain();
+  if (done) toast(done);
+  return true;
+}
+
+/** Arbeitszeit-Block (Ansicht wie am Handy: Saldo, Heute, Monat, Tage) */
+function workTimeEl(b, opts) {
+  const note = opts.note;
+  const live = !opts.preview && note && typeof b.id === "number" && canEditFromPc(note) && phoneCanOp("work");
+  const d = WT.parse(b.content);
+  const today = todayKey();
+  S.workMonth = S.workMonth || new Map();
+  const ym = S.workMonth.get(b.id) || today.slice(0, 7);
+  const t = WT.day(d, today), total = WT.total(d, today), mo = WT.month(d, ym, today);
+  const setDay = (key, to, msg) => queueModuleOp(note, { op: "work", blockId: b.id, date: key, from: WT.entryOut(d.entries.get(key) || null), to: WT.entryOut(to) }, msg);
+  const nowHm = () => { const n = new Date(); return WT.hm(n.getHours() * 60 + n.getMinutes()); };
+  const info = (label, value, hi) => h("div", { class: "wt-info" + (hi ? " hi" : "") }, h("span", null, label), h("b", null, value));
+  const box = h("div", { class: "b-work wt" });
+
+  // Kopf
+  box.appendChild(h("div", { class: "wt-head" },
+    icon("clock"), h("span", { class: "grow wt-title" }, "Arbeitszeit"),
+    live ? iconBtn("settings", "Arbeitszeit einrichten", () => workSettingsDialog(note, b, d), "sm") : null));
+  box.appendChild(h("div", { class: "wt-saldo" + (total < 0 ? " neg" : "") }, "Saldo " + WT.dur(total, true)));
+  box.appendChild(h("div", { class: "small muted" }, WT.dur(d.weekMin) + " / Woche · " + [...d.days].sort().map(x => WT_DAYS[x - 1]).join(", ") + " · Soll/Tag " + WT.dur(WT.daily(d))));
+
+  // Heute
+  const todayBox = h("div", { class: "wt-sec" }, h("div", { class: "wt-sub" }, "Heute · " + WT.dayLabel(today) + (t.holiday ? " · " + t.holiday : "")));
+  const startBtn = h("button", { class: "btn subtle small", disabled: !live, onclick: () => timeDialog("Beginn", t.entry?.s || nowHm(), v => setDay(today, { ...(t.entry || { s: null, e: null, p: null, st: "REGULAR" }), s: v }, "Beginn " + v + " gespeichert")) }, "Beginn " + (t.entry?.s || "–"));
+  const endBtn = h("button", { class: "btn subtle small", disabled: !live || !t.entry?.s, onclick: () => timeDialog("Ende", t.entry?.e || nowHm(), v => setDay(today, { ...t.entry, e: v }, "Ende " + v + " gespeichert")) }, "Ende " + (t.entry?.e || "–"));
+  const row = h("div", { class: "wt-row" }, startBtn, endBtn);
+  if (live && !t.entry?.s) row.appendChild(h("button", { class: "btn ghost small", onclick: () => setDay(today, { s: nowHm(), e: null, p: null, st: "REGULAR" }, "Beginn " + nowHm() + " gespeichert") }, "Jetzt gekommen"));
+  else if (live && !t.entry?.e) row.appendChild(h("button", { class: "btn ghost small", onclick: () => setDay(today, { ...t.entry, e: nowHm() }, "Ende " + nowHm() + " gespeichert") }, "Jetzt gegangen"));
+  todayBox.appendChild(row);
+  if (t.plannedEnd) todayBox.appendChild(info("Ende für ±0 heute", t.plannedEnd, true));
+  if (t.entry && !t.entry.e) { const z = WT.endForTotalZero(d, today); if (z) todayBox.appendChild(info("Ende für Gesamtsaldo ±0", z)); }
+  if (t.ist != null) todayBox.appendChild(info("Heute gearbeitet", WT.dur(t.ist) + " (" + WT.dur(t.saldo, true) + ")"));
+  box.appendChild(todayBox);
+
+  // Monat
+  const shift = n => { const [y, m] = ym.split("-").map(Number); const x = new Date(y, m - 1 + n, 1); S.workMonth.set(b.id, x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0")); renderMain(); };
+  const monthBox = h("div", { class: "wt-sec" },
+    h("div", { class: "wt-month" }, iconBtn("back", "Vormonat", () => shift(-1), "sm"), h("span", { class: "grow" }, WT.monthLabel(ym)), iconBtn("chevron", "Nächster Monat", () => shift(1), "sm")),
+    info("Soll im Monat", WT.dur(mo.soll)), info("Geleistet", WT.dur(mo.ist)), info("Saldo im Monat", WT.dur(mo.saldo, true)),
+    info("Übertrag", WT.dur(mo.carry, true)), info("Stand", WT.dur(mo.total, true), true));
+  if (mo.remainingDays > 0) {
+    monthBox.appendChild(h("div", { class: "small muted", style: { marginTop: "4px" } },
+      "Prognose: noch " + mo.remainingDays + " Arbeitstage · " + WT.dur(mo.remainingSoll) + " (Ø " + WT.dur(Math.trunc(mo.remainingSoll / mo.remainingDays)) + "/Tag). Um den Saldo auszugleichen: Ø " +
+      WT.dur(Math.round(Math.max(0, mo.remainingSoll - mo.total) / mo.remainingDays)) + "/Tag."));
+  }
+  box.appendChild(monthBox);
+
+  // Tage
+  const list = h("div", { class: "wt-days" });
+  for (const x of mo.days.filter(x => x.isWorkDay || x.entry || x.holiday)) {
+    const what = x.entry && x.entry.s ? x.entry.s + " – " + (x.entry.e || "–") : x.status !== "REGULAR" ? (x.holiday || WT_STATUS[x.status]) : "–";
+    list.appendChild(h(live ? "button" : "div", {
+      class: "wt-day" + (x.key === today ? " today" : ""), type: live ? "button" : null, title: live ? "Tag bearbeiten" : null,
+      onclick: live ? () => workDayDialog(note, b, d, x.key, setDay) : null
+    }, h("span", { class: "d" }, WT.dayLabel(x.key)), h("span", { class: "grow" }, what),
+      h("span", { class: "s" + (x.saldo < 0 ? " neg" : x.saldo > 0 ? " pos" : "") }, x.saldo != null ? WT.dur(x.saldo, true) : "")));
+  }
+  box.appendChild(list);
+  if (!opts.preview && note && !live && phoneCanOp("work") === false && canEditFromPc(note)) {
+    box.appendChild(h("div", { class: "small muted", style: { marginTop: "8px" } }, "Zum Eintragen am PC braucht das Handy MyNotes 1.4-BC."));
+  }
+  return box;
+}
+
+/** Uhrzeit wählen (mit Doppelpunkt, Pfeiltasten gehen) */
+function timeDialog(title, value, onPick) {
+  const input = h("input", { type: "time", value: value || "08:00", class: "field", style: { fontSize: "1.4rem" } });
+  const ok = () => { const v = WT.time(input.value); if (!v) { toast("Bitte eine Uhrzeit eingeben", { bad: true }); return; } closeDialog(); onPick(v); };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") ok(); });
+  openDialog([h("h2", null, title), input,
+    h("div", { class: "actions" }, h("button", { class: "btn ghost", onclick: () => closeDialog() }, "Abbrechen"), h("button", { class: "btn", onclick: ok }, "OK"))]);
+  setTimeout(() => input.focus(), 30);
+}
+
+/** Einen Tag bearbeiten: Status, Beginn, Ende, Pause – oder Eintrag löschen (wie am Handy) */
+function workDayDialog(note, b, d, key, setDay) {
+  const existing = d.entries.get(key) || null;
+  let status = existing ? existing.st : WT.day(d, key).status;
+  const start = h("input", { type: "time", class: "field", value: existing?.s || "" });
+  const end = h("input", { type: "time", class: "field", value: existing?.e || "" });
+  const pause = h("input", { type: "number", class: "field", min: "0", max: "600", value: String(existing?.p ?? d.pauseMin) });
+  const times = h("div", { class: "wt-times" }, h("label", null, "Beginn", start), h("label", null, "Ende", end), h("label", null, "Pause (Min.)", pause));
+  const chips = h("div", { class: "chips" });
+  const draw = () => {
+    replace(chips, ...Object.entries(WT_STATUS).map(([k, l]) => h("button", { class: "chip" + (status === k ? " accent" : ""), type: "button", onclick: () => { status = k; draw(); } }, l)));
+    times.style.display = status === "REGULAR" || status === "OFF" ? "" : "none";
+  };
+  draw();
+  const save = () => {
+    const withTimes = status === "REGULAR" || status === "OFF";
+    const p = parseInt(pause.value, 10);
+    setDay(key, {
+      s: withTimes ? WT.time(start.value) : null, e: withTimes ? WT.time(end.value) : null,
+      p: withTimes && Number.isFinite(p) ? p : null, st: status
+    }, WT.dayLabel(key) + " gespeichert");
+    closeDialog();
+  };
+  openDialog([h("h2", null, WT.dayLabel(key) + key.slice(0, 4)), chips, times,
+    h("div", { class: "actions" },
+      existing ? h("button", { class: "btn danger", onclick: () => { closeDialog(); setDay(key, null, "Eintrag gelöscht"); } }, "Eintrag löschen") : null,
+      h("span", { class: "grow" }),
+      h("button", { class: "btn ghost", onclick: () => closeDialog() }, "Abbrechen"), h("button", { class: "btn", onclick: save }, "Speichern"))]);
+}
+
+/** Arbeitszeit einrichten (wie am Handy) */
+function workSettingsDialog(note, b, d) {
+  const hours = h("input", { class: "field", inputmode: "decimal", value: String(d.weekMin / 60).replace(".", ",") });
+  let days = new Set(d.days);
+  const dayChips = h("div", { class: "chips" });
+  const drawDays = () => replace(dayChips, ...WT_DAYS.map((l, i) => h("button", { class: "chip" + (days.has(i + 1) ? " accent" : ""), type: "button", onclick: () => { days.has(i + 1) ? days.delete(i + 1) : days.add(i + 1); drawDays(); } }, l)));
+  drawDays();
+  const pause = h("input", { class: "field", type: "number", min: "0", max: "600", value: String(d.pauseMin) });
+  const start = h("input", { class: "field", placeholder: "z. B. +2:30 oder −1:00", value: d.startSaldo ? WT.dur(d.startSaldo, true).replace(" h", "") : "" });
+  const nrw = h("input", { type: "checkbox", checked: d.nrw });
+  const save = () => {
+    const wh = parseFloat(hours.value.replace(",", "."));
+    const to = { weekMin: Math.round((Number.isFinite(wh) ? wh : 20) * 60), days: [...days].sort((a, c) => a - c), pauseMin: parseInt(pause.value, 10) || 30, startSaldo: parseSignedDuration(start.value), nrw: nrw.checked };
+    closeDialog();
+    queueModuleOp(note, { op: "workcfg", blockId: b.id, from: WT.cfgOut(d), to }, "Einstellungen gespeichert");
+  };
+  openDialog([h("h2", null, "Arbeitszeit einrichten"),
+    h("label", { class: "wt-field" }, "Stunden pro Woche", hours),
+    h("div", { class: "wt-field" }, "Arbeitstage", dayChips),
+    h("label", { class: "wt-field" }, "Standardpause (Minuten)", pause),
+    h("label", { class: "wt-field" }, "Startsaldo", start),
+    h("label", { class: "wt-field row" }, nrw, " Feiertage NRW automatisch"),
+    h("div", { class: "actions" }, h("button", { class: "btn ghost", onclick: () => closeDialog() }, "Abbrechen"), h("button", { class: "btn", onclick: save }, "Speichern"))]);
+}
+/** „+2:30“, „-1:00“, „−0:45“, „1,5“ → Minuten (wie am Handy) */
+function parseSignedDuration(text) {
+  const t = String(text || "").trim().replace(/−/g, "-").replace(/\s*h$/, "");
+  if (!t || t === "±0:00") return 0;
+  const neg = t.startsWith("-");
+  const body = t.replace(/^[+\-±]+/, "");
+  let min;
+  if (body.includes(":")) { const [hh, mm] = body.split(":"); min = (parseInt(hh, 10) || 0) * 60 + (parseInt(mm, 10) || 0); }
+  else min = Math.round((parseFloat(body.replace(",", ".")) || 0) * 60);
+  return neg ? -min : min;
+}
+
+// ---------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------
 function startEdit(note, page) {
   if (!canEditFromPc(note)) { toast("Diese Notiz lässt sich am PC nicht bearbeiten", { bad: true }); return; }
   const eff = effectiveNote(note);
-  const blocks = blocksOfPage(eff, page);
+  const blocks = blocksOfPage(eff, page).filter(b => !b.hidden); // GEÄNDERT (BC): Ausgeblendetes bleibt unangetastet
   S.edit = {
     noteId: note.id, page, dirty: false,
     titleOrig: eff.title, title: eff.title,
@@ -4374,7 +4702,8 @@ function renderNoteEditor(main, note) {
   const list = h("div", { class: "erows" });
   const info = h("div", { class: "small muted edit-hint" },
     note.pages ? "Seite „" + note.pages[ed.page] + "“ · " : "",
-    "Rechnungen, Tabellen, Zeichnungen & Co. bleiben unverändert (am Handy bearbeiten). ",
+    canSetType("CALC") ? "Tabellen, Zeichnungen & Co. bleiben unverändert (am Handy bearbeiten). Rechnungen: Ergebnisse kommen nach dem Abgleich vom Handy. " // GEÄNDERT (BC)
+      : "Rechnungen, Tabellen, Zeichnungen & Co. bleiben unverändert (am Handy bearbeiten). ",
     h("kbd", null, "Strg S"), " speichern · ", h("kbd", null, "Esc"), " abbrechen");
 
   const rowEls = [];
@@ -4412,6 +4741,7 @@ function renderNoteEditor(main, note) {
       { label: "Checkliste", icon: "checkbox", run: () => insertRow(at, "CHECKLIST_ITEM") },
       { label: "Überschrift", icon: "heading", run: () => insertRow(at, "HEADING") },
       { label: "Code", icon: "code", run: () => insertRow(at, "CODE") },
+      canAddType("CALC") ? { label: "Rechnung", icon: "calc", run: () => insertRow(at, "CALC") } : null, // NEU (BC)
       { label: "Trennlinie", icon: "hr", run: () => insertRow(at, "DIVIDER", "", false) }
     ]);
   }
@@ -4427,7 +4757,7 @@ function renderNoteEditor(main, note) {
       tools.appendChild(h("button", { class: "icon-btn sm", title: "Trennlinie löschen", type: "button", onclick: () => removeRow(i, false) }, icon("close", "sm")));
       return h("div", { class: "erow divider" }, h("hr", { class: "b-divider grow" }), tools);
     }
-    const ta = h("textarea", { class: "erow-text t-" + r.type.toLowerCase() + (r.type === "HEADING" ? " lv" + r.level : ""), rows: "1", spellcheck: "true", placeholder: r.type === "HEADING" ? "Überschrift" : r.type === "CHECKLIST_ITEM" ? "Punkt" : r.type === "CODE" ? "Code" : "Text" });
+    const ta = h("textarea", { class: "erow-text t-" + r.type.toLowerCase() + (r.type === "HEADING" ? " lv" + r.level : ""), rows: "1", spellcheck: r.type === "CALC" || r.type === "CODE" ? "false" : "true", placeholder: r.type === "HEADING" ? "Überschrift" : r.type === "CHECKLIST_ITEM" ? "Punkt" : r.type === "CODE" ? "Code" : r.type === "CALC" ? "Rechnung, z. B. Miete = 650 €" : "Text" });
     ta.value = r.content;
     ta.addEventListener("input", () => { r.content = ta.value; editMarkDirty(); grow(ta); });
     ta.addEventListener("keydown", e => {
@@ -4460,7 +4790,7 @@ function renderNoteEditor(main, note) {
   }
   draw();
   const adders = h("div", { class: "eadd" },
-    [["TEXT", "note", "Text"], ["CHECKLIST_ITEM", "checkbox", "Checkliste"], ["HEADING", "heading", "Überschrift"], ["CODE", "code", "Code"], ["DIVIDER", "hr", "Trennlinie"]]
+    [["TEXT", "note", "Text"], ["CHECKLIST_ITEM", "checkbox", "Checkliste"], ["HEADING", "heading", "Überschrift"], ["CODE", "code", "Code"], ...(canAddType("CALC") ? [["CALC", "calc", "Rechnung"]] : []), ["DIVIDER", "hr", "Trennlinie"]] // GEÄNDERT (BC): + Rechnung
       .map(([t, ic, l]) => h("button", { class: "chip", type: "button", onclick: () => insertRow(ed.rows.length, t, "", t !== "DIVIDER") }, icon(ic, "sm"), l)));
   wrap.append(h("div", { class: "editor-head" }, titleIn), info, list, adders,
     h("div", { class: "edit-foot small muted" }, icon("shield", "sm"),
@@ -5083,16 +5413,16 @@ async function boot() {
   applySettings();
   if (DEMO) {
     try {
-      await import("./demo.js?v=4");
+      await import("./demo.js?v=5");
       const d = window.MyNotesDemo.setup();
       S.user = d.user;
       S.db = buildDb(d.snapshot);
-      S.extras = d.extras;
+      S.extras = extrasFrom(d.extras);
       S.files = new Map();
       S.inbox = { notes: parseInbox(d.inbox).notes, checks: [], edits: parseInbox(d.inbox).edits, fileId: "demo", modifiedTime: "demo", base: new Map(), readable: true, taken: [], state: null };
       S.inbox.base = inboxBase();
       S.done = new Set(d.done || []);
-      window.MyNotesTest = { effectiveNote, buildEdit, legacyOps, opsToLegacy, editForFile, parseInbox, extrasFrom, dropAppliedEdits, moveAppliedEdits, pendingEditsFor, timetableParse, timetableText, ttLayout, folderTotal, openNote, go, readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
+      window.MyNotesTest = { WT, workLines, calcLines, queueModuleOp, effectiveNote, buildEdit, legacyOps, opsToLegacy, editForFile, parseInbox, extrasFrom, dropAppliedEdits, moveAppliedEdits, pendingEditsFor, timetableParse, timetableText, ttLayout, folderTotal, openNote, go, readZip, deriveKey, decryptBytes, decryptJson, encryptBytes, b64url, buildDb, markupToBlocks, blocksToMarkup, searchNotes, decodeDrawing, S };
       startApp();
     } catch (e) {
       gate(h("h1", null, "Demo konnte nicht starten"), h("div", { class: "gate-msg bad" }, String(e && e.stack || e)));
