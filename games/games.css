@@ -120,3 +120,69 @@
   .sb-help { display: none; }
   .sb-view { height: clamp(260px, 56vh, 560px); }
 }
+
+/* ---- Blockdorf: Etappe 1 (Inventar, Fenster, Anzeigen) ---- */
+.sb-info { font-size: .8rem; }
+.sb-bottom { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 3; width: max-content; max-width: calc(100% - 12px); pointer-events: none; }
+.sb-bottom .sb-hotbar { position: static; transform: none; pointer-events: auto; }
+.sb-held { color: #fff; text-shadow: 0 1px 2px #000; font-size: .85rem; min-height: 1.1em; }
+.sb-held[hidden] { display: block; visibility: hidden; }
+.sb-barsrow { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; width: 100%; }
+.sb-barcol { display: flex; flex-direction: column; gap: 2px; }
+.sb-iconrow { display: flex; gap: 1px; min-height: 0; }
+.sb-hi { width: 18px; height: 18px; image-rendering: pixelated; display: block; }
+.sb-xp { position: relative; width: 100%; height: 7px; background: rgba(0, 0, 0, .55); border: 1px solid rgba(255, 255, 255, .25); border-radius: 2px; margin-top: 2px; }
+.sb-xpfill { height: 100%; width: 0; background: #7ee030; }
+.sb-xplvl { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); color: #8eef3c; font-weight: 700; font-size: .85rem; text-shadow: 0 1px 2px #000; }
+.sb-slot { width: 46px; height: 46px; padding: 0; }
+.sb-dur { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; background: rgba(0, 0, 0, .6); }
+.sb-dur i { display: block; height: 100%; }
+.sb-s { position: relative; width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; background: #8b8b8b; border: 2px solid; border-color: #373737 #fff #fff #373737; box-sizing: border-box; }
+.sb-s .sb-ic { width: 32px; height: 32px; }
+.sb-s:hover { background: #a6a6a6; }
+.sb-slot.sb-s { border-color: rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .08); border-width: 2px; border-style: solid; }
+.sb-slot.sb-s.on { border-color: #ffd866; background: rgba(255, 216, 102, .2); }
+.sb-n { position: absolute; right: 2px; bottom: 0; font-size: .72rem; font-weight: 700; color: #fff; text-shadow: 1px 1px 0 #333; pointer-events: none; }
+.sb-winwrap { position: absolute; inset: 0; z-index: 6; background: rgba(0, 0, 0, .55); display: flex; align-items: center; justify-content: center; overflow: auto; padding: 8px; }
+.sb-winwrap[hidden] { display: none; }
+.sb-wincol { display: flex; gap: 10px; align-items: flex-start; max-height: 100%; }
+.sb-win, .sb-book { background: #c6c6c6; border: 3px solid; border-color: #fff #555 #555 #fff; color: #404040; padding: 8px 10px 10px; box-shadow: 0 0 0 2px #000; user-select: none; -webkit-user-select: none; }
+.sb-wt { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: .9rem; }
+.sb-wl { font-size: .8rem; margin: 6px 0 4px; }
+.sb-x { background: none; border: 0; color: #404040; font-size: 1rem; padding: 0 4px; cursor: pointer; }
+.sb-top { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 4px; }
+.sb-armorcol { display: flex; flex-direction: column; }
+.sb-defense { text-align: center; font-size: .75rem; min-width: 56px; }
+.sb-big { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+.sb-craftbox, .sb-furn { display: flex; align-items: center; gap: 10px; }
+.sb-grid { display: grid; }
+.sb-arrow { width: 28px; height: 14px; background: #8b8b8b; border: 1px solid #555; position: relative; }
+.sb-arrow i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #fff; }
+.sb-fcol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.sb-flame { width: 14px; height: 18px; background: #6a6a6a; position: relative; transform: rotate(180deg); }
+.sb-flame i { position: absolute; left: 0; right: 0; top: 0; height: 0; background: #ff8a1e; }
+.sb-out { width: 48px; height: 48px; }
+.sb-srow { display: flex; }
+.sb-gap { height: 8px; }
+.sb-chest { margin-bottom: 4px; }
+.sb-book { width: 230px; max-height: min(100%, 440px); display: flex; flex-direction: column; }
+.sb-book[hidden] { display: none; }
+.sb-booklist { overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding-right: 2px; }
+.sb-rec { display: flex; align-items: center; gap: 8px; text-align: left; padding: 3px 5px; background: #a8a8a8; border: 2px solid; border-color: #777 #eee #eee #777; color: #555; cursor: pointer; }
+.sb-rec .sb-ic { width: 28px; height: 28px; opacity: .55; }
+.sb-rec.can { background: #d8e8c0; color: #222; border-color: #fff #666 #666 #fff; }
+.sb-rec.can .sb-ic { opacity: 1; }
+.sb-rm { min-width: 0; }
+.sb-rn { font-size: .78rem; font-weight: 650; }
+.sb-rc { font-size: .66rem; line-height: 1.2; }
+.sb-cursor { position: absolute; left: 0; top: 0; z-index: 9; pointer-events: none; width: 32px; height: 32px; }
+.sb-cursor[hidden] { display: none; }
+@media (max-width: 760px) {
+  .sb-wincol { flex-direction: column; align-items: center; }
+  .sb-book { width: min(360px, 100%); max-height: 180px; }
+  .sb-s { width: 36px; height: 36px; } .sb-s .sb-ic { width: 28px; height: 28px; }
+}
+.sb-bottom .sb-hotbar { max-width: none; overflow: visible; }
+.sb-bottom { width: max-content; }
+.sb-bottom .sb-barsrow, .sb-bottom .sb-xp { width: 100%; box-sizing: border-box; }
+@media (max-width: 640px) { .sb-slot { width: 36px; height: 36px; } .sb-slot .sb-ic { width: 26px; height: 26px; } .sb-hi { width: 13px; height: 13px; } }

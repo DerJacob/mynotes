@@ -7,59 +7,15 @@
 //   Speichern: Blöcke als Lauflängen (Base64) – klein genug für den Spielstand im Drive
 // =====================================================================
 
+import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS } from "./sandbox-data.js?v=2";
+import { installInventory } from "./sandbox-inventory.js?v=2";
+export { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS };
+
 export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
-
-// ---------------------------------------------------------------------
-// Blöcke und Gegenstände
-// ---------------------------------------------------------------------
-export const B = { AIR: 0, DIRT: 1, GRASS: 2, STONE: 3, SAND: 4, LOG: 5, LEAVES: 6, PLANKS: 7, COAL: 8, IRON: 9, GOLD: 10, TORCH: 11, BENCH: 12, GLASS: 13, BRICK: 14, BEDROCK: 15, FLOWER: 16, TALLGRASS: 17 };
-const def = (key, o) => ({ key, solid: false, lcost: 0, hard: 0.5, tier: 0, drop: null, emit: 0, ...o });
-/** solid = Körper stoßen dagegen · lcost = wie stark der Block Licht schluckt, das ihn verlässt · hard = Sekunden mit der Hand */
-export const BLOCKS = [];
-BLOCKS[B.AIR] = def("air", { hard: 0 });
-BLOCKS[B.DIRT] = def("dirt", { solid: true, lcost: 3, hard: 0.5, drop: "dirt" });
-BLOCKS[B.GRASS] = def("grass", { solid: true, lcost: 3, hard: 0.6, drop: "dirt" });
-BLOCKS[B.STONE] = def("stone", { solid: true, lcost: 3, hard: 1.8, tier: 1, drop: "stone" });
-BLOCKS[B.SAND] = def("sand", { solid: true, lcost: 3, hard: 0.5, drop: "sand" });
-BLOCKS[B.LOG] = def("log", { solid: true, lcost: 3, hard: 1.2, drop: "log" });
-BLOCKS[B.LEAVES] = def("leaves", { lcost: 1, hard: 0.2, drop: "leaves" });
-BLOCKS[B.PLANKS] = def("planks", { solid: true, lcost: 3, hard: 1, drop: "planks" });
-BLOCKS[B.COAL] = def("coal", { solid: true, lcost: 3, hard: 2.2, tier: 1, drop: "coal" });
-BLOCKS[B.IRON] = def("iron", { solid: true, lcost: 3, hard: 3.2, tier: 2, drop: "iron" });
-BLOCKS[B.GOLD] = def("gold", { solid: true, lcost: 3, hard: 4, tier: 3, drop: "gold" });
-BLOCKS[B.TORCH] = def("torch", { hard: 0.05, drop: "torch", emit: 13 });
-BLOCKS[B.BENCH] = def("bench", { hard: 1, drop: "bench" });
-BLOCKS[B.GLASS] = def("glass", { solid: true, lcost: 0, hard: 0.5, drop: "glass" });
-BLOCKS[B.BRICK] = def("brick", { solid: true, lcost: 3, hard: 2.5, tier: 1, drop: "brick" });
-BLOCKS[B.BEDROCK] = def("bedrock", { solid: true, lcost: 3, hard: Infinity });
-BLOCKS[B.FLOWER] = def("flower", { hard: 0.05 });
-BLOCKS[B.TALLGRASS] = def("tallgrass", { hard: 0.05 });
-
-/** Gegenstände: block = Block, der beim Bauen entsteht · tool/tier = Werkzeug */
-export const ITEMS = {
-  dirt: { name: "Erde", block: B.DIRT }, stone: { name: "Stein", block: B.STONE }, sand: { name: "Sand", block: B.SAND },
-  log: { name: "Holz", block: B.LOG }, leaves: { name: "Laub", block: B.LEAVES }, planks: { name: "Bretter", block: B.PLANKS },
-  coal: { name: "Kohle" }, iron: { name: "Eisen" }, gold: { name: "Gold" },
-  torch: { name: "Fackel", block: B.TORCH }, bench: { name: "Werkbank", block: B.BENCH },
-  glass: { name: "Glas", block: B.GLASS }, brick: { name: "Ziegel", block: B.BRICK },
-  wood_pick: { name: "Holzspitzhacke", tool: "pick", tier: 1 }, stone_pick: { name: "Steinspitzhacke", tool: "pick", tier: 2 }, iron_pick: { name: "Eisenspitzhacke", tool: "pick", tier: 3 },
-  wood_sword: { name: "Holzschwert", tool: "sword", tier: 1 }, stone_sword: { name: "Steinschwert", tool: "sword", tier: 2 }, iron_sword: { name: "Eisenschwert", tool: "sword", tier: 3 }
-};
-export const PLACE_ORDER = ["torch", "dirt", "stone", "planks", "log", "brick", "glass", "sand", "leaves", "bench"];
-export const RECIPES = [
-  { id: "planks", out: ["planks", 4], cost: { log: 1 } },
-  { id: "torch", out: ["torch", 4], cost: { coal: 1, planks: 1 } },
-  { id: "bench", out: ["bench", 1], cost: { planks: 8 } },
-  { id: "stone_pick", out: ["stone_pick", 1], cost: { stone: 8, planks: 3 }, bench: true },
-  { id: "iron_pick", out: ["iron_pick", 1], cost: { iron: 8, planks: 3 }, bench: true },
-  { id: "stone_sword", out: ["stone_sword", 1], cost: { stone: 6, planks: 2 }, bench: true },
-  { id: "iron_sword", out: ["iron_sword", 1], cost: { iron: 6, planks: 2 }, bench: true },
-  { id: "brick", out: ["brick", 2], cost: { stone: 2 }, bench: true },
-  { id: "glass", out: ["glass", 2], cost: { sand: 2 }, bench: true }
-];
-const PICK_SPEED = [1, 2, 3.4, 5];
+export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
+export const SAVE_VERSION = 2;
 
 // ---------------------------------------------------------------------
 // Zufall und Rauschen
@@ -205,6 +161,7 @@ export class Sandbox {
     vein(B.COAL, 520, 8, [4, 9]);
     vein(B.IRON, 330, 28, [3, 7]);
     vein(B.GOLD, 150, 62, [2, 5]);
+    vein(B.DIAMOND, 70, 88, [1, 4]);
     // Bäume, Gras, Blumen
     for (let x = 6; x < W - 6; x += 4 + Math.floor(rnd() * 6)) {
       if (Math.abs(x - SPAWN_X) < 26 || sandAt(x)) continue;
@@ -249,9 +206,9 @@ export class Sandbox {
   _fresh() {
     this.time = 0.3; this.day = 1;
     this.stats = { mined: 0, built: 0, kills: 0 };
-    this.player = { x: SPAWN_X - 6.4, y: SURF - 1.8 - 0.001, w: 0.8, h: 1.8, vx: 0, vy: 0, onGround: false, face: 1, hp: 10, maxHp: 10, invuln: 0, coyote: 0, jumpBuf: 0, atkCd: 0, visOff: 0, stepUp: true };
-    this.inv = { wood_pick: 1, wood_sword: 1, torch: 6 };
-    this.sel = 0;
+    this.spawn = { x: SPAWN_X - 6.4, y: SURF - 1.8 - 0.001 };
+    this.player = { x: this.spawn.x, y: this.spawn.y, w: 0.8, h: 1.8, vx: 0, vy: 0, onGround: false, face: 1, hp: MAX_HP, maxHp: MAX_HP, invuln: 0, coyote: 0, jumpBuf: 0, atkCd: 0, visOff: 0, stepUp: true };
+    this._resetInventory();
     this._entities();
   }
   _entities() {
@@ -264,23 +221,49 @@ export class Sandbox {
 
   // ---------- Speichern ----------
   toData() {
-    const p = this.player;
+    const p = this.player, pk = st => (st ? [st.id, st.n, st.d || 0] : 0);
     return {
-      v: 1, seed: this.seed, tiles: encodeTiles(this.tiles), ground: Array.from(this.ground),
-      p: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), hp: p.hp }, inv: { ...this.inv }, sel: this.sel,
+      v: SAVE_VERSION, seed: this.seed, tiles: encodeTiles(this.tiles), ground: Array.from(this.ground),
+      p: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), hp: p.hp, food: this.food, sat: +this.sat.toFixed(1), exh: +this.exh.toFixed(2) },
+      inv: this.inv.map(pk), armor: this.armor.map(pk), sel: this.sel, xp: this.xp,
+      ents: [...this.ents.entries()].map(([k, e]) => { const [x, y] = k.split(",").map(Number); return { x, y, t: e.t, s: e.s.map(pk), burn: e.burn, burnMax: e.burnMax, cook: e.cook, xp: e.xp }; }),
+      drops: this.drops.slice(-120).map(d => [d.id, d.n, d.d || 0, +d.x.toFixed(2), +d.y.toFixed(2)]),
+      spawn: { x: +this.spawn.x.toFixed(2), y: +this.spawn.y.toFixed(2) },
       time: +this.time.toFixed(4), day: this.day, stats: { ...this.stats }
     };
   }
   _fromData(d) {
-    if (!d || d.v !== 1 || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
+    if (!d || (d.v !== 1 && d.v !== 2) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
     this.seed = d.seed | 0;
     this.tiles = decodeTiles(d.tiles);
     this.ground = Int16Array.from(d.ground && d.ground.length === W ? d.ground : new Array(W).fill(SURF));
     this._fresh();
-    const p = this.player;
-    if (d.p && Number.isFinite(d.p.x) && Number.isFinite(d.p.y)) { p.x = clamp(d.p.x, 0, W - p.w); p.y = clamp(d.p.y, 0, H - p.h); p.hp = clamp(d.p.hp | 0, 1, p.maxHp); }
-    if (d.inv && typeof d.inv === "object") { this.inv = {}; for (const [k, v] of Object.entries(d.inv)) if (ITEMS[k] && v > 0) this.inv[k] = Math.min(9999, v | 0); }
-    this.sel = d.sel | 0;
+    const p = this.player, legacy = d.v === 1;
+    if (d.p && Number.isFinite(d.p.x) && Number.isFinite(d.p.y)) {
+      p.x = clamp(d.p.x, 0, W - p.w); p.y = clamp(d.p.y, 0, H - p.h);
+      p.hp = clamp((d.p.hp | 0) * (legacy ? 2 : 1), 1, p.maxHp);
+      if (!legacy) { this.food = clamp(d.p.food | 0, 0, 20); this.sat = clamp(+d.p.sat || 0, 0, 20); this.exh = clamp(+d.p.exh || 0, 0, 4); }
+    }
+    const un = a => (Array.isArray(a) && ITEMS[a[0]] ? { id: a[0], n: clamp(a[1] | 0, 1, stackMax(a[0])), d: a[2] | 0 } : null);
+    if (legacy) {
+      // alter Spielstand: Gegenstände als Zahlen pro Sorte → in die Plätze einsortieren
+      const map = { iron: "raw_iron", gold: "raw_gold" };
+      this.inv = this._emptyInv();
+      if (d.inv && typeof d.inv === "object") for (const [k0, v] of Object.entries(d.inv)) { const k = map[k0] || k0; if (ITEMS[k] && v > 0) this.add(k, Math.min(9999, v | 0), 0, true); }
+      this.events.length = 0;
+    } else {
+      if (Array.isArray(d.inv)) this.inv = this._emptyInv().map((_, i) => un(d.inv[i]));
+      if (Array.isArray(d.armor)) this.armor = [0, 1, 2, 3].map(i => un(d.armor[i]));
+      this.xp = Math.max(0, d.xp | 0);
+      for (const e of d.ents || []) {
+        if (!(e.t === "chest" || e.t === "furnace") || !Number.isFinite(e.x) || !Number.isFinite(e.y)) continue;
+        const n = e.t === "chest" ? 27 : 3;
+        this.ents.set(`${e.x},${e.y}`, { t: e.t, s: Array.from({ length: n }, (_, i) => un((e.s || [])[i])), burn: +e.burn || 0, burnMax: +e.burnMax || 0, cook: +e.cook || 0, xp: +e.xp || 0 });
+      }
+      for (const a of d.drops || []) if (ITEMS[a[0]]) this.drops.push({ id: a[0], n: clamp(a[1] | 0, 1, stackMax(a[0])), d: a[2] | 0, x: +a[3], y: +a[4], vx: 0, vy: 0, w: 0.3, h: 0.3, age: 1, stepUp: false });
+      if (d.spawn && Number.isFinite(d.spawn.x)) this.spawn = { x: d.spawn.x, y: d.spawn.y };
+    }
+    this.sel = clamp(d.sel | 0, 0, 8);
     this.time = Number.isFinite(d.time) ? d.time % 1 : 0.3;
     this.day = Math.max(1, d.day | 0);
     if (d.stats) this.stats = { mined: d.stats.mined | 0, built: d.stats.built | 0, kills: d.stats.kills | 0 };
@@ -327,110 +310,7 @@ export class Sandbox {
     }
   }
 
-  // ---------- Inventar ----------
-  count(item) { return this.inv[item] || 0; }
-  add(item, n = 1) { this.inv[item] = Math.min(9999, this.count(item) + n); this.events.push({ t: "pickup", item, n }); }
-  _take(item, n) { const c = this.count(item) - n; if (c > 0) this.inv[item] = c; else delete this.inv[item]; }
-  tier(kind) { let t = 0; for (const [k, v] of Object.entries(this.inv)) { const it = ITEMS[k]; if (v > 0 && it && it.tool === kind && it.tier > t) t = it.tier; } return t; }
-  hotbar() { return PLACE_ORDER.filter(k => this.count(k) > 0); }
-  selItem() { const hb = this.hotbar(); if (!hb.length) return null; this.sel = clamp(this.sel, 0, hb.length - 1); return hb[this.sel]; }
-  select(i) { const hb = this.hotbar(); if (hb.length) this.sel = clamp(i, 0, hb.length - 1); }
-  benchNear() {
-    const p = this.player, cx = Math.floor(p.x + p.w / 2), cy = Math.floor(p.y + p.h / 2);
-    for (let y = cy - 4; y <= cy + 4; y++) for (let x = cx - 6; x <= cx + 6; x++) if (this.tile(x, y) === B.BENCH) return true;
-    return false;
-  }
-  recipeState(r) {
-    const have = Object.entries(r.cost).every(([k, n]) => this.count(k) >= n);
-    const owned = ITEMS[r.out[0]].tool && this.count(r.out[0]) > 0;
-    return { have, owned: !!owned, bench: !r.bench || this.benchNear() };
-  }
-  craft(id) {
-    const r = RECIPES.find(x => x.id === id);
-    if (!r) return false;
-    const s = this.recipeState(r);
-    if (!s.have || !s.bench || s.owned) return false;
-    for (const [k, n] of Object.entries(r.cost)) this._take(k, n);
-    this.add(r.out[0], r.out[1]);
-    this.events.push({ t: "craft", id });
-    return true;
-  }
-
-  // ---------- Abbauen, Bauen, Kämpfen ----------
-  reachOk(tx, ty) {
-    const p = this.player;
-    return Math.hypot(tx + 0.5 - (p.x + p.w / 2), ty + 0.5 - (p.y + p.h / 2)) <= REACH;
-  }
-  /** Ein Bild lang abbauen. Liefert 0 = nichts, 1 = in Arbeit, 2 = abgebaut, -1 = Werkzeug zu schwach */
-  mineStep(tx, ty, dt) {
-    if (!this.reachOk(tx, ty)) { this.mining = null; return 0; }
-    const id = this.tile(tx, ty), bd = BLOCKS[id];
-    if (id === B.AIR || bd.hard === Infinity) { this.mining = null; return 0; }
-    if (bd.tier > this.tier("pick")) {
-      if (!this.mining || this.mining.x !== tx || this.mining.y !== ty || !this.mining.weak) this.events.push({ t: "weak", id });
-      this.mining = { x: tx, y: ty, p: 0, weak: true };
-      return -1;
-    }
-    if (!this.mining || this.mining.x !== tx || this.mining.y !== ty || this.mining.weak) this.mining = { x: tx, y: ty, p: 0 };
-    this.mining.p += (dt * PICK_SPEED[this.tier("pick")]) / Math.max(0.03, bd.hard);
-    if (this.mining.p >= 1) { this._break(tx, ty); this.mining = null; return 2; }
-    return 1;
-  }
-  mineStop() { this.mining = null; }
-  _break(x, y) {
-    const id = this.tile(x, y), bd = BLOCKS[id];
-    this.setTile(x, y, B.AIR);
-    if (bd.drop) this.add(bd.drop, 1);
-    this.stats.mined++;
-    this.events.push({ t: "break", x, y, id });
-    this._settle(x, y);
-  }
-  /** Nach dem Abbauen: Fackeln ohne Halt und Pflanzen ohne Boden fallen ab */
-  _settle(x, y) {
-    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
-      const nx = x + dx, ny = y + dy, id = this.tile(nx, ny);
-      if (id === B.TORCH && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.add("torch", 1); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
-      else if ((id === B.FLOWER || id === B.TALLGRASS) && !BLOCKS[this.tile(nx, ny + 1)].solid) { this.setTile(nx, ny, B.AIR); this.events.push({ t: "break", x: nx, y: ny, id }); }
-    }
-  }
-  _supported(x, y) { return BLOCKS[this.tile(x - 1, y)].solid || BLOCKS[this.tile(x + 1, y)].solid || BLOCKS[this.tile(x, y + 1)].solid || BLOCKS[this.tile(x, y - 1)].solid; }
-  /** Ausgewählten Block setzen */
-  place(tx, ty) {
-    const item = this.selItem();
-    if (!item || !ITEMS[item].block) return false;
-    if (!this.reachOk(tx, ty) || tx < 0 || tx >= W || ty < 1 || ty >= H - 2) return false;
-    const cur = this.tile(tx, ty);
-    if (cur !== B.AIR && cur !== B.FLOWER && cur !== B.TALLGRASS) return false;
-    const id = ITEMS[item].block;
-    if (!this._supported(tx, ty)) return false;
-    if (BLOCKS[id].solid) {
-      const box = { x: tx, y: ty, w: 1, h: 1 };
-      const over = b => b.x < box.x + 1 && b.x + b.w > box.x && b.y < box.y + 1 && b.y + b.h > box.y;
-      if (over(this.player) || this.villagers.some(over) || this.slimes.some(over)) return false;
-    }
-    this.setTile(tx, ty, id);
-    this._take(item, 1);
-    this.stats.built++;
-    this.events.push({ t: "place", x: tx, y: ty, id });
-    return true;
-  }
-  /** Schwerthieb auf einen Schleim an (mx, my) in Blockkoordinaten. Liefert true, wenn getroffen. */
-  attack(mx, my) {
-    const p = this.player;
-    if (p.atkCd > 0) return false;
-    for (const s of this.slimes) {
-      if (mx < s.x - 0.4 || mx > s.x + s.w + 0.4 || my < s.y - 0.4 || my > s.y + s.h + 0.4) continue;
-      if (Math.hypot(s.x + s.w / 2 - (p.x + p.w / 2), s.y + s.h / 2 - (p.y + p.h / 2)) > REACH - 0.5) continue;
-      const dmg = [1, 2, 3, 5][this.tier("sword")];   // Hand, Holz, Stein, Eisen (Schleim hat 4 Leben)
-      s.hp -= dmg; s.hurt = 0.3; p.atkCd = 0.35;
-      const dir = s.x + s.w / 2 > p.x + p.w / 2 ? 1 : -1;
-      s.vx = dir * 7; s.vy = -6;
-      this.events.push({ t: "hit", x: s.x + s.w / 2, y: s.y });
-      if (s.hp <= 0) { this.slimes.splice(this.slimes.indexOf(s), 1); this.stats.kills++; this.events.push({ t: "kill", x: s.x + s.w / 2, y: s.y + s.h / 2 }); }
-      return true;
-    }
-    return false;
-  }
+  // Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen: siehe sandbox-inventory.js
 
   // ---------- Physik ----------
   _hit(b) {
@@ -476,8 +356,13 @@ export class Sandbox {
     this.time += dt / DAY_LEN;
     if (this.time >= 1) { this.time -= 1; this.day++; this.events.push({ t: "day", day: this.day }); }
     this._player(dt);
+    this._hunger(dt);
     for (const v of this.villagers) this._villager(v, dt);
     for (const s of [...this.slimes]) this._slime(s, dt);
+    this._drops(dt);
+    this._furnaces(dt);
+    this._decayStep(dt);
+    this._windowCheck();
     this.spawnT -= dt;
     if (this.spawnT <= 0) { this.spawnT = 1.5; this._trySpawn(); }
   }
@@ -485,29 +370,50 @@ export class Sandbox {
     const p = this.player, inp = this.input;
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
     const acc = (p.onGround ? 70 : 34) * dt;
-    p.vx += clamp(dir * 6.2 - p.vx, -acc, acc);
+    const onLadder = BLOCKS[this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h * 0.5))].climb || BLOCKS[this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h - 0.1))].climb;
+    p.onLadder = onLadder;
+    p.vx += clamp(dir * (onLadder ? 3.2 : 6.2) - p.vx, -acc, acc);
     if (dir) p.face = dir;
     p.coyote = p.onGround ? 0.1 : p.coyote - dt;
     p.jumpBuf = inp.jump ? 0.12 : p.jumpBuf - dt;
     p.invuln = Math.max(0, p.invuln - dt); p.atkCd = Math.max(0, p.atkCd - dt);
-    if (p.jumpBuf > 0 && p.coyote > 0) { p.vy = -15; p.coyote = 0; p.jumpBuf = 0; p.onGround = false; this.events.push({ t: "jump" }); }
-    if (!inp.jump && p.vy < -5) p.vy += 60 * dt;                  // kurz tippen = kleiner Sprung
-    this._body(p, dt);
-    if (p.landV > 21) this.hurt(Math.ceil((p.landV - 21) / 3), 0, "fall");
-    if (p.hp < p.maxHp && p.invuln <= 0) { p.regen = (p.regen || 0) + dt; if (p.regen > 6) { p.regen = 0; p.hp++; } }
-    for (const s of this.slimes) if (s.hurt <= 0 && p.x < s.x + s.w && p.x + p.w > s.x && p.y < s.y + s.h && p.y + p.h > s.y) this.hurt(1, s.x + s.w / 2 > p.x + p.w / 2 ? -1 : 1, "slime");
+    if (onLadder) {
+      p.vy = inp.jump ? -4.5 : inp.down ? 4.5 : 0; p.coyote = 0; p.jumpBuf = 0;
+    } else if (p.jumpBuf > 0 && p.coyote > 0) { p.vy = -15; p.coyote = 0; p.jumpBuf = 0; p.onGround = false; this.events.push({ t: "jump" }); this.addExh(0.05); }
+    if (!inp.jump && p.vy < -5 && !onLadder) p.vy += 60 * dt;     // kurz tippen = kleiner Sprung
+    const wasFalling = p.vy;
+    this._body(p, dt, onLadder ? 0 : 42);
+    if (onLadder) { p.landV = 0; if (p.vy > 4.6) p.vy = 4.6; }
+    if (p.landV > 0) { const dist = (p.landV * p.landV) / 84; if (dist > 3.2) this.hurt(Math.ceil(dist - 3), 0, "fall"); }
+    if (Math.abs(p.vx) > 0.5 && p.onGround) this.addExh(Math.abs(p.vx) * dt * 0.012);
+    for (const s of this.slimes) if (s.hurt <= 0 && p.x < s.x + s.w && p.x + p.w > s.x && p.y < s.y + s.h && p.y + p.h > s.y) this.hurt(3, s.x + s.w / 2 > p.x + p.w / 2 ? -1 : 1, "slime");
   }
   hurt(n, dir, why) {
     const p = this.player;
-    if (p.invuln > 0 || n <= 0) return;
-    p.hp -= n; p.invuln = 1; p.regen = 0;
-    if (dir) { p.vx = dir * 7; p.vy = -7; }
-    this.events.push({ t: "hurt", n, why });
-    if (p.hp <= 0) {
-      this.events.push({ t: "died" });
-      p.hp = p.maxHp; p.x = SPAWN_X - 6.4; p.y = SURF - 1.8 - 0.001; p.vx = p.vy = 0; p.invuln = 2;
-      this.slimes.length = 0;
+    if (n <= 0 || (p.invuln > 0 && why !== "hunger")) return;
+    if (why === "slime") {
+      const def = this.defense();
+      n = Math.max(1, Math.round(n * (1 - Math.min(20, def) * 0.04)));
+      for (let i = 0; i < 4; i++) this.wearArmor(i);
     }
+    p.hp -= n; if (why !== "hunger") p.invuln = 1;
+    this.regenT = 0;
+    if (dir) { p.vx = dir * 7; p.vy = -7; }
+    this.addExh(0.1);
+    this.events.push({ t: "hurt", n, why });
+    if (p.hp <= 0) this._die();
+  }
+  _die() {
+    const p = this.player;
+    this.events.push({ t: "died" });
+    // wie Minecraft: alles fällt an der Todesstelle
+    const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+    const all = [...this.inv, ...this.armor, this.cursor];
+    for (const st of all) if (st) this.dropStack(st, cx, cy, true);
+    this.inv = this._emptyInv(); this.armor = [null, null, null, null]; this.cursor = null; this.grid.fill(null); this.win = null;
+    this.xp = 0; this.food = 20; this.sat = 5; this.exh = 0;
+    p.hp = p.maxHp; p.x = this.spawn.x; p.y = this.spawn.y; p.vx = p.vy = 0; p.invuln = 2;
+    this.slimes.length = 0;
   }
   _villager(v, dt) {
     v.t -= dt; v.sayT = Math.max(0, v.sayT - dt); v.cool -= dt;
@@ -547,9 +453,11 @@ export class Sandbox {
       if (this.tile(x, y) === B.AIR && this.tile(x, y - 1) === B.AIR && BLOCKS[this.tile(x, y + 1)].solid) {
         if (Math.abs(x - SPAWN_X) < 26 && y < SURF + 2) return;     // im Dorf bleibt es friedlich
         if (this.lightAt(x, y) >= 5) return;
-        this.slimes.push({ x: x + 0.05, y: y + 0.3, w: 0.9, h: 0.7, vx: 0, vy: 0, onGround: false, hp: 4, hopT: 0.5 + this.rng(), hurt: 0, stepUp: false });
+        this.slimes.push({ x: x + 0.05, y: y + 0.3, w: 0.9, h: 0.7, vx: 0, vy: 0, onGround: false, hp: 10, hopT: 0.5 + this.rng(), hurt: 0, stepUp: false });
         return;
       }
     }
   }
 }
+
+installInventory(Sandbox, { clamp, REACH, MAX_HP, W, H, SURF, SPAWN_X });
