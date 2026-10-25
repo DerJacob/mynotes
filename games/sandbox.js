@@ -5,15 +5,16 @@
 //   A/D laufen · W/Leertaste springen (Leiter: W hoch, S runter) · linke Maustaste abbauen/kämpfen
 //   rechte Maustaste benutzen/bauen/essen · 1–9 oder Mausrad: Platz wählen · E Inventar · Q werfen · P/Esc Pause
 // =====================================================================
-import { Sandbox, W, H, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32 } from "./sandbox-engine.js?v=2";
-import { makeArt, IDX, T } from "./sandbox-art.js?v=2";
+import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES } from "./sandbox-engine.js?v=3";
+import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=3";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const rgb = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 const fmt = n => new Intl.NumberFormat("de-DE").format(n);
-const TAGNAME = { "#planks": "Bretter", "#coals": "Kohle" };
+const TAGNAME = { "#planks": "Bretter", "#coals": "Kohle", "#logs": "Baumstämme" };
+const DEEP_Y = SURF + 74;           // ab hier werden Erze auf Tiefenschiefer gemalt
 
 // =====================================================================
 // mount
@@ -44,7 +45,7 @@ export function mount(root, ctx) {
   const info = h("div", { class: "sb-info" });
   const heldName = h("div", { class: "sb-held", hidden: true });
   const barsRow = h("div", { class: "sb-barsrow" });
-  const armorRow = h("div", { class: "sb-iconrow" }), heartsRow = h("div", { class: "sb-iconrow" }), foodRow = h("div", { class: "sb-iconrow" });
+  const armorRow = h("div", { class: "sb-iconrow" }), heartsRow = h("div", { class: "sb-iconrow" }), foodRow = h("div", { class: "sb-iconrow" }), airRow = h("div", { class: "sb-iconrow sb-airrow" });
   const xpFill = h("div", { class: "sb-xpfill" }), xpLvl = h("div", { class: "sb-xplvl" });
   const xpBar = h("div", { class: "sb-xp" }, xpFill, xpLvl);
   const hotbar = h("div", { class: "sb-hotbar" });
@@ -82,7 +83,7 @@ export function mount(root, ctx) {
       h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info), h("div", { class: "sb-right" }, invBtn, soundBtn, pauseBtn)),
       toastEl, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), winWrap, cursorEl, overlay),
     touch, help));
-  barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), foodRow);
+  barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
 
   function blurFocus() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
 
@@ -104,13 +105,15 @@ export function mount(root, ctx) {
   }
   function hud() {
     const p = game.player;
-    const sb = `${p.hp}|${game.food}|${game.defense()}`;
+    const nAir = p.air < 14.95 ? Math.max(0, Math.min(10, Math.ceil(p.air / 1.5))) : -1;
+    const sb = `${p.hp}|${game.food}|${game.defense()}|${nAir}`;
     if (sb !== sig.bars) {
       sig.bars = sb;
       iconRow(heartsRow, "heart", MAX_HP / 2, i => (p.hp >= i * 2 + 2 ? 1 : p.hp === i * 2 + 1 ? 0.5 : 0));
       iconRow(foodRow, "food", 10, i => (game.food >= i * 2 + 2 ? 1 : game.food === i * 2 + 1 ? 0.5 : 0));
       const df = game.defense();
       iconRow(armorRow, "armor", df > 0 ? 10 : 0, i => (df >= i * 2 + 2 ? 1 : df === i * 2 + 1 ? 0.5 : 0));
+      iconRow(airRow, "bubble", Math.max(0, nAir), () => 1);
     }
     const sx = `${game.xp}`;
     if (sx !== sig.xp) { sig.xp = sx; xpFill.style.width = Math.round(game.levelFrac() * 100) + "%"; xpLvl.textContent = game.level() > 0 ? String(game.level()) : ""; }
@@ -127,7 +130,7 @@ export function mount(root, ctx) {
       lastHeld = cur ? cur.id : null;
     }
     const hour = Math.floor(game.time * 24), min = Math.floor((game.time * 24 - hour) * 60);
-    const si = `Tag ${game.day} · ${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+    const si = `Tag ${game.day} · ${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")} · ${BIOME_NAMES[game.biomeAt(p.x + p.w / 2)]} · Höhe ${SURF - Math.floor(p.y + p.h / 2)}`;
     if (si !== sig.info) { sig.info = si; info.textContent = si; }
     syncWindow();
   }
@@ -236,6 +239,7 @@ export function mount(root, ctx) {
     else if (k === "hurt") tone(160, 0.22, "sawtooth", 0.06, -90); else if (k === "craft") { tone(520, 0.08, "triangle", 0.06); setTimeout(() => tone(780, 0.1, "triangle", 0.06), 70); }
     else if (k === "pick") tone(120 + Math.random() * 40, 0.04, "square", 0.025); else if (k === "kill") tone(420, 0.14, "square", 0.05, -250); else if (k === "jump") tone(250, 0.07, "triangle", 0.03, 90);
     else if (k === "door") tone(200, 0.08, "square", 0.04, -60); else if (k === "eat") { tone(300, 0.05, "square", 0.04); setTimeout(() => tone(260, 0.05, "square", 0.04), 80); }
+    else if (k === "hiss") tone(700, 0.18, "sawtooth", 0.025, -450);
     else if (k === "xp") tone(900 + Math.random() * 300, 0.06, "sine", 0.03); else if (k === "click") tone(420, 0.03, "square", 0.02);
   }
 
@@ -381,7 +385,9 @@ export function mount(root, ctx) {
       else if (e.t === "noharvest") say("Damit bekommst du davon nichts – du brauchst das richtige Werkzeug.", 2800);
       else if (e.t === "craft") sfx("craft");
       else if (e.t === "pickup") floatText(`+${e.n} ${ITEMS[e.item].name}`, "#fff3b0");
-      else if (e.t === "hurt") { flash = 0.5; shake = 0.25; sfx("hurt"); }
+      else if (e.t === "hurt") { flash = 0.5; shake = 0.25; sfx("hurt"); if (e.why === "lava") say("Autsch – Lava!", 1200); else if (e.why === "drown") say("Du ertrinkst! Schwimm nach oben (Leertaste).", 1500); }
+      else if (e.t === "hiss") { spark(e.x + 0.5, e.y + 0.5, B.STONE, 7); sfx("hiss"); }
+      else if (e.t === "bucket") { spark(e.x + 0.5, e.y + 0.5, e.fill ? B.WATER : B.LAVA, 6); sfx("place"); dirty = true; }
       else if (e.t === "died") say("Du bist gestorben. Deine Sachen liegen dort, wo es passiert ist – du hast 5 Minuten.", 5000);
       else if (e.t === "day") say(`Tag ${e.day}`, 2200);
       else if (e.t === "hit") { spark(e.x, e.y + 0.4, 1000, 5); floats.push({ x: e.x, y: e.y - 0.2, text: `-${e.n}`, color: "#ffb0a0", life: 0.9 }); }
@@ -475,6 +481,7 @@ export function mount(root, ctx) {
 
     // --- Blöcke ---
     const vw = Math.ceil(cw / tile) + 2, vh = Math.ceil(ch / tile) + 2;
+    const fluids = [];
     for (let j = 0; j < vh; j++) {
       const ty = y0 + j;
       if (ty < 0 || ty >= H) continue;
@@ -482,13 +489,16 @@ export function mount(root, ctx) {
         const tx = x0 + i;
         if (tx < 0 || tx >= W) continue;
         const px = i * tile - offX, py = j * tile - offY;
-        const id = game.tiles[ty * W + tx], gy = game.ground[tx];
-        if (ty > gy && (id === B.AIR || !BLOCKS[id].solid || id === B.GLASS)) g.drawImage(atlas, (ty < gy + 7 ? IDX.WALL_DIRT : IDX.WALL_STONE) * T, 0, T, T, px, py, tile, tile);
+        const id = game.tiles[ty * W + tx], gy = game.ground[tx], bd = BLOCKS[id];
+        if (ty > gy && (id === B.AIR || !bd.solid || id === B.GLASS)) g.drawImage(atlas, (ty < gy + 7 ? IDX.WALL_DIRT : ty >= DEEP_Y - 2 ? IDX.WALL_DEEP : IDX.WALL_STONE) * T, 0, T, T, px, py, tile, tile);
         if (id === B.AIR) continue;
-        let idx = id;
+        if (bd.fluid) { fluids.push(px, py, id, game.lvl[ty * W + tx], ty > 0 ? game.tiles[(ty - 1) * W + tx] : 0); continue; }
+        let idx = id, row = 0;
         if (id === B.FLOWER) idx = [B.FLOWER, IDX.FLOWER2, IDX.FLOWER3][(tx * 7 + ty * 3) % 3];
         else if (id === B.FURNACE) { const fe = game.ents.get(tx + "," + ty); if (fe && fe.burn > 0) idx = IDX.FURNACE_LIT; }
-        g.drawImage(atlas, idx * T, 0, T, T, px, py, tile, tile);
+        else if (id === B.GRASS || id === B.LEAVES || id === B.TALLGRASS) { idx = game.biomes[tx] * 3 + (id === B.GRASS ? 0 : id === B.LEAVES ? 1 : 2); row = 1; }
+        else if (ty >= DEEP_Y && ORE_DEEP[id] != null) idx = ORE_DEEP[id];
+        g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
         if (id === B.TORCH) { const fl = 0.5 + 0.5 * Math.sin(game.time * 3000 + tx * 2.1); g.fillStyle = `rgba(255,${180 + fl * 60 | 0},80,${0.35 + fl * 0.3})`; g.fillRect(px + 6 * S, py + (2 + (fl > 0.6 ? 0 : 1)) * S, 4 * S, 3 * S); }
       }
     }
@@ -510,6 +520,7 @@ export function mount(root, ctx) {
     for (const v of game.villagers) drawVillager(v, scr);
     for (const s of game.slimes) drawSlime(s, scr);
     drawPlayer(scr);
+    drawFluids(fluids, tile);
     // Partikel
     for (const q of parts) { const [bx, by] = scr(q.x, q.y); g.globalAlpha = clamp(q.life * 2, 0, 1); g.fillStyle = rgb(q.c); g.fillRect(bx, by, Math.max(2, q.s * tile), Math.max(2, q.s * tile)); }
     g.globalAlpha = 1;
@@ -556,6 +567,22 @@ export function mount(root, ctx) {
     g.drawImage(glowCv, -offX, -offY, w * tile, hh * tile);
     g.globalCompositeOperation = "source-over";
     g.imageSmoothingEnabled = false;
+  }
+  /** Wasser und Lava: Höhe nach Stufe, zwei Bilder im Wechsel, Oberflächenlinie */
+  function drawFluids(list, tile) {
+    const t = performance.now();
+    for (let k = 0; k < list.length; k += 5) {
+      const px = list[k], py = list[k + 1], id = list[k + 2], lv = list[k + 3], above = list[k + 4];
+      const lava = id === B.LAVA, full = above === id || lv === 8;
+      const hT = full ? T : lv >= 9 ? 14 : Math.max(2, Math.round(1.5 + lv * 1.7));
+      const fr = Math.floor(t / (lava ? 650 : 420) + px * 0.01) % 2;
+      const idx = fr ? (lava ? IDX.LAVA2 : IDX.WATER2) : id;
+      g.drawImage(atlas, idx * T, T - hT, T, hT, px, py + (T - hT) * S, tile, hT * S);
+      if (!full) { g.fillStyle = lava ? "rgba(255,230,120,.55)" : "rgba(225,240,255,.5)"; g.fillRect(px, py + (T - hT) * S, tile, Math.max(1, S)); }
+    }
+    // Kopf unter Wasser / in Lava: Farbschleier über dem ganzen Bild
+    const p = game.player, head = game.fluidAt(Math.floor(p.x + p.w / 2), Math.floor(p.y + 0.25));
+    if (head) { g.fillStyle = head === B.WATER ? "rgba(24,70,200,.26)" : "rgba(255,90,10,.55)"; g.fillRect(-8, -8, canvas.width + 16, canvas.height + 16); }
   }
   function bubble(text, bx, by) {
     const fs = Math.round(5 * S); g.font = `${fs}px system-ui, sans-serif`;

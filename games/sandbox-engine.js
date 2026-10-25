@@ -7,46 +7,21 @@
 //   Speichern: Blöcke als Lauflängen (Base64) – klein genug für den Spielstand im Drive
 // =====================================================================
 
-import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS } from "./sandbox-data.js?v=2";
-import { installInventory } from "./sandbox-inventory.js?v=2";
+import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid } from "./sandbox-data.js?v=3";
+import { installInventory } from "./sandbox-inventory.js?v=3";
+import { installFluids, SRC } from "./sandbox-fluids.js?v=3";
+import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=3";
+export { BIOMES, BIOME_NAMES };
 export { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS };
 
 export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
-// ---------------------------------------------------------------------
-// Zufall und Rauschen
-// ---------------------------------------------------------------------
-export function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function hash2(x, y, s) {
-  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s | 0, 1442695041)) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-function vnoise(x, y, s) {
-  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
-  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
-  const a = hash2(xi, yi, s), b = hash2(xi + 1, yi, s), c = hash2(xi, yi + 1, s), d = hash2(xi + 1, yi + 1, s);
-  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-}
-function fbm(x, y, s, oct = 3) {
-  let t = 0, a = 0.5, f = 1, n = 0;
-  for (let i = 0; i < oct; i++) { t += a * vnoise(x * f, y * f, s + i * 101); n += a; a *= 0.5; f *= 2; }
-  return t / n;
-}
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=3";
+export { mulberry32 };
 
 // ---------------------------------------------------------------------
 // Blöcke ↔ Text (Lauflängen, Base64)
@@ -65,9 +40,9 @@ export function encodeTiles(tiles) {
   for (let k = 0; k < out.length; k += 8192) s += String.fromCharCode.apply(null, out.slice(k, k + 8192));
   return btoa(s);
 }
-export function decodeTiles(str) {
+export function decodeTiles(str, len = W * H) {
   const bin = atob(str);
-  const tiles = new Uint8Array(W * H);
+  const tiles = new Uint8Array(len);
   let pos = 0;
   for (let i = 0; i + 1 < bin.length; i += 2) {
     const v = bin.charCodeAt(i), n = bin.charCodeAt(i + 1);
@@ -94,7 +69,8 @@ export class Sandbox {
     this.mining = null;
     this.lightDirty = true;
     if (opts.data) this._fromData(opts.data);
-    else { this.seed = (opts.seed ?? (Math.random() * 2147483647)) | 0; this._generate(); this._fresh(); }
+    else { this.seed = (opts.seed ?? (Math.random() * 2147483647)) | 0; this._generate(); this._fresh(); this._stockChests(); }
+    this._fluidInit();
     this.rng = mulberry32((this.seed ^ 0x51ed) + Math.floor(this.time * 1000));
     this.sky = new Uint8Array(W * H);
     this.blk = new Uint8Array(W * H);
@@ -105,109 +81,35 @@ export class Sandbox {
   // ---------- Zugriff ----------
   tile(x, y) { return x < 0 || x >= W || y < 0 || y >= H ? (y < 0 ? B.AIR : B.BEDROCK) : this.tiles[y * W + x]; }
   solidAt(x, y) { return BLOCKS[this.tile(Math.floor(x), Math.floor(y))].solid; }
-  setTile(x, y, id) { if (x >= 0 && x < W && y >= 0 && y < H) { this.tiles[y * W + x] = id; this.lightDirty = true; } }
+  setTile(x, y, id) {
+    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    const i = y * W + x;
+    if (this.tiles[i] === B.LAVA) this.lightDirty = true;
+    this.tiles[i] = id; this.lvl[i] = 0; this.lightDirty = true;
+    this._fluidWake(x, y);
+  }
 
   // ---------- Welt erzeugen ----------
   _generate() {
-    const seed = this.seed, rnd = mulberry32(seed);
-    const tiles = (this.tiles = new Uint8Array(W * H));
-    const hgt = new Int16Array(W);
-    for (let x = 0; x < W; x++) {
-      const t = smooth(22, 50, Math.abs(x - SPAWN_X));
-      hgt[x] = Math.round(SURF + (fbm(x * 0.012, 3.7, seed, 4) - 0.5) * 80 * t);
-    }
-    const sandAt = x => Math.abs(x - SPAWN_X) > 55 && fbm(x * 0.02, 9.1, seed + 7, 3) > 0.6;
-    this.ground = new Int16Array(W);
-    for (let x = 0; x < W; x++) {
-      const top = clamp(hgt[x], 20, H - 40);
-      const sand = sandAt(x);
-      const dirt = 3 + Math.floor(hash2(x, 5, seed) * 3);
-      for (let y = top; y < H; y++) {
-        let id;
-        if (y >= H - 2) id = B.BEDROCK;
-        else if (sand && y < top + 6) id = B.SAND;
-        else if (y === top) id = B.GRASS;
-        else if (y <= top + dirt) id = B.DIRT;
-        else id = B.STONE;
-        tiles[y * W + x] = id;
-      }
-      this.ground[x] = top;
-    }
-    // Höhlen: dünne Gänge (Schnitt zweier Rauschfelder) und größere Kammern
-    for (let x = 1; x < W - 1; x++) {
-      const top = this.ground[x];
-      const nearVillage = Math.abs(x - SPAWN_X) < 26;
-      for (let y = top + 6; y < H - 5; y++) {
-        if (nearVillage && y < top + 18) continue;
-        const a = Math.abs(vnoise(x * 0.05, y * 0.07, seed + 11) - 0.5);
-        const b = Math.abs(vnoise(x * 0.05 + 40, y * 0.07 + 40, seed + 23) - 0.5);
-        let carve = a < 0.04 && b < 0.045;
-        if (!carve && y > top + 24 && fbm(x * 0.03, y * 0.045, seed + 31, 3) > 0.7) carve = true;
-        if (carve && tiles[y * W + x] !== B.BEDROCK) tiles[y * W + x] = B.AIR;
-      }
-    }
-    // Erze als kleine Adern
-    const vein = (type, count, minD, size) => {
-      for (let i = 0; i < count; i++) {
-        let cx = Math.floor(rnd() * W), cy = Math.floor(SURF + minD + rnd() * (H - 8 - SURF - minD));
-        const n = size[0] + Math.floor(rnd() * (size[1] - size[0] + 1));
-        for (let k = 0; k < n; k++) {
-          if (cx > 0 && cx < W - 1 && cy > 0 && cy < H - 3 && tiles[cy * W + cx] === B.STONE) tiles[cy * W + cx] = type;
-          const d = Math.floor(rnd() * 4);
-          cx += d === 0 ? 1 : d === 1 ? -1 : 0; cy += d === 2 ? 1 : d === 3 ? -1 : 0;
-        }
-      }
-    };
-    vein(B.COAL, 520, 8, [4, 9]);
-    vein(B.IRON, 330, 28, [3, 7]);
-    vein(B.GOLD, 150, 62, [2, 5]);
-    vein(B.DIAMOND, 70, 88, [1, 4]);
-    // Bäume, Gras, Blumen
-    for (let x = 6; x < W - 6; x += 4 + Math.floor(rnd() * 6)) {
-      if (Math.abs(x - SPAWN_X) < 26 || sandAt(x)) continue;
-      const gy = this.ground[x];
-      if (tiles[gy * W + x] !== B.GRASS) continue;
-      const th = 4 + Math.floor(rnd() * 4);
-      for (let i = 1; i <= th; i++) tiles[(gy - i) * W + x] = B.LOG;
-      const top = gy - th;
-      for (let dx = -2; dx <= 2; dx++) for (let dy = -3; dy <= 1; dy++) {
-        if (dx * dx + dy * dy * 0.8 > 5.2) continue;
-        const px = x + dx, py = top + dy;
-        if (px >= 0 && px < W && py > 0 && tiles[py * W + px] === B.AIR) tiles[py * W + px] = B.LEAVES;
-      }
-    }
-    for (let x = 0; x < W; x++) {
-      const gy = this.ground[x];
-      if (tiles[gy * W + x] !== B.GRASS || tiles[(gy - 1) * W + x] !== B.AIR) continue;
-      const r = rnd();
-      if (r < 0.2) tiles[(gy - 1) * W + x] = B.TALLGRASS; else if (r < 0.26) tiles[(gy - 1) * W + x] = B.FLOWER;
-    }
-    this._village();
+    const w = generateWorld(this.seed);
+    this.tiles = w.tiles; this.lvl = w.lvl; this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
+    this._worldChests = w.chests;
   }
-  _village() {
-    const t = this.tiles, put = (x, y, id) => { if (x >= 0 && x < W && y > 0 && y < H) t[y * W + x] = id; };
-    const S = SURF;
-    for (let x = SPAWN_X - 24; x <= SPAWN_X + 24; x++) for (let y = S - 12; y < S; y++) put(x, y, B.AIR);   // Platz schaffen
-    const house = (x0, bench) => {
-      for (let y = S - 5; y <= S - 1; y++) { put(x0, y, B.PLANKS); put(x0 + 6, y, B.PLANKS); }
-      for (let x = x0 - 1; x <= x0 + 7; x++) put(x, S - 6, B.PLANKS);        // Dach mit Überstand
-      for (let x = x0 + 1; x <= x0 + 5; x++) { put(x, S, B.PLANKS); }       // Boden
-      for (let y = S - 5; y <= S - 1; y++) for (let x = x0 + 1; x <= x0 + 5; x++) put(x, y, B.AIR);
-      put(x0, S - 2, B.AIR); put(x0, S - 1, B.AIR);                          // Tür (offen)
-      put(x0 + 6, S - 3, B.GLASS);                                           // Fenster
-      put(x0 + 1, S - 4, B.TORCH);
-      if (bench) put(x0 + 4, S - 1, B.BENCH);
-    };
-    house(SPAWN_X - 20, false);
-    house(SPAWN_X - 3, true);
-    house(SPAWN_X + 13, false);
-    for (const x of [SPAWN_X - 9, SPAWN_X + 9]) { put(x, S - 1, B.LOG); put(x, S - 2, B.LOG); put(x, S - 3, B.TORCH); }  // Laternenpfähle
+  /** Truhen der Bauwerke (Dörfer, Verliese, Schächte) mit Beute füllen */
+  _stockChests() {
+    for (const c of this._worldChests || []) {
+      const s = new Array(27).fill(null);
+      c.items.forEach((it, k) => { if (ITEMS[it.id]) s[k * 3 % 27] = { id: it.id, n: it.n, d: 0 }; });
+      this.ents.set(`${c.x},${c.y}`, { t: "chest", s });
+    }
+    this._worldChests = null;
   }
+  biomeAt(x) { return BIOMES[this.biomes[clamp(Math.floor(x), 0, W - 1)]] || "plains"; }
   _fresh() {
     this.time = 0.3; this.day = 1;
     this.stats = { mined: 0, built: 0, kills: 0 };
     this.spawn = { x: SPAWN_X - 6.4, y: SURF - 1.8 - 0.001 };
-    this.player = { x: this.spawn.x, y: this.spawn.y, w: 0.8, h: 1.8, vx: 0, vy: 0, onGround: false, face: 1, hp: MAX_HP, maxHp: MAX_HP, invuln: 0, coyote: 0, jumpBuf: 0, atkCd: 0, visOff: 0, stepUp: true };
+    this.player = { air: 15, burn: 0, x: this.spawn.x, y: this.spawn.y, w: 0.8, h: 1.8, vx: 0, vy: 0, onGround: false, face: 1, hp: MAX_HP, maxHp: MAX_HP, invuln: 0, coyote: 0, jumpBuf: 0, atkCd: 0, visOff: 0, stepUp: true };
     this._resetInventory();
     this._entities();
   }
@@ -223,7 +125,7 @@ export class Sandbox {
   toData() {
     const p = this.player, pk = st => (st ? [st.id, st.n, st.d || 0] : 0);
     return {
-      v: SAVE_VERSION, seed: this.seed, tiles: encodeTiles(this.tiles), ground: Array.from(this.ground),
+      v: SAVE_VERSION, seed: this.seed, tiles: encodeTiles(this.tiles), lvl: encodeTiles(this.lvl), biomes: encodeTiles(this.biomes), villages: this.villages, ground: Array.from(this.ground),
       p: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), hp: p.hp, food: this.food, sat: +this.sat.toFixed(1), exh: +this.exh.toFixed(2) },
       inv: this.inv.map(pk), armor: this.armor.map(pk), sel: this.sel, xp: this.xp,
       ents: [...this.ents.entries()].map(([k, e]) => { const [x, y] = k.split(",").map(Number); return { x, y, t: e.t, s: e.s.map(pk), burn: e.burn, burnMax: e.burnMax, cook: e.cook, xp: e.xp }; }),
@@ -233,10 +135,16 @@ export class Sandbox {
     };
   }
   _fromData(d) {
-    if (!d || (d.v !== 1 && d.v !== 2) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
+    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
     this.seed = d.seed | 0;
     this.tiles = decodeTiles(d.tiles);
     this.ground = Int16Array.from(d.ground && d.ground.length === W ? d.ground : new Array(W).fill(SURF));
+    this.lvl = new Uint8Array(W * H); this.biomes = new Uint8Array(W); this.villages = [];
+    if (d.v >= 3) {
+      try { this.lvl = decodeTiles(d.lvl); this.biomes = decodeTiles(d.biomes, W); } catch (e) { /* Zusatzdaten beschädigt: Welt bleibt spielbar */ }
+      this.villages = Array.isArray(d.villages) ? d.villages.filter(v => v && Number.isFinite(v.x)) : [];
+      for (let i = 0; i < W * H; i++) if (this.tiles[i] === B.WATER || this.tiles[i] === B.LAVA) { if (!this.lvl[i]) this.lvl[i] = SRC; } else this.lvl[i] = 0;
+    } else this.villages = [{ x: SPAWN_X, y: SURF, style: "oak" }];
     this._fresh();
     const p = this.player, legacy = d.v === 1;
     if (d.p && Number.isFinite(d.p.x) && Number.isFinite(d.p.y)) {
@@ -341,6 +249,12 @@ export class Sandbox {
   }
   _body(b, dt, grav = 42) {
     b.blocked = false;
+    if (b !== this.player) {
+      const f = this.fluidOf(b);
+      if (f === B.WATER) { grav *= 0.25; b.vx *= Math.max(0, 1 - 3 * dt); b.inWater = true; if (b.vy > 3.5) b.vy = 3.5; }
+      else if (f === B.LAVA) { grav *= 0.15; b.vx *= Math.max(0, 1 - 6 * dt); if (b.vy > 1.5) b.vy = 1.5; b.inLava = true; }
+      else { b.inWater = b.inLava = false; }
+    }
     b.vy = Math.min(b.vy + grav * dt, 32);
     this._moveX(b, b.vx * dt);
     this._moveY(b, b.vy * dt);
@@ -362,41 +276,49 @@ export class Sandbox {
     this._drops(dt);
     this._furnaces(dt);
     this._decayStep(dt);
+    this._fluidStep(dt);
     this._windowCheck();
     this.spawnT -= dt;
     if (this.spawnT <= 0) { this.spawnT = 1.5; this._trySpawn(); }
   }
   _player(dt) {
     const p = this.player, inp = this.input;
+    this._playerFluids(dt);
+    const swim = p.inWater || p.inLava;
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
     const acc = (p.onGround ? 70 : 34) * dt;
     const onLadder = BLOCKS[this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h * 0.5))].climb || BLOCKS[this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h - 0.1))].climb;
     p.onLadder = onLadder;
-    p.vx += clamp(dir * (onLadder ? 3.2 : 6.2) - p.vx, -acc, acc);
+    p.vx += clamp(dir * (onLadder ? 3.2 : p.inLava ? 2.2 : swim ? 3.8 : 6.2) - p.vx, -acc, acc);
     if (dir) p.face = dir;
     p.coyote = p.onGround ? 0.1 : p.coyote - dt;
     p.jumpBuf = inp.jump ? 0.12 : p.jumpBuf - dt;
     p.invuln = Math.max(0, p.invuln - dt); p.atkCd = Math.max(0, p.atkCd - dt);
     if (onLadder) {
       p.vy = inp.jump ? -4.5 : inp.down ? 4.5 : 0; p.coyote = 0; p.jumpBuf = 0;
+    } else if (swim) {
+      p.vy = clamp(p.vy + (inp.jump ? -34 : inp.down ? 14 : 0) * dt, -5, p.inLava ? 1.5 : 3.5); p.coyote = 0; p.jumpBuf = 0;
     } else if (p.jumpBuf > 0 && p.coyote > 0) { p.vy = -15; p.coyote = 0; p.jumpBuf = 0; p.onGround = false; this.events.push({ t: "jump" }); this.addExh(0.05); }
-    if (!inp.jump && p.vy < -5 && !onLadder) p.vy += 60 * dt;     // kurz tippen = kleiner Sprung
+    if (!inp.jump && p.vy < -5 && !onLadder && !swim) p.vy += 60 * dt;     // kurz tippen = kleiner Sprung
     const wasFalling = p.vy;
-    this._body(p, dt, onLadder ? 0 : 42);
+    if (swim) p.vy = clamp(p.vy, -5, p.inLava ? 1.5 : 3.5);
+    this._body(p, dt, onLadder ? 0 : swim ? 9 : 42);
+    if (swim) p.vy *= Math.max(0, 1 - 2 * dt);
     if (onLadder) { p.landV = 0; if (p.vy > 4.6) p.vy = 4.6; }
-    if (p.landV > 0) { const dist = (p.landV * p.landV) / 84; if (dist > 3.2) this.hurt(Math.ceil(dist - 3), 0, "fall"); }
+    if (p.landV > 0 && !swim) { const dist = (p.landV * p.landV) / 84; if (dist > 3.2) this.hurt(Math.ceil(dist - 3), 0, "fall"); }
     if (Math.abs(p.vx) > 0.5 && p.onGround) this.addExh(Math.abs(p.vx) * dt * 0.012);
     for (const s of this.slimes) if (s.hurt <= 0 && p.x < s.x + s.w && p.x + p.w > s.x && p.y < s.y + s.h && p.y + p.h > s.y) this.hurt(3, s.x + s.w / 2 > p.x + p.w / 2 ? -1 : 1, "slime");
   }
   hurt(n, dir, why) {
     const p = this.player;
-    if (n <= 0 || (p.invuln > 0 && why !== "hunger")) return;
+    const env = why === "hunger" || why === "drown" || why === "lava" || why === "fire" || why === "cactus";
+    if (n <= 0 || (p.invuln > 0 && !env)) return;
     if (why === "slime") {
       const def = this.defense();
       n = Math.max(1, Math.round(n * (1 - Math.min(20, def) * 0.04)));
       for (let i = 0; i < 4; i++) this.wearArmor(i);
     }
-    p.hp -= n; if (why !== "hunger") p.invuln = 1;
+    p.hp -= n; if (!env) p.invuln = 1;
     this.regenT = 0;
     if (dir) { p.vx = dir * 7; p.vy = -7; }
     this.addExh(0.1);
@@ -412,7 +334,7 @@ export class Sandbox {
     for (const st of all) if (st) this.dropStack(st, cx, cy, true);
     this.inv = this._emptyInv(); this.armor = [null, null, null, null]; this.cursor = null; this.grid.fill(null); this.win = null;
     this.xp = 0; this.food = 20; this.sat = 5; this.exh = 0;
-    p.hp = p.maxHp; p.x = this.spawn.x; p.y = this.spawn.y; p.vx = p.vy = 0; p.invuln = 2;
+    p.air = 15; p.burn = 0; p.hp = p.maxHp; p.x = this.spawn.x; p.y = this.spawn.y; p.vx = p.vy = 0; p.invuln = 2;
     this.slimes.length = 0;
   }
   _villager(v, dt) {
@@ -441,7 +363,7 @@ export class Sandbox {
     }
     if (s.onGround) s.vx *= 0.8;
     this._body(s, dt);
-    if (Math.hypot(p.x - s.x, p.y - s.y) > 60 || s.y > H) this.slimes.splice(this.slimes.indexOf(s), 1);
+    if (Math.hypot(p.x - s.x, p.y - s.y) > 60 || s.y > H || this.fluidOf(s) === B.LAVA) this.slimes.splice(this.slimes.indexOf(s), 1);
   }
   _trySpawn() {
     if (this.slimes.length >= 6) return;
@@ -461,3 +383,4 @@ export class Sandbox {
 }
 
 installInventory(Sandbox, { clamp, REACH, MAX_HP, W, H, SURF, SPAWN_X });
+installFluids(Sandbox, { clamp, W, H });
