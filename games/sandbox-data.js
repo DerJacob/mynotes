@@ -11,7 +11,9 @@ export const B = {
   // Etappe 2
   GRAVEL: 27, SNOW: 28, GRASS_SNOW: 29, SANDSTONE: 30, CACTUS: 31, DEADBUSH: 32,
   BIRCH_LOG: 33, BIRCH_LEAVES: 34, SPRUCE_LOG: 35, SPRUCE_LEAVES: 36, JUNGLE_LOG: 37, JUNGLE_LEAVES: 38, ACACIA_LOG: 39, ACACIA_LEAVES: 40,
-  WATER: 41, LAVA: 42, DEEPSLATE: 43, COPPER: 44, REDSTONE: 45, LAPIS: 46, EMERALD: 47, OBSIDIAN: 48, ICE: 49, CLAY: 50
+  WATER: 41, LAVA: 42, DEEPSLATE: 43, COPPER: 44, REDSTONE: 45, LAPIS: 46, EMERALD: 47, OBSIDIAN: 48, ICE: 49, CLAY: 50,
+  // Etappe 3
+  WOOL: 51, BED: 52
 };
 export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG];
 export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES];
@@ -75,6 +77,8 @@ BLOCKS[B.EMERALD] = def("emerald", { solid: true, lcost: 3, hard: 4.5, tool: "pi
 BLOCKS[B.OBSIDIAN] = def("obsidian", { solid: true, lcost: 3, hard: 75, tool: "pick", tier: 4, drop: "obsidian" });
 BLOCKS[B.ICE] = def("ice", { solid: true, lcost: 0, hard: 0.75, tool: "pick", drop: null });
 BLOCKS[B.CLAY] = def("clay", { solid: true, lcost: 3, hard: 0.9, tool: "shovel", drop: "clay" });
+BLOCKS[B.WOOL] = def("wool", { solid: true, lcost: 3, hard: 1.2, tool: "shears", drop: "wool" });
+BLOCKS[B.BED] = def("bed", { hard: 0.3, drop: "bed", interact: true });
 
 // ---------------------------------------------------------------------
 // Gegenstände
@@ -103,6 +107,19 @@ item("raw_iron", "Roheisen"); item("raw_gold", "Rohgold");
 item("iron_ingot", "Eisenbarren"); item("gold_ingot", "Goldbarren"); item("diamond", "Diamant");
 item("stick", "Stock", { fuel: 5 }); item("apple", "Apfel", { food: [4, 2.4] });
 item("slimeball", "Schleimball");
+// Etappe 3: Beute, Fleisch, Waffen
+blockItem("wool", "Wolle", B.WOOL, { fuel: 5 }); blockItem("bed", "Bett", B.BED, { stack: 1 });
+item("leather", "Leder"); item("feather", "Feder"); item("egg", "Ei", { stack: 16 }); item("bone", "Knochen"); item("bone_meal", "Knochenmehl");
+item("string", "Faden"); item("gunpowder", "Schwarzpulver"); item("spider_eye", "Spinnenauge"); item("ender_pearl", "Enderperle", { stack: 16 }); item("flint", "Feuerstein");
+item("arrow", "Pfeil"); item("bow", "Bogen", { stack: 1, dur: 384, fuel: 15 }); item("shield", "Schild", { stack: 1, dur: 336, fuel: 15 });
+item("shears", "Schere", { stack: 1, dur: 238, tool: "shears", tier: 1, speed: 5, dmg: 1, mat: "iron" });
+item("milk_bucket", "Milcheimer", { stack: 1 });
+item("raw_beef", "Rohes Rindfleisch", { food: [3, 1.8] }); item("steak", "Steak", { food: [8, 12.8] });
+item("raw_porkchop", "Rohes Schweinefleisch", { food: [3, 1.8] }); item("cooked_porkchop", "Gebratenes Schweinefleisch", { food: [8, 12.8] });
+item("raw_chicken", "Rohes Hühnchen", { food: [2, 1.2] }); item("cooked_chicken", "Gebratenes Hühnchen", { food: [6, 7.2] });
+item("raw_mutton", "Rohes Hammelfleisch", { food: [2, 1.2] }); item("cooked_mutton", "Gebratenes Hammelfleisch", { food: [6, 9.6] });
+item("raw_rabbit", "Rohes Kaninchen", { food: [3, 1.8] }); item("cooked_rabbit", "Gebratenes Kaninchen", { food: [5, 6] });
+item("rotten_flesh", "Verrottetes Fleisch", { food: [4, 0.8] });
 
 // Werkzeuge und Rüstung: Stufe (tier) bestimmt, welche Erze etwas fallen lassen
 export const MATERIALS = {
@@ -126,6 +143,9 @@ for (const [m, M] of Object.entries(MATERIALS)) {
   if (M.armor) ARMOR_SLOTS.forEach((s, i) => item(`${m}_${s}`, `${M.name}${ARMOR_NAMES[s]}`, { stack: 1, armor: { slot: i, def: M.armor.def[i] }, dur: ARMOR_FACTOR[i] * M.armor.dur, mat: m }));
 }
 
+// Lederrüstung (Material nur für Rüstung, daher nicht in MATERIALS: dort würden auch Lederwerkzeuge entstehen)
+ARMOR_SLOTS.forEach((sl, i) => item(`leather_${sl}`, `Leder${ARMOR_NAMES[sl]}`, { stack: 1, armor: { slot: i, def: [1, 3, 2, 1][i] }, dur: ARMOR_FACTOR[i] * 5, mat: "leather" }));
+
 export const hasTag = (id, tag) => !!ITEMS[id] && !!ITEMS[id].tags && ITEMS[id].tags.includes(tag);
 export const stackMax = id => (ITEMS[id] ? ITEMS[id].stack : 64);
 
@@ -148,6 +168,16 @@ shaped("furnace", 1, ["CCC", "C C", "CCC"], { C: "cobble" });
 shaped("door", 3, ["PP", "PP", "PP"], { P: "#planks" });
 shaped("ladder", 3, ["S S", "SSS", "S S"], { S: "stick" });
 shaped("brick", 4, ["SS", "SS"], { S: "stone" });
+shaped("bow", 1, [" SX", "S X", " SX"], { S: "stick", X: "string" });
+shaped("arrow", 4, ["F", "S", "W"], { F: "flint", S: "stick", W: "feather" });
+shaped("shield", 1, ["PIP", "PPP", " P "], { P: "#planks", I: "iron_ingot" });
+shaped("shears", 1, [" I", "I "], { I: "iron_ingot" });
+shaped("bed", 1, ["WWW", "PPP"], { W: "wool", P: "#planks" });
+shaped("wool", 1, ["SS", "SS"], { S: "string" });
+shapeless("bone_meal", 3, ["bone"]);
+{ const k = { X: "leather" };
+  shaped("leather_helmet", 1, ["XXX", "X X"], k); shaped("leather_chest", 1, ["X X", "XXX", "XXX"], k);
+  shaped("leather_legs", 1, ["XXX", "X X", "X X"], k); shaped("leather_boots", 1, ["X X", "X X"], k); }
 for (const [m, M] of Object.entries(MATERIALS)) {
   const key = { X: M.ing, S: "stick" };
   shaped(`${m}_pick`, 1, ["XXX", " S ", " S "], key);
@@ -166,6 +196,7 @@ for (const [m, M] of Object.entries(MATERIALS)) {
 /** Ofen: Zutat → [Ergebnis, Erfahrung] */
 export const SMELT = {
   raw_iron: ["iron_ingot", 0.7], raw_gold: ["gold_ingot", 1], raw_copper: ["copper_ingot", 0.7], sand: ["glass", 0.1], cobble: ["stone", 0.1], clay: ["brick", 0.3],
+  raw_beef: ["steak", 0.35], raw_porkchop: ["cooked_porkchop", 0.35], raw_chicken: ["cooked_chicken", 0.35], raw_mutton: ["cooked_mutton", 0.35], raw_rabbit: ["cooked_rabbit", 0.35],
   log: ["charcoal", 0.15], birch_log: ["charcoal", 0.15], spruce_log: ["charcoal", 0.15], jungle_log: ["charcoal", 0.15], acacia_log: ["charcoal", 0.15]
 };
 export const SMELT_TIME = 10;

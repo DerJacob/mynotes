@@ -175,6 +175,14 @@
 .sb-rm { min-width: 0; }
 .sb-rn { font-size: .78rem; font-weight: 650; }
 .sb-rc { font-size: .66rem; line-height: 1.2; }
+.sb-advcount { font-size: .8rem; margin-bottom: 6px; }
+.sb-advlist { display: flex; flex-direction: column; gap: 4px; width: min(360px, 78vw); max-height: min(340px, 56vh); overflow-y: auto; padding-right: 2px; }
+.sb-adv { display: flex; align-items: center; gap: 10px; padding: 4px 8px; background: #a8a8a8; border: 2px solid; border-color: #777 #eee #eee #777; color: #555; }
+.sb-adv.ok { background: #e8dca0; color: #222; border-color: #fff #666 #666 #fff; }
+.sb-advic { font-size: 1.3rem; width: 28px; text-align: center; filter: grayscale(1); opacity: .6; }
+.sb-adv.ok .sb-advic { filter: none; opacity: 1; }
+.sb-advn { font-size: .82rem; font-weight: 700; }
+.sb-advd { font-size: .7rem; line-height: 1.25; }
 .sb-cursor { position: absolute; left: 0; top: 0; z-index: 9; pointer-events: none; width: 32px; height: 32px; }
 .sb-cursor[hidden] { display: none; }
 @media (max-width: 760px) {

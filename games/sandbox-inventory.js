@@ -2,7 +2,7 @@
 // Blockdorf – Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen, Hunger, Erfahrung
 // Wird an die Klasse Sandbox gehängt (installInventory) und hält sandbox-engine.js übersichtlich.
 // =====================================================================
-import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant } from "./sandbox-data.js?v=3";
+import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant } from "./sandbox-data.js?v=4";
 
 export function installInventory(Sandbox, K) {
   const { clamp, REACH } = K;
@@ -221,7 +221,7 @@ export function installInventory(Sandbox, K) {
   };
   P._windowCheck = function () {
     const w = this.win;
-    if (!w || w.kind === "inv") return;
+    if (!w || w.kind === "inv" || w.kind === "adv") return;
     const p = this.player;
     if (Math.hypot(w.x + 0.5 - (p.x + p.w / 2), w.y + 0.5 - (p.y + p.h / 2)) > REACH + 2 || !BLOCKS[this.tile(w.x, w.y)].interact) this.closeWindow();
   };
@@ -375,7 +375,7 @@ export function installInventory(Sandbox, K) {
     this.setTile(x, y, B.AIR);
     const key = `${x},${y}`, ent = this.ents.get(key);
     if (ent) { for (const st of ent.s) if (st) this.dropStack(st, x + 0.5, y + 0.5, true); this.ents.delete(key); }
-    if (bd.drop && harvest) { const dn = bd.dropN ? bd.dropN[0] + Math.floor(this.rng() * (bd.dropN[1] - bd.dropN[0] + 1)) : 1; this.dropFrom(bd.drop, dn, x, y, true); }
+    if (bd.drop && harvest && !this._noDrops) { const dn = bd.dropN ? bd.dropN[0] + Math.floor(this.rng() * (bd.dropN[1] - bd.dropN[0] + 1)) : 1; this.dropFrom(id === B.GRAVEL && this.rng() < 0.1 ? "flint" : bd.drop, dn, x, y, true); }
     if (isLeaves(id)) {
       const r = this.rng(); if (r < (id === B.LEAVES || id === B.BIRCH_LEAVES ? 0.06 : 0)) this.dropFrom("apple", 1, x, y, true); else if (r < 0.16) this.dropFrom("stick", 1, x, y, true);
     }
@@ -400,6 +400,7 @@ export function installInventory(Sandbox, K) {
     for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
       const nx = x + dx, ny = y + dy, id = this.tile(nx, ny);
       if (id === B.TORCH && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("torch", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
+      else if (id === B.BED && !BLOCKS[this.tile(nx, ny + 1)].solid && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("bed", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); }
       else if (isPlant(id) && !BLOCKS[this.tile(nx, ny + 1)].solid) { this.setTile(nx, ny, B.AIR); this.events.push({ t: "break", x: nx, y: ny, id }); }
       else if (id === B.CACTUS && this.tile(nx, ny + 1) !== B.SAND && this.tile(nx, ny + 1) !== B.CACTUS) { this.setTile(nx, ny, B.AIR); this.dropFrom("cactus", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
       else if (id === B.LADDER && !this._ladderOk(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("ladder", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
@@ -473,7 +474,9 @@ export function installInventory(Sandbox, K) {
         this.openWindow(bd.entity, tx, ty); return true;
       }
       if (id >= B.DOOR_B && id <= B.DOOR_TO) return this._toggleDoor(tx, ty);
+      if (id === B.BED) return this.sleep(tx, ty);
     }
+    if (this.mobUse(tx, ty)) return true;
     const s = this.selStack();
     if (s && (s.id === "bucket" || s.id === "water_bucket" || s.id === "lava_bucket")) return this.useBucket(tx, ty);
     if (s && ITEMS[s.id].food && this.food < 20) return this.eat();
@@ -497,7 +500,7 @@ export function installInventory(Sandbox, K) {
     if (solid) {
       const box = { x: tx, y: isDoor ? ty - 1 : ty, w: 1, h: isDoor ? 2 : 1 };
       const over = b => b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
-      if (over(this.player) || this.villagers.some(over) || this.slimes.some(over)) return false;
+      if (over(this.player) || this.villagers.some(over) || this.mobs.some(over)) return false;
     }
     this.setTile(tx, ty, id);
     if (isDoor) this.setTile(tx, ty - 1, B.DOOR_T);
@@ -510,32 +513,7 @@ export function installInventory(Sandbox, K) {
     return true;
   };
 
-  // ---------- Kampf ----------
-  /** Hieb auf einen Schleim an (mx, my) in Blockkoordinaten. Liefert true, wenn getroffen. */
-  P.attack = function (mx, my) {
-    const p = this.player;
-    if (p.atkCd > 0 || this.win) return false;
-    for (const s of this.slimes) {
-      if (mx < s.x - 0.4 || mx > s.x + s.w + 0.4 || my < s.y - 0.4 || my > s.y + s.h + 0.4) continue;
-      if (Math.hypot(s.x + s.w / 2 - (p.x + p.w / 2), s.y + s.h / 2 - (p.y + p.h / 2)) > REACH - 0.5) continue;
-      const tool = this.heldTool(), dmg = tool.dmg;
-      s.hp -= dmg; s.hurt = 0.3; p.atkCd = 0.5;
-      if (tool.type) this._wear(this.inv, this.sel, tool.type === "sword" ? 1 : 2);
-      this.addExh(0.1);
-      const dir = s.x + s.w / 2 > p.x + p.w / 2 ? 1 : -1;
-      s.vx = dir * 7; s.vy = -6;
-      this.events.push({ t: "hit", x: s.x + s.w / 2, y: s.y, n: dmg });
-      if (s.hp <= 0) {
-        this.slimes.splice(this.slimes.indexOf(s), 1); this.stats.kills++;
-        this.events.push({ t: "kill", x: s.x + s.w / 2, y: s.y + s.h / 2 });
-        const n = Math.floor(this.rng() * 3);
-        if (n) this.dropStack(newStack("slimeball", n), s.x + s.w / 2, s.y + s.h / 2, true);
-        this.addXp(4);
-      }
-      return true;
-    }
-    return false;
-  };
+  // ---------- Kampf: siehe sandbox-mobs.js ----------
 
   // ---------- Ofen ----------
   P._furnaceXp = function () {
