@@ -27,7 +27,7 @@ export const GAMES = [
     title: "Blockdorf",
     emoji: "⛏️",
     desc: "Abbauen, handwerken, bauen – eine Pixelwelt mit Höhlen, Erzen, Tag und Nacht. Dein Dorf wartet schon auf dich.",
-    load: () => import("./sandbox.js?v=1"),
+    load: () => import("./sandbox.js?v=2"),
     summary: r => r && r.day ? "Tag " + r.day + " · " + fmt(r.mined || 0) + " abgebaut · " + fmt(r.built || 0) + " gebaut" : "Neue Welt"
   },
   {
