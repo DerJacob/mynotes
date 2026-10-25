@@ -3,19 +3,23 @@
 // Alles wird beim Start per Code gemalt, es gibt keine Bilddateien. Die Texturen sind eigene Malereien im
 // kantigen Minecraft-Stil (nicht die Originale).
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=2";
-import { mulberry32 } from "./sandbox-engine.js?v=2";
+import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=3";
+import { mulberry32 } from "./sandbox-noise.js?v=3";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 
-export const IDX = { FLOWER2: 27, FLOWER3: 28, WALL_DIRT: 29, WALL_STONE: 30, FURNACE_LIT: 31, CRACK: 32 };   // 32…36 = Risse in 5 Stufen
-const ATLAS_N = 37;
+// Spalte = Block-ID (0…50); Zusatz-Bilder ab 60. Zeile 1 enthält die nach Biom gefärbten Varianten von Gras, Laub und hohem Gras.
+export const IDX = { FLOWER2: 60, FLOWER3: 61, WALL_DIRT: 62, WALL_STONE: 63, FURNACE_LIT: 64, CRACK: 65 /* 65…69 = Risse in 5 Stufen */, LAVA2: 70, WALL_DEEP: 71, WATER2: 72, ORE_DEEP: 80 /* 80…87 */ };
+export const ORE_DEEP = { [B.COAL]: 80, [B.IRON]: 81, [B.GOLD]: 82, [B.DIAMOND]: 83, [B.COPPER]: 84, [B.REDSTONE]: 85, [B.LAPIS]: 86, [B.EMERALD]: 87 };
+// Farb-Faktoren (R, G, B) für Gras/Laub je Biom – Reihenfolge wie BIOMES in sandbox-world.js
+export const BIOME_TINT = [[1, 1, 1], [0.9, 0.96, 0.88], [1.04, 1.02, 0.88], [0.7, 0.92, 0.86], [0.82, 0.98, 0.94], [1.4, 0.96, 0.6], [1.38, 0.97, 0.62], [0.72, 1.14, 0.58], [0.74, 0.8, 0.56], [0.86, 1.0, 0.92], [1, 1, 1]];
+const ATLAS_N = 96;
 
 export function makeAtlas() {
   const cv = document.createElement("canvas");
-  cv.width = ATLAS_N * T; cv.height = T;
+  cv.width = ATLAS_N * T; cv.height = T * 2;
   const g = cv.getContext("2d");
   const avg = [];
   const paint = (index, fn) => {
@@ -182,6 +186,111 @@ export function makeAtlas() {
     for (let n = 0; n < (k + 1) * 7; n++) { set(x, y, [20, 14, 10], 210); x = clamp(x + Math.floor(r() * 3) - 1, 0, 15); y = clamp(y + Math.floor(r() * 3) - 1, 0, 15); if (n % 7 === 6) { x = 8; y = 8; } }
     for (let n = 0; n < (k + 1) * 4; n++) { let cx = 8, cy = 8; const dx = r() < 0.5 ? -1 : 1, dy = r() < 0.5 ? -1 : 1; for (let s = 0; s < 8; s++) { cx += dx * (r() < 0.7 ? 1 : 0); cy += dy * (r() < 0.7 ? 1 : 0); set(cx, cy, [20, 14, 10], 190); } }
   });
+
+  // ---------- Etappe 2: Biome, Flüssigkeiten, Tiefe ----------
+  const px4 = (set, r, base, k, rare) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { let c = noise(base, k, r); if (rare && r() < rare[0]) c = rare[1]; set(x, y, c); } };
+  paint(B.GRAVEL, (set, r) => {
+    px4(set, r, [130, 126, 124], 20);
+    for (let i = 0; i < 16; i++) { const x = Math.floor(r() * 14), y = Math.floor(r() * 14), c = r() < 0.5 ? [98, 94, 94] : [168, 162, 158]; set(x, y, c); set(x + 1, y, c); set(x, y + 1, noise(c, 12, r)); }
+  });
+  paint(B.SNOW, (set, r) => px4(set, r, [244, 248, 252], 8, [0.08, [210, 226, 242]]));
+  paint(B.GRASS_SNOW, (set, r) => {
+    dirtPix(set, r, 5);
+    const edge = []; for (let x = 0; x < T; x++) edge[x] = 4 + Math.floor(r() * 3);
+    for (let x = 0; x < T; x++) { for (let y = 0; y < edge[x]; y++) set(x, y, noise(y < 2 ? [248, 251, 255] : [226, 238, 248], 8, r)); set(x, edge[x], [210, 224, 238]); }
+  });
+  paint(B.SANDSTONE, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      let c = noise([222, 202, 142], 12, r);
+      if (y === 0 || y === 15) c = [206, 184, 124]; else if (y === 5 || y === 10) c = [200, 176, 118];
+      set(x, y, c);
+    }
+    for (let i = 0; i < 10; i++) set(1 + Math.floor(r() * 13), 1 + Math.floor(r() * 13), [236, 218, 162]);
+  });
+  paint(B.CACTUS, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const edge = x < 2 || x > 13;
+      let c = noise(edge ? [30, 98, 44] : x % 4 === 2 ? [52, 138, 58] : [64, 156, 62], 8, r);
+      set(x, y, c);
+    }
+    for (let y = 1; y < T; y += 3) for (const x of [4, 8, 12]) { set(x + (y % 2), y, [230, 238, 190]); }
+    for (let y = 0; y < T; y++) { set(0, y, [22, 70, 32]); set(15, y, [22, 70, 32]); }
+  });
+  paint(B.DEADBUSH, (set, r) => {
+    const br = [[8, 15, 8, 9], [8, 9, 4, 5], [8, 10, 12, 4], [6, 7, 3, 3], [10, 7, 13, 5]];
+    for (const [x0, y0, x1, y1] of br) { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) set(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), i % 2 ? [120, 82, 40] : [96, 64, 30]); }
+  });
+  const logTex = (id, base, dark, light) => paint(id, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const s = x % 4 === 0 ? -24 : x % 4 === 2 ? 10 : 0; set(x, y, noise([base[0] + s, base[1] + s, base[2] + s * 0.7], 10, r)); }
+    for (let y = 6; y <= 10; y++) for (let x = 4; x <= 7; x++) if (((x - 5.5) ** 2) / 4 + ((y - 8) ** 2) / 7 < 1) set(x, y, dark);
+    if (light) light(set, r);
+  });
+  logTex(B.BIRCH_LOG, [216, 214, 202], [60, 56, 50], (set, r) => { for (let i = 0; i < 9; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16), w = 2 + Math.floor(r() * 3); for (let k = 0; k < w; k++) set(x + k, y, [38, 36, 34]); } });
+  logTex(B.SPRUCE_LOG, [66, 48, 30], [38, 26, 16]);
+  logTex(B.JUNGLE_LOG, [92, 70, 40], [54, 38, 20], (set, r) => { for (let i = 0; i < 12; i++) set(Math.floor(r() * 16), Math.floor(r() * 16), [64, 104, 40]); });
+  logTex(B.ACACIA_LOG, [126, 112, 98], [96, 70, 50], (set, r) => { for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) if (x % 4 === 2 && r() < 0.5) set(x, y, [172, 98, 52]); });
+  const leafTex = (id, cols, hole = 0.12) => paint(id, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const q = r(); if (q < hole) continue; set(x, y, noise(q < 0.4 ? cols[0] : q < 0.8 ? cols[1] : cols[2], 10, r)); }
+  });
+  leafTex(B.BIRCH_LEAVES, [[96, 140, 54], [122, 166, 66], [152, 192, 84]]);
+  leafTex(B.SPRUCE_LEAVES, [[28, 66, 48], [40, 88, 60], [58, 112, 74]], 0.1);
+  leafTex(B.JUNGLE_LEAVES, [[24, 112, 30], [38, 150, 38], [76, 190, 54]], 0.14);
+  leafTex(B.ACACIA_LEAVES, [[88, 118, 40], [114, 146, 52], [146, 176, 68]]);
+  // Wasser: zwei Bilder (Wellen verschieben sich)
+  const waterTex = (id, ph) => paint(id, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const w = Math.sin((x + ph * 4) * 0.8 + y * 0.5) + Math.sin((x - ph * 3) * 0.4 - y * 1.1);
+      let c = noise([46 + w * 5, 96 + w * 8, 214 + w * 5], 8, r);
+      if (w > 1.5) c = [110, 160, 244];
+      set(x, y, c, 178);
+    }
+  });
+  waterTex(B.WATER, 0); waterTex(IDX.WATER2, 1);
+  const lavaTex = (id, ph) => paint(id, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const w = Math.sin((x + ph * 5) * 0.7 + Math.sin(y * 0.6) * 2) + Math.sin(y * 0.9 - (x + ph * 3) * 0.3);
+      let c = w > 1.1 ? [255, 214, 70] : w > 0.2 ? [250, 140, 30] : w > -0.8 ? [216, 76, 14] : [150, 36, 10];
+      set(x, y, noise(c, 12, r));
+    }
+  });
+  lavaTex(B.LAVA, 0); lavaTex(IDX.LAVA2, 1);
+  // Tiefenschiefer, Erze, Obsidian, Eis, Ton
+  const deepBase = (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      let c = noise([60, 60, 68], 12, r);
+      if (y % 5 === 0) c = [c[0] - 12, c[1] - 12, c[2] - 10]; else if ((x + y * 3) % 11 === 0) c = [c[0] + 14, c[1] + 14, c[2] + 16];
+      set(x, y, c);
+    }
+  };
+  paint(B.DEEPSLATE, deepBase);
+  wall(IDX.WALL_DEEP, [38, 38, 46]);
+  const ORES = [[B.COAL, [30, 30, 36], [92, 92, 100], 7], [B.IRON, [208, 152, 118], [240, 200, 170], 6], [B.GOLD, [246, 206, 62], [255, 244, 160], 6], [B.DIAMOND, [70, 220, 214], [220, 255, 252], 6],
+    [B.COPPER, [196, 108, 70], [90, 190, 150], 7], [B.REDSTONE, [186, 22, 22], [255, 96, 80], 8], [B.LAPIS, [36, 66, 190], [110, 150, 250], 7], [B.EMERALD, [36, 190, 84], [170, 255, 190], 5]];
+  for (const [id, base, hi, n] of ORES) {
+    if (id >= 27) paint(id, (set, r) => { stoneBase(set, r); specks(set, r, base, hi, n); });
+    paint(ORE_DEEP[id], (set, r) => { deepBase(set, r); specks(set, r, base, hi, n); });
+  }
+  paint(B.OBSIDIAN, (set, r) => { px4(set, r, [22, 14, 38], 14); for (let i = 0; i < 12; i++) { const x = Math.floor(r() * 14), y = Math.floor(r() * 14); set(x, y, [74, 36, 120]); set(x + 1, y, [52, 26, 90]); } });
+  paint(B.ICE, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) set(x, y, noise([150, 200, 250], 12, r), 215);
+    for (let i = 0; i < 4; i++) { let x = 2 + Math.floor(r() * 10), y = Math.floor(r() * 5); for (let k = 0; k < 7; k++) { set(x, y, [226, 244, 255], 235); x += r() < 0.5 ? 1 : 0; y += 1; } }
+  });
+  paint(B.CLAY, (set, r) => px4(set, r, [160, 166, 184], 10, [0.06, [140, 146, 166]]));
+  // ---------- gefärbte Varianten (Zeile 2): Gras, Laub, hohes Gras je Biom ----------
+  {
+    const grab = i => g.getImageData(i * T, 0, T, T);
+    const srcs = [grab(B.GRASS), grab(B.LEAVES), grab(B.TALLGRASS)];
+    BIOME_TINT.forEach((tn, bi) => {
+      srcs.forEach((src, k) => {
+        const out = g.createImageData(T, T), a = src.data, o = out.data;
+        for (let i = 0; i < a.length; i += 4) {
+          const green = a[i + 1] > a[i] + 6 && a[i + 1] > a[i + 2] + 6;
+          o[i] = clamp(green ? a[i] * tn[0] : a[i], 0, 255); o[i + 1] = clamp(green ? a[i + 1] * tn[1] : a[i + 1], 0, 255); o[i + 2] = clamp(green ? a[i + 2] * tn[2] : a[i + 2], 0, 255); o[i + 3] = a[i + 3];
+        }
+        g.putImageData(out, (bi * 3 + k) * T, T);
+      });
+    });
+  }
   return { cv, avg };
 }
 
@@ -246,6 +355,17 @@ function paintItem(g, atlas, id) {
     case "stick": line(3, 14, 12, 4, STICK, 2); line(4, 13, 11, 5, "#9a6c3c", 1); break;
     case "apple": R(4, 5, 8, 7, "#d63a2c"); R(5, 4, 6, 1, "#e85a44"); R(5, 12, 6, 1, "#a82418"); R(5, 6, 2, 2, "#ff8a76"); R(7, 2, 1, 3, "#5a3a20"); R(8, 2, 3, 2, "#4aa84a"); break;
     case "slimeball": R(4, 5, 8, 8, "#5cc878"); R(5, 4, 6, 1, "#7ce09a"); R(5, 13, 6, 1, "#3c9858"); R(6, 6, 2, 2, "#b4f4c4"); break;
+    case "raw_copper": R(3, 5, 9, 8, "#b8795a"); R(4, 4, 6, 2, "#d49270"); R(5, 7, 2, 2, "#68c8a4"); R(9, 9, 2, 2, "#e8a07c"); R(4, 12, 8, 1, "#8a583e"); break;
+    case "copper_ingot": R(2, 7, 12, 5, "#d4825a"); R(3, 6, 10, 1, "#f2a880"); R(2, 12, 12, 1, "#a05a38"); R(2, 7, 1, 5, "#f2a880"); R(13, 7, 1, 6, "#a05a38"); break;
+    case "redstone": R(4, 8, 8, 4, "#b01818"); R(5, 6, 6, 3, "#d82424"); R(3, 10, 3, 2, "#8c1010"); R(9, 5, 3, 2, "#ff5a48"); R(6, 9, 2, 1, "#ff8a78"); R(10, 11, 3, 2, "#e03030"); break;
+    case "lapis": R(4, 5, 8, 8, "#2848b8"); R(5, 4, 6, 1, "#4a6ae0"); R(5, 13, 6, 1, "#1a2c80"); R(6, 6, 2, 2, "#8aa8ff"); R(9, 9, 2, 2, "#3a5ad0"); break;
+    case "emerald": R(5, 3, 6, 2, "#9af0b0"); R(3, 5, 10, 3, "#28c05c"); R(4, 8, 8, 2, "#1a9a46"); R(6, 10, 4, 2, "#127836"); R(6, 3, 2, 1, "#e0ffe8"); break;
+    case "bucket": case "water_bucket": case "lava_bucket": {
+      R(3, 5, 10, 1, "#9a9ca8"); R(4, 6, 8, 7, "#c4c7d2"); R(5, 13, 6, 1, "#8a8d9a"); R(4, 6, 1, 7, "#e6e8f0"); R(11, 6, 1, 7, "#8a8d9a"); R(5, 3, 1, 3, "#8a8d9a"); R(10, 3, 1, 3, "#8a8d9a"); R(5, 3, 6, 1, "#8a8d9a");
+      if (id === "water_bucket") { R(5, 6, 6, 3, "#3f78e8"); R(5, 6, 6, 1, "#8ab4ff"); }
+      else if (id === "lava_bucket") { R(5, 6, 6, 3, "#f08a1c"); R(5, 6, 6, 1, "#ffd24a"); R(8, 7, 2, 1, "#e0480c"); }
+      break;
+    }
     default: R(4, 4, 8, 8, "#f0f"); break;
   }
 }
@@ -284,6 +404,7 @@ export function makeArt() {
   };
   mk("heart", ["..XX.XX..", ".XHXXXXX.", "XHXXXXXXX", "XXXXXXXXX", ".XXXXXXX.", "..XXXXX..", "...XXX...", "....X...."], ["#e02a34", "#ff9a9a", "#e02a34"], "#3a2a2a");
   mk("food", ["....XXXX.", "...XHXXXX", "...XXXXXX", "...XXXXXX", "....XXXX.", "..BBX....", ".BB......", "BB......."], ["#b8642c", "#e8a064", "#f2f0e6"], "#3a302a");
+  mk("bubble", [".XXXX.", "XHXXXX", "XHXXXX", "XXXXXX", ".XXXX."], ["#5ab0ff", "#e4f4ff", "#5ab0ff"], "#26334a");
   mk("armor", ["X.XXXXX.X", "XXXXXXXXX", "XXXXXXXXX", ".XXXXXXX.", ".XXXXXXX.", "..XXXXX..", "...XXX..."], ["#aeb4c4", "#e8ecf8", "#aeb4c4"], "#3a3c44");
   return { atlas, avg, base, icon, hud };
 }

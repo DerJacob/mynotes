@@ -186,3 +186,7 @@
 .sb-bottom { width: max-content; }
 .sb-bottom .sb-barsrow, .sb-bottom .sb-xp { width: 100%; box-sizing: border-box; }
 @media (max-width: 640px) { .sb-slot { width: 36px; height: 36px; } .sb-slot .sb-ic { width: 26px; height: 26px; } .sb-hi { width: 13px; height: 13px; } }
+
+/* Etappe 2: Luftblasen über den Hungersymbolen */
+.sb-foodcol { align-items: flex-end; }
+.sb-airrow { justify-content: flex-end; }
