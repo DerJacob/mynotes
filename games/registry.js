@@ -23,10 +23,18 @@ export const GAMES = [
     })
   },
   {
-    id: "aufbau",
-    title: "ASCII-Aufbauspiel",
-    emoji: "🏘️",
-    desc: "Ein kleines Aufbauspiel nur aus Zeichen – das bauen wir als Nächstes selbst.",
+    id: "sandbox",
+    title: "Blockdorf",
+    emoji: "⛏️",
+    desc: "Abbauen, handwerken, bauen – eine Pixelwelt mit Höhlen, Erzen, Tag und Nacht. Dein Dorf wartet schon auf dich.",
+    load: () => import("./sandbox.js?v=1"),
+    summary: r => r && r.day ? "Tag " + r.day + " · " + fmt(r.mined || 0) + " abgebaut · " + fmt(r.built || 0) + " gebaut" : "Neue Welt"
+  },
+  {
+    id: "zivilisation",
+    title: "Zivilisation",
+    emoji: "🏛️",
+    desc: "Ein Rundenstrategiespiel: Städte gründen, Forschung, Handel und Reiche – das bauen wir als Nächstes.",
     soon: true
   }
 ];
