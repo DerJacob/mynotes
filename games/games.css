@@ -73,3 +73,50 @@
   .tg-side .tg-box.stats { flex: 2 1 160px; }
   .tg-mini.tall { height: 108px; width: 48px; }   /* gleiches Seitenverhältnis wie die Zeichenfläche (96 × 216) */
 }
+
+/* ---------------- Blockdorf ---------------- */
+.sb { width: 100%; display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+.sb-view { position: relative; width: 100%; height: clamp(320px, calc(100vh - 190px), 720px); border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); background: #0b1020; line-height: 1.3; }
+.sb-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; }
+.sb-overlay { border-radius: 0; background: rgba(10, 14, 30, .72); color: #fff; z-index: 5; }
+.sb-overlay .tg-ov-title { color: #fff; }
+.sb-ov-text { color: #cfd6ee; max-width: 34ch; }
+.sb-overlay .btn.ghost { color: #dfe5ff; }
+.sb-overlay .btn.danger { background: #c0392b; color: #fff; border-color: transparent; }
+.sb-hud-top { position: absolute; left: 10px; right: 10px; top: 8px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; z-index: 3; }
+.sb-left { display: flex; flex-direction: column; gap: 3px; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); font-size: .8rem; font-variant-numeric: tabular-nums; }
+.sb-hearts { display: flex; gap: 2px; font-size: 1.05rem; line-height: 1; }
+.sb-heart { color: rgba(255, 255, 255, .28); }
+.sb-heart.on { color: #ff4d5e; }
+.sb-right { display: flex; gap: 6px; pointer-events: auto; }
+.sb-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .3); background: rgba(10, 14, 30, .55); color: #fff; font-size: 1rem; line-height: 1; }
+.sb-btn:hover { background: rgba(10, 14, 30, .8); }
+.sb-hotbar { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(10, 14, 30, .6); z-index: 3; max-width: calc(100% - 16px); overflow-x: auto; }
+.sb-hotbar:empty { display: none; }
+.sb-slot { position: relative; flex: 0 0 auto; width: 44px; height: 44px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .08); padding: 0; display: grid; place-items: center; }
+.sb-slot.on { border-color: #ffd866; background: rgba(255, 216, 102, .2); }
+.sb-ic { width: 32px; height: 32px; image-rendering: pixelated; display: block; }
+.sb-n { position: absolute; right: 3px; bottom: 1px; font-size: .68rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
+.sb-key { position: absolute; left: 4px; top: 1px; font-size: .6rem; color: rgba(255, 255, 255, .6); }
+.sb-toast { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); background: rgba(10, 14, 30, .78); color: #fff; padding: 6px 12px; border-radius: 10px; font-size: .85rem; z-index: 4; text-align: center; max-width: 90%; pointer-events: none; }
+.sb-toast[hidden], .sb-craft[hidden] { display: none; }
+.sb-craft { position: absolute; right: 8px; top: 52px; bottom: 64px; width: min(310px, calc(100% - 16px)); overflow-y: auto; background: rgba(14, 18, 38, .92); color: #fff; border: 1px solid rgba(255, 255, 255, .22); border-radius: 12px; padding: 10px; z-index: 4; display: flex; flex-direction: column; gap: 8px; }
+.sb-craft-head { display: flex; justify-content: space-between; align-items: center; }
+.sb-x { background: none; border: 0; color: #fff; font-size: 1rem; padding: 4px 8px; }
+.sb-craft-note { font-size: .78rem; color: #aeb7d8; }
+.sb-recipe { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; background: rgba(255, 255, 255, .06); opacity: .75; }
+.sb-recipe.can { opacity: 1; background: rgba(255, 216, 102, .12); }
+.sb-recipe .sb-ic { width: 28px; height: 28px; flex: 0 0 auto; }
+.sb-r-main { flex: 1; min-width: 0; font-size: .82rem; }
+.sb-r-name { font-weight: 650; }
+.sb-r-cost .ok { color: #9be39b; } .sb-r-cost .no { color: #ff9b9b; }
+.sb-r-hint { color: #ffd866; font-size: .72rem; }
+.sb-touch { display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; user-select: none; -webkit-user-select: none; }
+.sb-mode { font-size: .85rem; }
+.sb-help { display: grid; gap: 5px; font-size: .82rem; color: var(--muted); justify-items: center; text-align: center; }
+.sb-help kbd { margin-right: 3px; }
+@media (pointer: coarse), (max-width: 760px) {
+  .sb-touch { display: grid; }
+  .sb-help { display: none; }
+  .sb-view { height: clamp(260px, 56vh, 560px); }
+}
