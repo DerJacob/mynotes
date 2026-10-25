@@ -5,8 +5,9 @@
 //   A/D laufen · W/Leertaste springen (Leiter: W hoch, S runter) · linke Maustaste abbauen/kämpfen
 //   rechte Maustaste benutzen/bauen/essen · 1–9 oder Mausrad: Platz wählen · E Inventar · Q werfen · P/Esc Pause
 // =====================================================================
-import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES } from "./sandbox-engine.js?v=3";
-import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=3";
+import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV } from "./sandbox-engine.js?v=4";
+import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=4";
+import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=4";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -30,7 +31,7 @@ export function mount(root, ctx) {
   try { if (ctx.record && ctx.record.w) { game = new Sandbox({ data: ctx.record.w }); hadSave = true; } } catch (_) { game = null; }
   if (!game) game = new Sandbox({});
   let state = "ready", raf = 0, last = 0, destroyed = false, confirmNew = false;
-  let saveT = 0, dirty = false, flash = 0, toastT = 0, sound = false, touchMode = "mine", placeCd = 0, swingT = 0, walkPh = 0, shake = 0;
+  let saveT = 0, dirty = false, flash = 0, toastT = 0, sound = false, touchMode = "mine", placeCd = 0, swingT = 0, walkPh = 0, shake = 0, fade = 0, whiteout = 0;
   const keys = { left: false, right: false, jump: false, down: false };
   const mouse = { px: 0, py: 0, in: false, down: false, btn: 0 };
   const cam = { x: game.player.x, y: game.player.y };
@@ -57,6 +58,7 @@ export function mount(root, ctx) {
   const btn = (label, title, fn, cls = "") => h("button", { class: "sb-btn " + cls, type: "button", title, "aria-label": title, onclick: fn }, label);
   const soundBtn = btn("🔇", "Ton an/aus", () => { sound = !sound; if (sound) ensureAudio(); soundBtn.textContent = sound ? "🔊" : "🔇"; blurFocus(); });
   const invBtn = btn("🎒", "Inventar (E)", () => { toggleInv(); blurFocus(); });
+  const advBtn = btn("🏆", "Fortschritte (G)", () => { toggleAdv(); blurFocus(); });
   const pauseBtn = btn("⏸", "Pause (P)", () => { pause(); });
   const ovTitle = h("div", { class: "tg-ov-title" }, "Blockdorf");
   const ovText = h("div", { class: "sb-ov-text" });
@@ -67,6 +69,7 @@ export function mount(root, ctx) {
   const help = h("div", { class: "sb-help" },
     h("div", null, kbd("A"), kbd("D"), " laufen · ", kbd("W"), " / ", kbd("Leertaste"), " springen · ", kbd("S"), " Leiter runter"),
     h("div", null, "Linke Maustaste: abbauen und kämpfen · rechte: benutzen, bauen, essen"),
+    h("div", null, "Bogen: rechte Maustaste halten und loslassen · Schild: rechte Maustaste halten · ", kbd("G"), " Fortschritte"),
     h("div", null, kbd("1"), "–", kbd("9"), " / Mausrad: Platz · ", kbd("E"), " Inventar · ", kbd("Q"), " werfen · ", kbd("P"), " Pause"));
   const touchBtn = (label, action, title) => {
     const b = h("button", { class: "tg-tb", type: "button", title, "aria-label": title }, label);
@@ -80,7 +83,7 @@ export function mount(root, ctx) {
 
   root.appendChild(h("div", { class: "sb" },
     h("div", { class: "sb-view" }, canvas,
-      h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info), h("div", { class: "sb-right" }, invBtn, soundBtn, pauseBtn)),
+      h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info), h("div", { class: "sb-right" }, advBtn, invBtn, soundBtn, pauseBtn)),
       toastEl, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), winWrap, cursorEl, overlay),
     touch, help));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
@@ -141,17 +144,28 @@ export function mount(root, ctx) {
   function syncWindow() {
     const w = game.win;
     if (!w) { if (!winWrap.hidden) { winWrap.hidden = true; cursorEl.hidden = true; sig.win = ""; } return; }
-    if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; }
+    if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.blocking = false; game.bow = null; }
     const e = game.winEnt();
-    const sg = JSON.stringify([w.kind, game.inv, game.armor, game.grid, game.cursor, e && e.s]);
+    const sg = JSON.stringify([w.kind, game.inv, game.armor, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0]);
     if (sg !== sig.win) { sig.win = sg; renderWindow(); renderBook(); updateCursor(); }
     if (w.kind === "furnace" && e) { const f = winPanel.querySelector(".sb-flame i"), a = winPanel.querySelector(".sb-arrow i"); if (f) f.style.height = e.burnMax ? Math.round((e.burn / e.burnMax) * 100) + "%" : "0%"; if (a) a.style.width = Math.round((e.cook / 10) * 100) + "%"; }
   }
   const arrow = () => h("div", { class: "sb-arrow" }, h("i"));
   function renderWindow() {
     const w = game.win; winPanel.textContent = "";
-    const title = { inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe" }[w.kind];
+    const title = { inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe", adv: "Fortschritte" }[w.kind];
     winPanel.appendChild(h("div", { class: "sb-wt" }, h("b", null, title), h("button", { class: "sb-x", type: "button", title: "Schließen (E)", onclick: () => { game.closeWindow(); blurFocus(); } }, "✕")));
+    if (w.kind === "adv") {
+      const ids = Object.keys(ADV), done = ids.filter(k => game.adv[k]).length;
+      winPanel.appendChild(h("div", { class: "sb-advcount" }, `${done} von ${ids.length} geschafft`));
+      const list = h("div", { class: "sb-advlist" });
+      for (const k of [...ids.filter(k => game.adv[k]), ...ids.filter(k => !game.adv[k])]) {
+        const ok = !!game.adv[k];
+        list.appendChild(h("div", { class: "sb-adv" + (ok ? " ok" : "") }, h("div", { class: "sb-advic" }, ok ? "🏆" : "🔒"), h("div", null, h("div", { class: "sb-advn" }, ADV[k][0]), h("div", { class: "sb-advd" }, ADV[k][1]))));
+      }
+      winPanel.appendChild(list);
+      return;
+    }
     const row = (area, from, n, cls = "") => { const r = h("div", { class: "sb-srow " + cls }); for (let i = from; i < from + n; i++) r.appendChild(slotEl(area, i, game.slots(area)[i])); return r; };
     const grid = size => { const gEl = h("div", { class: "sb-grid", style: { gridTemplateColumns: `repeat(${size}, 40px)` } }); for (let i = 0; i < size * size; i++) gEl.appendChild(slotEl("grid", i, game.grid[i])); return gEl; };
     const outStack = () => { const r = game.craftResult(); return r ? { id: r.id, n: r.n, d: 0 } : null; };
@@ -223,6 +237,7 @@ export function mount(root, ctx) {
     if (el && !game.win) { e.preventDefault(); game.select(Number(el.getAttribute("data-idx"))); }
   });
   function toggleInv() { if (game.win) game.closeWindow(); else game.openWindow("inv"); sig.win = ""; }
+  function toggleAdv() { if (game.win && game.win.kind === "adv") game.closeWindow(); else game.openWindow("adv"); sig.win = ""; }
   function say(text, ms = 2600) { toastEl.textContent = text; toastEl.hidden = false; toastT = ms / 1000; }
 
   // ---------- Ton (winzige Synthesizer-Klänge, standardmäßig aus) ----------
@@ -240,6 +255,12 @@ export function mount(root, ctx) {
     else if (k === "pick") tone(120 + Math.random() * 40, 0.04, "square", 0.025); else if (k === "kill") tone(420, 0.14, "square", 0.05, -250); else if (k === "jump") tone(250, 0.07, "triangle", 0.03, 90);
     else if (k === "door") tone(200, 0.08, "square", 0.04, -60); else if (k === "eat") { tone(300, 0.05, "square", 0.04); setTimeout(() => tone(260, 0.05, "square", 0.04), 80); }
     else if (k === "hiss") tone(700, 0.18, "sawtooth", 0.025, -450);
+    else if (k === "boom") { tone(70, 0.55, "sawtooth", 0.09, -40); tone(120, 0.4, "square", 0.06, -80); }
+    else if (k === "shoot") tone(520, 0.12, "triangle", 0.05, -380); else if (k === "thunk") tone(150, 0.06, "square", 0.04, -60);
+    else if (k === "block") { tone(900, 0.05, "square", 0.04); tone(600, 0.07, "square", 0.03); }
+    else if (k === "tame") { tone(660, 0.08, "triangle", 0.05); setTimeout(() => tone(880, 0.12, "triangle", 0.05), 90); }
+    else if (k === "tp") tone(900, 0.2, "sine", 0.04, -700); else if (k === "splash") tone(300, 0.2, "sawtooth", 0.025, 200);
+    else if (k === "adv") { tone(523, 0.12, "triangle", 0.06); setTimeout(() => tone(659, 0.12, "triangle", 0.06), 120); setTimeout(() => tone(784, 0.25, "triangle", 0.06), 240); }
     else if (k === "xp") tone(900 + Math.random() * 300, 0.06, "sine", 0.03); else if (k === "click") tone(420, 0.03, "square", 0.02);
   }
 
@@ -260,7 +281,7 @@ export function mount(root, ctx) {
   }
   function pause() {
     if (state !== "playing") return;
-    state = "paused"; cancelAnimationFrame(raf); raf = 0; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop();
+    state = "paused"; cancelAnimationFrame(raf); raf = 0; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop(); game.bow = null; game.blocking = false;
     saveNow(); confirmNew = false; showOverlay("paused"); draw(0);
   }
   function newWorld() {
@@ -285,6 +306,7 @@ export function mount(root, ctx) {
       return;
     }
     if (e.key === "e" || e.key === "E") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
+    if (e.key === "g" || e.key === "G") { e.preventDefault(); if (!e.repeat) toggleAdv(); return; }
     if (e.key === "Escape" && game.win) { e.preventDefault(); game.closeWindow(); sig.win = ""; return; }
     if (e.key === "p" || e.key === "P" || e.key === "Escape") { e.preventDefault(); if (!e.repeat) pause(); return; }
     if (e.key >= "1" && e.key <= "9") { e.preventDefault(); game.select(Number(e.key) - 1); return; }
@@ -310,11 +332,16 @@ export function mount(root, ctx) {
     if (mouse.btn === 2) {                       // Benutzen sofort ausführen, damit auch ganz kurze Klicks/Tipper zählen
       const m = worldMouse();
       mouse.first = false;
-      if (game.use(Math.floor(m.x), Math.floor(m.y))) { placeCd = 0.25; dirty = true; }
-    }
+      if (game.use(Math.floor(m.x), Math.floor(m.y))) { placeCd = 0.25; dirty = true; mouse.used = true; }
+      else if (game.selItem() === "bow" && game.count("arrow") === 0) say("Du brauchst Pfeile für den Bogen.", 1800);
+    } else mouse.used = false;
   });
   canvas.addEventListener("pointermove", setPointer);
-  const up = () => { mouse.down = false; game.mineStop(); };
+  const up = () => {
+    if (mouse.down && mouse.btn === 2 && game.bow) { const m = worldMouse(); if (game.bowRelease(m.x, m.y)) { dirty = true; } }
+    game.bow = null; game.blocking = false; mouse.used = false;
+    mouse.down = false; game.mineStop();
+  };
   canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
   canvas.addEventListener("pointerleave", () => { mouse.in = false; });
   canvas.addEventListener("contextmenu", e => e.preventDefault());
@@ -358,12 +385,15 @@ export function mount(root, ctx) {
       const m = worldMouse(), tx = Math.floor(m.x), ty = Math.floor(m.y);
       if (mouse.btn === 2) {
         placeCd -= dt;
+        const heldIt = game.selItem();
+        if (heldIt === "shield") game.blocking = true; else if (heldIt === "bow" && !mouse.used) { if (game.bowDraw(dt) && game.bow.t < dt * 1.5) sfx("click"); }
         if (mouse.first) { mouse.first = false; if (game.use(tx, ty)) { placeCd = 0.25; dirty = true; } }
         else if (placeCd <= 0) { const it = game.selItem(); if (it && ITEMS[it].block && !BLOCKS[game.tile(tx, ty)].interact && game.place(tx, ty)) { placeCd = 0.12; dirty = true; } }
       }
       else if (game.attack(m.x, m.y)) { swingT = 0.25; sfx("kill"); }
       else { const r = game.mineStep(tx, ty, dt); mining = r === 1 || r === 2; if (mining && Math.random() < dt * 9) sfx("pick"); if (r === 1 && Math.random() < dt * 22) spark(tx + 0.5, ty + 0.5, game.tile(tx, ty), 1); }
     } else game.mineStop();
+    game.aim = mouse.in ? worldMouse() : null;
     swingT = Math.max(0, swingT - dt);
     game.player.swing = mining ? 1 : swingT > 0 ? 1 : 0;
     game.update(dt);
@@ -390,21 +420,40 @@ export function mount(root, ctx) {
       else if (e.t === "bucket") { spark(e.x + 0.5, e.y + 0.5, e.fill ? B.WATER : B.LAVA, 6); sfx("place"); dirty = true; }
       else if (e.t === "died") say("Du bist gestorben. Deine Sachen liegen dort, wo es passiert ist – du hast 5 Minuten.", 5000);
       else if (e.t === "day") say(`Tag ${e.day}`, 2200);
-      else if (e.t === "hit") { spark(e.x, e.y + 0.4, 1000, 5); floats.push({ x: e.x, y: e.y - 0.2, text: `-${e.n}`, color: "#ffb0a0", life: 0.9 }); }
-      else if (e.t === "kill") { spark(e.x, e.y, 1000, 14); }
+      else if (e.t === "hit") { spark(e.x, e.y + 0.4, [200, 40, 40], 5); floats.push({ x: e.x, y: e.y - 0.2, text: `-${e.n}`, color: e.src === "player" || e.src === "arrow" ? "#ffe0a0" : "#ffb0a0", life: 0.9 }); if (e.src === "player") sfx("kill"); }
+      else if (e.t === "kill") { spark(e.x, e.y, MOB_COLORS[e.type] || [200, 200, 200], 14); sfx("kill"); }
+      else if (e.t === "crit") { floats.push({ x: e.x, y: e.y - 0.9, text: "Krit!", color: "#fff070", life: 0.9 }); }
+      else if (e.t === "shoot") sfx("shoot");
+      else if (e.t === "thunk") sfx("thunk");
+      else if (e.t === "block") { spark(game.player.x + game.player.w / 2 + game.player.face * 0.6, game.player.y + 0.8, [210, 214, 226], 6); sfx("block"); }
+      else if (e.t === "splash") { spark(e.x, e.y, [180, 70, 220], 14); sfx("splash"); }
+      else if (e.t === "fuse") sfx("hiss");
+      else if (e.t === "boom") {
+        spark(e.x, e.y, B.STONE, 26); spark(e.x, e.y, B.DIRT, 14); spark(e.x, e.y, [70, 70, 70], 22); spark(e.x, e.y, [255, 190, 70], 14); sfx("boom"); whiteout = 0.35; dirty = true;
+        const d = Math.hypot(e.x - game.player.x, e.y - game.player.y); shake = Math.max(shake, clamp(1 - d / 16, 0, 1) * 0.8);
+      }
+      else if (e.t === "tp") { spark(e.x + 0.3, e.y + 1, [176, 60, 232], 10); sfx("tp"); }
+      else if (e.t === "tame") { for (let i = 0; i < 4; i++) floats.push({ x: e.x + (i - 1.5) * 0.4, y: e.y - 0.3 - (i % 2) * 0.3, text: "❤", color: "#ff6080", life: 1.1 }); sfx("tame"); dirty = true; }
+      else if (e.t === "smoke") floats.push({ x: e.x, y: e.y - 0.3, text: "…", color: "#d0d0d0", life: 0.9 });
+      else if (e.t === "sit") say(e.sit ? "Er bleibt sitzen." : "Er folgt dir wieder.", 1400);
+      else if (e.t === "shear") { spark(e.x, e.y + 0.6, [236, 236, 230], 10); sfx("click"); dirty = true; }
+      else if (e.t === "nosleep") say(e.why === "day" ? "Du kannst nur nachts schlafen." : "Du kannst jetzt nicht schlafen – Monster sind in der Nähe!", 2400);
+      else if (e.t === "sleep") { fade = 1.6; say("Gute Nacht … der Morgen graut.", 2400); dirty = true; }
+      else if (e.t === "nobed") say("Dein Bett fehlt oder wurde zerstört – du startest am Dorf.", 3600);
+      else if (e.t === "adv") { say(`🏆 Fortschritt: ${e.name}`, 4200); sfx("adv"); dirty = true; sig.win = ""; }
       else if (e.t === "jump") sfx("jump");
     }
     game.events.length = 0;
     // Partikel, Schwebetexte, Meldungen
     for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.life -= dt; q.vy += 24 * dt; q.x += q.vx * dt; q.y += q.vy * dt; if (q.life <= 0) parts.splice(i, 1); }
     for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.life -= dt; f.y -= dt * 0.9; if (f.life <= 0) floats.splice(i, 1); }
-    flash = Math.max(0, flash - dt); shake = Math.max(0, shake - dt);
+    flash = Math.max(0, flash - dt); shake = Math.max(0, shake - dt); fade = Math.max(0, fade - dt); whiteout = Math.max(0, whiteout - dt);
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
     if (heldT > 0) { heldT -= dt; if (heldT <= 0) heldName.hidden = true; }
     saveT += dt; if (saveT > 20 && dirty) saveNow();
   }
   function spark(x, y, id, n) {
-    const col = id === 1000 ? [90, 210, 120] : avg[id] || [200, 200, 200];
+    const col = Array.isArray(id) ? id : id === 1000 ? [90, 210, 120] : avg[id] || [200, 200, 200];
     for (let i = 0; i < n; i++) parts.push({ x: x + (Math.random() - 0.5) * 0.6, y: y + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 6, vy: -Math.random() * 5 - 1, life: 0.5 + Math.random() * 0.5, c: col, s: 0.1 + Math.random() * 0.12 });
   }
   function floatText(text, color) {
@@ -518,8 +567,19 @@ export function mount(root, ctx) {
     }
     // --- Figuren ---
     for (const v of game.villagers) drawVillager(v, scr);
-    for (const s of game.slimes) drawSlime(s, scr);
+    for (const m of game.mobs) {
+      if (m.x + m.w < left - 3 || m.x > left + cw / tile + 3) continue;
+      const [mx, my] = scr(m.x, m.y + (m.visOff || 0));
+      drawMob(g, m, mx, my + Math.round((m.visOff || 0) * T * S), S, T, performance.now(), art);
+      if (m.hp !== m._uiHp) { if (m._uiHp !== undefined) m._uiT = performance.now(); m._uiHp = m.hp; }
+    }
+    for (const a of game.proj) { const [ax, ay] = scr(a.x, a.y); drawProjectile(g, a, ax, ay, S, performance.now()); }
     drawPlayer(scr);
+    if (game.bow && game.bow.t > 0.05) {
+      const p = game.player, [px, py] = scr(p.x + p.w / 2, p.y), bwid = 16 * S, f = Math.min(1, game.bow.t / 1.0);
+      g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(Math.round(px - bwid / 2) - S, py - 7 * S - S, bwid + 2 * S, 3 * S + 2 * S);
+      g.fillStyle = f >= 1 ? "#ffe14a" : "#ffffff"; g.fillRect(Math.round(px - bwid / 2), py - 7 * S, Math.round(bwid * f), 3 * S);
+    }
     drawFluids(fluids, tile);
     // Partikel
     for (const q of parts) { const [bx, by] = scr(q.x, q.y); g.globalAlpha = clamp(q.life * 2, 0, 1); g.fillStyle = rgb(q.c); g.fillRect(bx, by, Math.max(2, q.s * tile), Math.max(2, q.s * tile)); }
@@ -531,10 +591,25 @@ export function mount(root, ctx) {
     // --- Text über den Figuren (nicht abgedunkelt) ---
     g.textBaseline = "middle"; g.textAlign = "center";
     for (const v of game.villagers) if (v.sayT > 0 && v.say) bubble(v.say, ...scr(v.x + v.w / 2, v.y - 0.2));
+    {
+      const now = performance.now(), mw = mouse.in ? worldMouse() : null;
+      for (const m of game.mobs) {
+        const hov = mw && mw.x > m.x - 0.3 && mw.x < m.x + m.w + 0.3 && mw.y > m.y - 0.3 && mw.y < m.y + m.h + 0.3;
+        const recent = m._uiT && now - m._uiT < 3200;
+        if (!hov && !recent) continue;
+        if (m.x + m.w < left - 2 || m.x > left + cw / tile + 2) continue;
+        const [lx, ly] = scr(m.x + m.w / 2, m.y), bwid = Math.max(14, m.maxHp * 1.6) * S * 0.6, f = clamp(m.hp / m.maxHp, 0, 1);
+        g.fillStyle = "rgba(0,0,0,.6)"; g.fillRect(Math.round(lx - bwid / 2) - S, ly - 5 * S - S, Math.round(bwid) + 2 * S, 2.6 * S + 2 * S);
+        g.fillStyle = f > 0.5 ? "#5ad25a" : f > 0.25 ? "#e8c23a" : "#e04a3a"; g.fillRect(Math.round(lx - bwid / 2), ly - 5 * S, Math.round(bwid * f), Math.round(2.6 * S));
+        if (hov) { g.font = `bold ${Math.round(4.6 * S)}px system-ui, sans-serif`; g.textBaseline = "alphabetic"; g.lineWidth = S; g.strokeStyle = "rgba(0,0,0,.75)"; const nm = (m.tamed ? "♥ " : "") + MOBS[m.type].name; g.strokeText(nm, lx, ly - 7 * S); g.fillStyle = m.kind === "hostile" ? "#ffb0a0" : "#ffffff"; g.fillText(nm, lx, ly - 7 * S); g.textBaseline = "middle"; }
+      }
+    }
     g.font = `bold ${Math.round(5 * S)}px system-ui, sans-serif`;
     for (const f of floats) { const [fx, fy] = scr(f.x, f.y); g.globalAlpha = clamp(f.life * 1.6, 0, 1); g.lineWidth = S; g.strokeStyle = "rgba(0,0,0,.7)"; g.strokeText(f.text, fx, fy); g.fillStyle = f.color; g.fillText(f.text, fx, fy); }
     g.globalAlpha = 1;
     if (flash > 0) { g.fillStyle = `rgba(210,30,30,${flash * 0.5})`; g.fillRect(-8, -8, cw + 16, ch + 16); }
+    if (whiteout > 0) { g.fillStyle = `rgba(255,240,210,${whiteout * 1.1})`; g.fillRect(-8, -8, cw + 16, ch + 16); }
+    if (fade > 0) { g.fillStyle = `rgba(4,6,20,${Math.min(1, fade * 1.6)})`; g.fillRect(-8, -8, cw + 16, ch + 16); }
   }
 
   let lightImg = null, glowImg = null, lightW = 0, lightH = 0;
@@ -612,7 +687,7 @@ export function mount(root, ctx) {
     // Kopf
     R(3, 2 - bob, 7, 7, "#ecbc94"); R(3, 1 - bob, 8, 2.6, "#54341e"); R(2, 1.6 - bob, 2, 5.5, "#54341e"); R(8, 4.6 - bob, 1.6, 1.6, "#1e1e28"); R(7.5, 7 - bob, 2.5, 0.8, "#c88a6c");
     // Rüstung
-    const AC = { iron: ["#d0d3de", "#f4f5fa", "#8e91a0"], gold: ["#f2c93c", "#fff0a0", "#b8861a"], diamond: ["#4fe0d8", "#c8fffa", "#1f9c9e"] };
+    const AC = { leather: ["#a0612f", "#c98a52", "#6f4220"], iron: ["#d0d3de", "#f4f5fa", "#8e91a0"], gold: ["#f2c93c", "#fff0a0", "#b8861a"], diamond: ["#4fe0d8", "#c8fffa", "#1f9c9e"] };
     const arm = i => (game.armor[i] ? AC[ITEMS[game.armor[i].id].mat] : null);
     let c = arm(2); if (c) { R(3 + sw * 0.5, 17.5 - bob, 3, 5, c[0]); R(7 - sw * 0.5, 17.5 - bob, 3, 5, c[1]); R(2, 16.5 - bob, 9, 2, c[2]); }
     c = arm(3); if (c) { R(2.5 + sw * 0.5, 24.5 - bob, 4, 3.5, c[0]); R(6.5 - sw * 0.5, 24.5 - bob, 4, 3.5, c[2]); }
@@ -631,6 +706,7 @@ export function mount(root, ctx) {
       else { const sz = Math.round(7 * S); g.drawImage(base, 0, 0, T, T, Math.round(-sz * 0.2), Math.round(-sz * 0.9), sz, sz); }
     }
     g.restore();
+    if (game.blocking && game.selItem() === "shield") g.drawImage(art.base("shield"), 0, 0, T, T, Math.round(6.5 * S), Math.round(6 * S), Math.round(14 * S), Math.round(14 * S));
     g.restore();
   }
   function drawVillager(v, scr) {
@@ -645,18 +721,6 @@ export function mount(root, ctx) {
     R(2, 1.5 - bob, 7.5, 2.2, v.look === 1 ? "#d8d8d8" : "#4a3020"); R(1.5, 2 - bob, 1.6, 4, v.look === 1 ? "#d8d8d8" : "#4a3020");
     g.restore();
   }
-  function drawSlime(s, scr) {
-    const [bx, by] = scr(s.x, s.y), w = s.w * T * S, hh = s.h * T * S, sq = clamp(1 - s.vy * 0.03, 0.7, 1.35), sh = hh * sq, sw = w * (2 - sq) * 0.9 + w * 0.1;
-    const x = bx + (w - sw) / 2, y = by + (hh - sh);
-    g.globalAlpha = s.hurt > 0 ? 0.55 : 0.92;
-    g.fillStyle = "#3cae5e"; g.fillRect(Math.round(x), Math.round(y + sh * 0.25), Math.round(sw), Math.round(sh * 0.75));
-    g.fillRect(Math.round(x + sw * 0.12), Math.round(y), Math.round(sw * 0.76), Math.round(sh * 0.3));
-    g.fillStyle = "#7ce09a"; g.fillRect(Math.round(x + sw * 0.18), Math.round(y + sh * 0.1), Math.round(sw * 0.3), Math.round(sh * 0.12));
-    g.fillStyle = "#256f3c"; g.fillRect(Math.round(x), Math.round(y + sh * 0.85), Math.round(sw), Math.round(sh * 0.15));
-    g.fillStyle = "#10281a"; g.fillRect(Math.round(x + sw * 0.28), Math.round(y + sh * 0.38), Math.round(sw * 0.12), Math.round(sh * 0.2)); g.fillRect(Math.round(x + sw * 0.62), Math.round(y + sh * 0.38), Math.round(sw * 0.12), Math.round(sh * 0.2));
-    g.globalAlpha = 1;
-  }
-
   showOverlay("ready");
   hud();
   draw(0);

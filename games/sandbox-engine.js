@@ -2,15 +2,16 @@
 // Blockdorf – Regeln und Welt (ohne Oberfläche, ohne Uhr; update(dt) treibt alles an → testbar)
 //   Welt:      512 × 192 Blöcke, aus einer Zahl (seed) erzeugt: Hügel, Höhlen, Erze, Bäume, Sand, Dorf
 //   Licht:     Himmelslicht + Fackellicht, weich ausgebreitet (wie bei Terraria)
-//   Physik:    Spieler, Dorfbewohner, Schleime (Rechteck-Kollision, Stufen werden automatisch genommen)
+//   Physik:    Spieler, Dorfbewohner, Tiere und Monster (Rechteck-Kollision, Stufen werden automatisch genommen)
 //   Handwerk:  Abbauen mit Werkzeug-Stufen, Bauen, Rezepte, Werkbank
 //   Speichern: Blöcke als Lauflängen (Base64) – klein genug für den Spielstand im Drive
 // =====================================================================
 
-import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid } from "./sandbox-data.js?v=3";
-import { installInventory } from "./sandbox-inventory.js?v=3";
-import { installFluids, SRC } from "./sandbox-fluids.js?v=3";
-import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=3";
+import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid } from "./sandbox-data.js?v=4";
+import { installInventory } from "./sandbox-inventory.js?v=4";
+import { installFluids, SRC } from "./sandbox-fluids.js?v=4";
+import { installMobs } from "./sandbox-mobs.js?v=4";
+import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=4";
 export { BIOMES, BIOME_NAMES };
 export { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS };
 
@@ -18,10 +19,11 @@ export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
-import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=3";
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=4";
 export { mulberry32 };
+export { MOBS, ADV } from "./sandbox-mobs.js?v=4";
 
 // ---------------------------------------------------------------------
 // Blöcke ↔ Text (Lauflängen, Base64)
@@ -55,8 +57,8 @@ export function decodeTiles(str, len = W * H) {
 }
 
 const LINES = [
-  "Willkommen im Dorf!", "Nachts treiben sich Schleime in den Höhlen herum.", "Tief unten gibt es Eisen – und sogar Gold.",
-  "Fackeln halten die Dunkelheit fern.", "Mit einer Werkbank wird alles besser.", "Schönes Wetter heute!", "Hast du schon die Höhlen erkundet?",
+  "Willkommen im Dorf!", "Nachts treiben sich Zombies und Creeper herum – am besten ein Bett in der Nähe.", "Tief unten gibt es Eisen – und sogar Gold.",
+  "Fackeln halten die Dunkelheit fern.", "Mit einer Werkbank wird alles besser.", "Schönes Wetter heute!", "Hast du schon die Höhlen erkundet?", "Mit einem Knochen kannst du einen Wolf zähmen.",
   "Für Eisen brauchst du eine Steinspitzhacke."
 ];
 
@@ -75,6 +77,8 @@ export class Sandbox {
     this.sky = new Uint8Array(W * H);
     this.blk = new Uint8Array(W * H);
     this.spawnT = 2;
+    this._mobInit();
+    if (opts.data && opts.data.v >= 4) this._mobsFromData(opts.data.mobs); else this._populate();
     this.relight();
   }
 
@@ -108,13 +112,14 @@ export class Sandbox {
   _fresh() {
     this.time = 0.3; this.day = 1;
     this.stats = { mined: 0, built: 0, kills: 0 };
+    this.adv = {}; this.bed = null;
     this.spawn = { x: SPAWN_X - 6.4, y: SURF - 1.8 - 0.001 };
     this.player = { air: 15, burn: 0, x: this.spawn.x, y: this.spawn.y, w: 0.8, h: 1.8, vx: 0, vy: 0, onGround: false, face: 1, hp: MAX_HP, maxHp: MAX_HP, invuln: 0, coyote: 0, jumpBuf: 0, atkCd: 0, visOff: 0, stepUp: true };
     this._resetInventory();
     this._entities();
   }
   _entities() {
-    this.slimes = [];
+    this.mobs = [];
     this.villagers = [-17, 0, 16].map((dx, i) => ({
       x: SPAWN_X + dx + 1.6, y: SURF - 1.7 - 0.001, w: 0.7, h: 1.7, vx: 0, vy: 0, onGround: false, face: 1,
       home: SPAWN_X + dx + 3, t: 1 + i, dir: 0, say: null, sayT: 0, cool: 3 + i * 2, look: i, stepUp: true, visOff: 0
@@ -131,11 +136,12 @@ export class Sandbox {
       ents: [...this.ents.entries()].map(([k, e]) => { const [x, y] = k.split(",").map(Number); return { x, y, t: e.t, s: e.s.map(pk), burn: e.burn, burnMax: e.burnMax, cook: e.cook, xp: e.xp }; }),
       drops: this.drops.slice(-120).map(d => [d.id, d.n, d.d || 0, +d.x.toFixed(2), +d.y.toFixed(2)]),
       spawn: { x: +this.spawn.x.toFixed(2), y: +this.spawn.y.toFixed(2) },
-      time: +this.time.toFixed(4), day: this.day, stats: { ...this.stats }
+      time: +this.time.toFixed(4), day: this.day, stats: { ...this.stats },
+      mobs: this._mobsToData(), adv: { ...this.adv }, bed: this.bed ? { ...this.bed } : null
     };
   }
   _fromData(d) {
-    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
+    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3 && d.v !== 4) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
     this.seed = d.seed | 0;
     this.tiles = decodeTiles(d.tiles);
     this.ground = Int16Array.from(d.ground && d.ground.length === W ? d.ground : new Array(W).fill(SURF));
@@ -171,6 +177,8 @@ export class Sandbox {
       for (const a of d.drops || []) if (ITEMS[a[0]]) this.drops.push({ id: a[0], n: clamp(a[1] | 0, 1, stackMax(a[0])), d: a[2] | 0, x: +a[3], y: +a[4], vx: 0, vy: 0, w: 0.3, h: 0.3, age: 1, stepUp: false });
       if (d.spawn && Number.isFinite(d.spawn.x)) this.spawn = { x: d.spawn.x, y: d.spawn.y };
     }
+    if (d.adv && typeof d.adv === "object") for (const k of Object.keys(d.adv)) if (d.adv[k]) this.adv[k] = 1;
+    if (d.bed && Number.isFinite(d.bed.x) && Number.isFinite(d.bed.y)) this.bed = { x: d.bed.x | 0, y: d.bed.y | 0 };
     this.sel = clamp(d.sel | 0, 0, 8);
     this.time = Number.isFinite(d.time) ? d.time % 1 : 0.3;
     this.day = Math.max(1, d.day | 0);
@@ -272,14 +280,12 @@ export class Sandbox {
     this._player(dt);
     this._hunger(dt);
     for (const v of this.villagers) this._villager(v, dt);
-    for (const s of [...this.slimes]) this._slime(s, dt);
+    this._mobs(dt);
     this._drops(dt);
     this._furnaces(dt);
     this._decayStep(dt);
     this._fluidStep(dt);
     this._windowCheck();
-    this.spawnT -= dt;
-    if (this.spawnT <= 0) { this.spawnT = 1.5; this._trySpawn(); }
   }
   _player(dt) {
     const p = this.player, inp = this.input;
@@ -307,20 +313,27 @@ export class Sandbox {
     if (onLadder) { p.landV = 0; if (p.vy > 4.6) p.vy = 4.6; }
     if (p.landV > 0 && !swim) { const dist = (p.landV * p.landV) / 84; if (dist > 3.2) this.hurt(Math.ceil(dist - 3), 0, "fall"); }
     if (Math.abs(p.vx) > 0.5 && p.onGround) this.addExh(Math.abs(p.vx) * dt * 0.012);
-    for (const s of this.slimes) if (s.hurt <= 0 && p.x < s.x + s.w && p.x + p.w > s.x && p.y < s.y + s.h && p.y + p.h > s.y) this.hurt(3, s.x + s.w / 2 > p.x + p.w / 2 ? -1 : 1, "slime");
+    if (this.blocking && this.selItem() !== "shield") this.blocking = false;
   }
   hurt(n, dir, why) {
     const p = this.player;
     const env = why === "hunger" || why === "drown" || why === "lava" || why === "fire" || why === "cactus";
     if (n <= 0 || (p.invuln > 0 && !env)) return;
-    if (why === "slime") {
+    // Schild: Angriffe von vorn (Monster, Pfeile, Tränke) werden abgefangen
+    if (this.blocking && this.selItem() === "shield" && dir && p.face === -dir && (why === "mob" || why === "arrow" || why === "potion" || why === "slime")) {
+      this._wear(this.inv, this.sel, Math.max(1, Math.round(n)));
+      p.invuln = 0.4; p.vx = dir * 3.5;
+      this.events.push({ t: "block" });
+      return;
+    }
+    if (why === "slime" || why === "mob" || why === "arrow" || why === "explosion") {
       const def = this.defense();
       n = Math.max(1, Math.round(n * (1 - Math.min(20, def) * 0.04)));
       for (let i = 0; i < 4; i++) this.wearArmor(i);
     }
     p.hp -= n; if (!env) p.invuln = 1;
     this.regenT = 0;
-    if (dir) { p.vx = dir * 7; p.vy = -7; }
+    if (dir && why !== "explosion") { p.vx = dir * 7; p.vy = -7; }
     this.addExh(0.1);
     this.events.push({ t: "hurt", n, why });
     if (p.hp <= 0) this._die();
@@ -334,8 +347,12 @@ export class Sandbox {
     for (const st of all) if (st) this.dropStack(st, cx, cy, true);
     this.inv = this._emptyInv(); this.armor = [null, null, null, null]; this.cursor = null; this.grid.fill(null); this.win = null;
     this.xp = 0; this.food = 20; this.sat = 5; this.exh = 0;
+    if (this.bed && this.tile(this.bed.x, this.bed.y) !== B.BED) {          // Bett zerstört → zurück ans Weltspawn
+      this.bed = null; this.spawn = { x: SPAWN_X - 6.4, y: SURF - 1.8 - 0.001 }; this.events.push({ t: "nobed" });
+    }
     p.air = 15; p.burn = 0; p.hp = p.maxHp; p.x = this.spawn.x; p.y = this.spawn.y; p.vx = p.vy = 0; p.invuln = 2;
-    this.slimes.length = 0;
+    if (this._hit(p)) { const q = this._safeSpot(p.x, p.y); p.x = q.x; p.y = q.y; }
+    this.mobs = this.mobs.filter(m => m.kind !== "hostile"); this.proj.length = 0; this.bow = null; this.blocking = false;
   }
   _villager(v, dt) {
     v.t -= dt; v.sayT = Math.max(0, v.sayT - dt); v.cool -= dt;
@@ -353,34 +370,8 @@ export class Sandbox {
       v.face = p.x > v.x ? 1 : -1;
     }
   }
-  _slime(s, dt) {
-    s.hurt = Math.max(0, (s.hurt || 0) - dt); s.hopT -= dt;
-    const p = this.player, near = Math.hypot(p.x - s.x, p.y - s.y) < 22;
-    if (s.onGround && s.hopT <= 0) {
-      s.hopT = 0.9 + this.rng() * 0.8;
-      const dir = near ? (p.x > s.x ? 1 : -1) : (this.rng() < 0.5 ? -1 : 1);
-      s.vx = dir * (near ? 4.2 : 2); s.vy = -9; s.onGround = false;
-    }
-    if (s.onGround) s.vx *= 0.8;
-    this._body(s, dt);
-    if (Math.hypot(p.x - s.x, p.y - s.y) > 60 || s.y > H || this.fluidOf(s) === B.LAVA) this.slimes.splice(this.slimes.indexOf(s), 1);
-  }
-  _trySpawn() {
-    if (this.slimes.length >= 6) return;
-    const p = this.player, side = this.rng() < 0.5 ? -1 : 1;
-    const x = Math.floor(p.x + side * (14 + this.rng() * 14));
-    if (x < 2 || x >= W - 2) return;
-    const y0 = Math.max(2, Math.floor(p.y) - 12), y1 = Math.min(H - 4, Math.floor(p.y) + 14);
-    for (let y = y0; y < y1; y++) {
-      if (this.tile(x, y) === B.AIR && this.tile(x, y - 1) === B.AIR && BLOCKS[this.tile(x, y + 1)].solid) {
-        if (Math.abs(x - SPAWN_X) < 26 && y < SURF + 2) return;     // im Dorf bleibt es friedlich
-        if (this.lightAt(x, y) >= 5) return;
-        this.slimes.push({ x: x + 0.05, y: y + 0.3, w: 0.9, h: 0.7, vx: 0, vy: 0, onGround: false, hp: 10, hopT: 0.5 + this.rng(), hurt: 0, stepUp: false });
-        return;
-      }
-    }
-  }
 }
 
 installInventory(Sandbox, { clamp, REACH, MAX_HP, W, H, SURF, SPAWN_X });
 installFluids(Sandbox, { clamp, W, H });
+installMobs(Sandbox, { clamp, W, H, SURF, SPAWN_X, REACH });

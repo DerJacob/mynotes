@@ -3,8 +3,8 @@
 // Alles wird beim Start per Code gemalt, es gibt keine Bilddateien. Die Texturen sind eigene Malereien im
 // kantigen Minecraft-Stil (nicht die Originale).
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=3";
-import { mulberry32 } from "./sandbox-noise.js?v=3";
+import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=4";
+import { mulberry32 } from "./sandbox-noise.js?v=4";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -276,6 +276,23 @@ export function makeAtlas() {
     for (let i = 0; i < 4; i++) { let x = 2 + Math.floor(r() * 10), y = Math.floor(r() * 5); for (let k = 0; k < 7; k++) { set(x, y, [226, 244, 255], 235); x += r() < 0.5 ? 1 : 0; y += 1; } }
   });
   paint(B.CLAY, (set, r) => px4(set, r, [160, 166, 184], 10, [0.06, [140, 146, 166]]));
+  // ---------- Etappe 3: Wolle und Bett ----------
+  paint(B.WOOL, (set, r) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      let c = noise([236, 236, 232], 10, r);
+      if ((x + y * 2) % 7 === 0) c = [c[0] - 14, c[1] - 14, c[2] - 12]; else if (r() < 0.06) c = [250, 250, 248];
+      set(x, y, c);
+    }
+  });
+  paint(B.BED, (set, r) => {
+    for (const x of [0, 1, 14, 15]) for (let y = 12; y < 16; y++) set(x, y, noise([104, 72, 40], 8, r));              // Füße
+    for (let x = 0; x < 16; x++) { set(x, 10, [196, 150, 92]); set(x, 11, noise([150, 108, 62], 8, r)); set(x, 12, [118, 82, 46]); }   // Rahmen
+    for (let y = 5; y < 10; y++) for (let x = 0; x < 16; x++) set(x, y, noise(x < 6 ? [240, 240, 238] : [182, 36, 40], 10, r));      // Kissen + Decke
+    for (let x = 6; x < 16; x++) set(x, 5, [214, 70, 72]);
+    for (let x = 0; x < 6; x++) set(x, 9, [208, 208, 206]);
+    for (let y = 3; y < 10; y++) { set(0, y, [104, 72, 40]); set(1, y, [128, 90, 50]); }                                        // Kopfteil
+    for (let x = 6; x < 16; x++) set(x, 9, [140, 24, 30]);
+  });
   // ---------- gefärbte Varianten (Zeile 2): Gras, Laub, hohes Gras je Biom ----------
   {
     const grab = i => g.getImageData(i * T, 0, T, T);
@@ -300,7 +317,7 @@ export function makeAtlas() {
 // ---------------------------------------------------------------------
 const MAT_COL = {
   wood: ["#a4743f", "#c89658", "#6e4a24"], stone: ["#8d8f98", "#b4b6bf", "#5e6068"], iron: ["#d6d9e4", "#f4f5fa", "#8e91a0"],
-  gold: ["#f4c93a", "#fff0a0", "#b8861a"], diamond: ["#4fe0d8", "#c8fffa", "#1f9c9e"]
+  gold: ["#f4c93a", "#fff0a0", "#b8861a"], diamond: ["#4fe0d8", "#c8fffa", "#1f9c9e"], leather: ["#a0612f", "#c98a52", "#6f4220"]
 };
 const STICK = "#7a5230";
 
@@ -328,6 +345,8 @@ function paintItem(g, atlas, id) {
     } else if (it.tool === "hoe") {
       line(3, 14, 10, 7, STICK, 2);
       R(8, 3, 5, 2, c); R(8, 3, 5, 1, hi); R(8, 5, 2, 2, c); R(12, 4, 1, 1, lo);
+    } else if (it.tool === "shears") {
+      line(5, 9, 12, 2, c, 2); line(10, 9, 3, 2, hi, 2); R(3, 10, 4, 4, "#b8302c"); R(9, 10, 4, 4, "#b8302c"); R(4, 11, 2, 2, "#00000066"); R(10, 11, 2, 2, "#00000066"); P(8, 6, lo);
     } else {
       line(4, 12, 12, 4, c, 2); line(5, 12, 12, 5, hi, 1); P(12, 3, c); P(13, 3, hi);
       R(3, 11, 5, 2, lo); line(2, 14, 4, 12, STICK, 2); P(1, 15, "#4a3018");
@@ -366,6 +385,37 @@ function paintItem(g, atlas, id) {
       else if (id === "lava_bucket") { R(5, 6, 6, 3, "#f08a1c"); R(5, 6, 6, 1, "#ffd24a"); R(8, 7, 2, 1, "#e0480c"); }
       break;
     }
+    case "milk_bucket": {
+      R(3, 5, 10, 1, "#9a9ca8"); R(4, 6, 8, 7, "#c4c7d2"); R(5, 13, 6, 1, "#8a8d9a"); R(4, 6, 1, 7, "#e6e8f0"); R(11, 6, 1, 7, "#8a8d9a"); R(5, 3, 1, 3, "#8a8d9a"); R(10, 3, 1, 3, "#8a8d9a"); R(5, 3, 6, 1, "#8a8d9a");
+      R(5, 6, 6, 3, "#f6f6f2"); R(5, 6, 6, 1, "#ffffff"); break;
+    }
+    case "leather": R(3, 4, 10, 9, "#9a5a2c"); R(4, 3, 8, 1, "#b97a44"); R(3, 12, 10, 1, "#6c3c1c"); R(5, 6, 2, 1, "#d9a76c"); R(9, 8, 2, 1, "#d9a76c"); R(6, 10, 3, 1, "#7a4420"); R(3, 4, 1, 8, "#b97a44"); break;
+    case "feather": line(4, 13, 12, 4, "#f2f2f6", 3); line(3, 14, 13, 3, "#a8a8b8", 1); line(6, 12, 9, 12, "#dcdce6", 1); P(11, 3, "#ffffff"); break;
+    case "egg": R(6, 3, 4, 1, "#efe4cf"); R(5, 4, 6, 2, "#efe4cf"); R(4, 6, 8, 5, "#efe4cf"); R(5, 11, 6, 2, "#efe4cf"); R(10, 6, 2, 5, "#d6c8ae"); R(9, 11, 2, 2, "#d6c8ae"); P(6, 5, "#ffffff"); P(5, 7, "#fffaf0"); break;
+    case "bone": line(4, 12, 11, 5, "#ece8dc", 2); R(2, 11, 3, 3, "#ece8dc"); R(11, 2, 3, 3, "#ece8dc"); R(2, 13, 2, 1, "#c4bfae"); R(12, 4, 2, 1, "#c4bfae"); line(5, 13, 12, 6, "#c4bfae", 1); P(3, 11, "#ffffff"); P(12, 2, "#ffffff"); break;
+    case "bone_meal": R(4, 8, 8, 5, "#f0efe8"); R(5, 6, 6, 2, "#f0efe8"); R(6, 5, 4, 1, "#f8f8f4"); R(4, 12, 8, 1, "#cfcdc0"); P(6, 9, "#cfcdc0"); P(9, 10, "#cfcdc0"); P(7, 7, "#ffffff"); break;
+    case "string": line(3, 13, 6, 5, "#ecece6", 1); line(6, 5, 9, 12, "#d0d0c8", 1); line(9, 12, 12, 4, "#ecece6", 1); P(3, 13, "#b8b8b0"); P(12, 4, "#ffffff"); P(6, 5, "#ffffff"); break;
+    case "gunpowder": R(4, 8, 8, 5, "#585860"); R(5, 6, 6, 2, "#6c6c76"); R(6, 5, 4, 1, "#7c7c86"); R(4, 12, 8, 1, "#34343a"); P(6, 9, "#34343a"); P(9, 10, "#9a9aa4"); P(8, 7, "#9a9aa4"); break;
+    case "spider_eye": R(5, 4, 6, 1, "#a8283a"); R(4, 5, 8, 7, "#8a1c26"); R(5, 12, 6, 1, "#5a1018"); R(6, 7, 4, 4, "#2a0a10"); P(5, 6, "#d84a58"); P(10, 5, "#d84a58"); P(7, 8, "#ff8090"); break;
+    case "ender_pearl": R(6, 3, 4, 1, "#1d6b5a"); R(5, 4, 6, 1, "#1d6b5a"); R(4, 5, 8, 6, "#1d6b5a"); R(5, 11, 6, 1, "#124a3e"); R(6, 12, 4, 1, "#0f3c32"); R(5, 5, 4, 4, "#2a9a80"); R(5, 5, 2, 2, "#3cc6a4"); P(5, 5, "#b8ffe8"); R(9, 9, 2, 2, "#103c32"); break;
+    case "flint": R(6, 3, 4, 2, "#5a5c64"); R(5, 5, 6, 3, "#44464e"); R(4, 8, 8, 4, "#383a42"); R(6, 12, 5, 1, "#2a2c32"); R(6, 4, 2, 2, "#7a7c86"); P(6, 8, "#6a6c74"); R(9, 9, 2, 1, "#4c4e58"); break;
+    case "arrow": line(3, 13, 12, 4, "#8a6a42", 1); line(4, 13, 12, 5, "#6e5230", 1); R(11, 2, 3, 3, "#aeb2bc"); P(13, 2, "#e8ecf4"); R(1, 12, 4, 3, "#f0f0f4"); R(2, 11, 2, 1, "#c0c0cc"); R(1, 14, 3, 1, "#c0c0cc"); break;
+    case "bow": {
+      for (let k = 0; k <= 14; k++) { const t = k / 14, x = (1 - t) * (1 - t) * 3 + 2 * (1 - t) * t * 2 + t * t * 13, y = (1 - t) * (1 - t) * 13 + 2 * (1 - t) * t * 2 + t * t * 3; R(Math.round(x), Math.round(y), 2, 2, k > 5 && k < 9 ? "#c89658" : "#8a5a2c"); }
+      line(4, 14, 14, 4, "#ece8dc", 1); R(7, 7, 2, 2, "#5a3a1c"); break;
+    }
+    case "shield": R(3, 2, 10, 8, "#a07040"); R(4, 10, 8, 2, "#a07040"); R(5, 12, 6, 1, "#a07040"); R(6, 13, 4, 1, "#8a5a2c"); R(3, 2, 10, 1, "#c0c4d0"); R(3, 2, 1, 8, "#c0c4d0"); R(12, 2, 1, 8, "#8e91a0"); R(4, 9, 1, 3, "#c0c4d0"); R(11, 9, 1, 3, "#8e91a0"); R(5, 4, 6, 5, "#b02828"); R(7, 4, 2, 5, "#e8e8ee"); R(5, 6, 6, 1, "#e8e8ee"); R(4, 3, 8, 1, "#c89658"); break;
+    case "raw_beef": R(3, 5, 10, 7, "#c0463a"); R(4, 4, 7, 1, "#c0463a"); R(4, 12, 8, 1, "#8a2a24"); R(4, 5, 8, 1, "#de6a5e"); R(6, 7, 3, 1, "#f0b0a8"); R(9, 9, 2, 1, "#f0b0a8"); R(4, 10, 2, 1, "#f0b0a8"); R(12, 6, 1, 5, "#f0dcd4"); break;
+    case "steak": R(3, 5, 10, 7, "#8a4a26"); R(4, 4, 7, 1, "#8a4a26"); R(4, 12, 8, 1, "#52280e"); R(4, 5, 8, 1, "#b4703c"); line(5, 6, 9, 10, "#4a2210", 1); line(8, 6, 12, 10, "#4a2210", 1); R(12, 6, 1, 5, "#d8b890"); break;
+    case "raw_porkchop": R(3, 5, 10, 7, "#e48f90"); R(4, 4, 7, 1, "#e48f90"); R(4, 12, 8, 1, "#b0605f"); R(4, 5, 8, 1, "#f4b4b4"); R(5, 8, 3, 3, "#f8d0cc"); R(10, 7, 3, 3, "#efe6d2"); break;
+    case "cooked_porkchop": R(3, 5, 10, 7, "#b27440"); R(4, 4, 7, 1, "#b27440"); R(4, 12, 8, 1, "#74461c"); R(4, 5, 8, 1, "#d49a5c"); R(5, 8, 3, 3, "#c88a50"); R(10, 7, 3, 3, "#efe6d2"); P(7, 6, "#7a4a24"); P(9, 9, "#7a4a24"); break;
+    case "raw_chicken": R(5, 3, 7, 7, "#e9b898"); R(6, 2, 5, 1, "#e9b898"); R(6, 10, 5, 1, "#b88a6c"); R(6, 3, 4, 1, "#f6d4bc"); R(8, 10, 2, 3, "#efe6d2"); R(7, 13, 4, 2, "#efe6d2"); break;
+    case "cooked_chicken": R(5, 3, 7, 7, "#bc7a30"); R(6, 2, 5, 1, "#bc7a30"); R(6, 10, 5, 1, "#7e4a14"); R(6, 3, 4, 1, "#dca058"); R(8, 10, 2, 3, "#efe6d2"); R(7, 13, 4, 2, "#efe6d2"); P(8, 6, "#8a5018"); break;
+    case "raw_mutton": R(4, 3, 8, 8, "#be4a5a"); R(5, 2, 6, 1, "#be4a5a"); R(5, 11, 6, 1, "#862c38"); R(5, 3, 5, 1, "#dc7080"); R(6, 6, 3, 2, "#f0c0c8"); R(8, 11, 2, 3, "#efe6d2"); R(7, 14, 4, 1, "#efe6d2"); break;
+    case "cooked_mutton": R(4, 3, 8, 8, "#8e5030"); R(5, 2, 6, 1, "#8e5030"); R(5, 11, 6, 1, "#582c14"); R(5, 3, 5, 1, "#b87850"); R(6, 6, 3, 2, "#a46a40"); R(8, 11, 2, 3, "#efe6d2"); R(7, 14, 4, 1, "#efe6d2"); break;
+    case "raw_rabbit": R(4, 5, 7, 6, "#d09a7a"); R(5, 4, 5, 1, "#d09a7a"); R(5, 11, 5, 1, "#a06a4c"); R(5, 5, 4, 1, "#e8bca0"); R(9, 11, 2, 3, "#efe6d2"); R(8, 13, 4, 2, "#efe6d2"); break;
+    case "cooked_rabbit": R(4, 5, 7, 6, "#a8642c"); R(5, 4, 5, 1, "#a8642c"); R(5, 11, 5, 1, "#6a3a14"); R(5, 5, 4, 1, "#cc8a4c"); R(9, 11, 2, 3, "#efe6d2"); R(8, 13, 4, 2, "#efe6d2"); P(7, 7, "#6e3e16"); break;
+    case "rotten_flesh": R(3, 5, 10, 8, "#7a6a3c"); R(4, 4, 7, 1, "#7a6a3c"); R(4, 13, 8, 1, "#4c4224"); R(5, 6, 3, 2, "#5c7a3a"); R(9, 9, 3, 2, "#9a4a3a"); R(4, 10, 2, 2, "#5c7a3a"); R(10, 5, 2, 1, "#9a8a5a"); break;
     default: R(4, 4, 8, 8, "#f0f"); break;
   }
 }

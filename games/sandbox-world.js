@@ -7,8 +7,8 @@
 //   Bauwerke: Dörfer, Verliese, Minenschächte
 // Gleiche Zahl → gleiche Welt.
 // =====================================================================
-import { B, BLOCKS } from "./sandbox-data.js?v=3";
-import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=3";
+import { B, BLOCKS } from "./sandbox-data.js?v=4";
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=4";
 
 export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const SEA = SURF + 4;                         // Wasserspiegel
