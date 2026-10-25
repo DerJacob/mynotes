@@ -27,6 +27,7 @@ const FOLDER_NAME = TEST_APP ? "MyNotes PC (Test-App)" : "MyNotes PC";
 const F_MIRROR = "mynotes-pc.zip";
 const F_INBOX = "mynotes-inbox.enc";
 const F_DONE = "mynotes-inbox-done.enc";
+const F_GAMES = "mynotes-games.enc"; // NEU (BE): Spielstände (nur die Web-App schreibt diese Datei)
 const MAGIC = "MNE1";
 const TE = new TextEncoder();
 const TD = new TextDecoder();
@@ -194,6 +195,7 @@ const ICONS = {
   calc: "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5.97 4.06L14.09 6l1.41 1.41L16.91 6l1.06 1.06-1.41 1.41 1.41 1.41-1.06 1.06-1.41-1.4-1.41 1.41-1.06-1.06 1.41-1.41-1.41-1.42zm-6.78.66h5v1.5h-5v-1.5zM11.5 16h-2v2H8v-2H6v-1.5h2v-2h1.5v2h2V16zm6.5 1.25h-5v-1.5h5v1.5zm0-2.5h-5v-1.5h5v1.5z",
   clock: "M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z",
   person: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
+  game: "M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4-3c-.83 0-1.5-.67-1.5-1.5S18.67 9 19.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z", // NEU (BE): Material „videogame_asset“
   draw: "M18.85 10.39l1.06-1.06c.78-.78.78-2.05 0-2.83L18.5 5.09c-.78-.78-2.05-.78-2.83 0l-1.06 1.06 4.24 4.24zm-5.66-2.83L4 16.76V21h4.24l9.19-9.19-4.24-4.25zM19 17.5c0 2.19-2.54 3.5-5 3.5-.55 0-1-.45-1-1s.45-1 1-1c1.54 0 3-.73 3-1.5 0-.47-.48-.87-1.23-1.2l1.48-1.48c1.07.63 1.75 1.47 1.75 2.68zM4.58 13.35C3.61 12.79 3 12.06 3 11c0-1.8 1.89-2.63 3.56-3.36C7.59 7.18 9 6.56 9 6c0-.41-.78-1-2-1-1.26 0-1.8.61-1.83.64-.35.41-.98.46-1.4.12a.997.997 0 0 1-.15-1.38C3.73 4.24 4.76 3 7 3s4 1.32 4 3c0 1.87-1.93 2.72-3.64 3.47C6.42 9.88 5 10.5 5 11c0 .31.43.6 1.07.86l-1.49 1.49z"
 };
 function icon(name, cls = "") {
@@ -2701,7 +2703,8 @@ const VIEWS = {
   trash: { title: "Papierkorb", icon: "trash" },
   search: { title: "Suche", icon: "search" },
   folder: { title: "Ordner", icon: "folder" },
-  label: { title: "Label", icon: "label" }
+  label: { title: "Label", icon: "label" },
+  games: { title: "Spiele", icon: "game" } // NEU (BE)
 };
 
 function routeHash() {
@@ -2718,6 +2721,7 @@ function parseHash(hash) {
   out.route.view = p[0];
   let i = 1;
   if ((p[0] === "folder" || p[0] === "label") && p[1] && /^\d+$/.test(p[1])) { out.route.id = Number(p[1]); i = 2; }
+  else if (p[0] === "games" && /^[a-z0-9-]+$/.test(p[1] || "")) { out.route.id = p[1]; i = 2; } // NEU (BE): #/games/tetris
   if (p[i] === "n" && /^\d+$/.test(p[i + 1] || "")) out.noteId = Number(p[i + 1]);
   if (p[i] === "pc" && p[i + 1]) out.pcId = p[i + 1];
   return out;
@@ -2736,7 +2740,7 @@ function go(route, noteId, { push = true } = {}) {
   renderList();
   renderMain();
   revealFolder();
-  setMobilePane(S.noteId != null || S.pcId != null || S.route.view === "home" ? "main" : "list");
+  setMobilePane(S.noteId != null || S.pcId != null || S.route.view === "home" || S.route.view === "games" ? "main" : "list"); // GEÄNDERT (BE): auch „Spiele“
 }
 function openNote(id, { anchor = null, ts = null, blockId = null } = {}) {
   const note = noteById(id);
@@ -2781,7 +2785,7 @@ window.addEventListener("popstate", () => {
   const p = parseHash(location.hash);
   S.route = p.route; S.noteId = p.noteId; S.pcId = p.pcId;
   renderSidebarActive(); renderList(); renderMain(); revealFolder();
-  setMobilePane(S.noteId != null || S.pcId || S.route.view === "home" ? "main" : "list");
+  setMobilePane(S.noteId != null || S.pcId || S.route.view === "home" || S.route.view === "games" ? "main" : "list"); // GEÄNDERT (BE): auch „Spiele“
 });
 function rememberScroll() {
   const lb = $(".list-body");
@@ -2856,7 +2860,7 @@ function counts() {
   return { all, fav, arch, trash, tmpl, rem, tasks, unfiled: db.unfiled.length, pc: pcVisible().length };
 }
 function navItem(view, label, iconName, count, opts = {}) {
-  const on = S.route.view === view && S.route.id == null;
+  const on = S.route.view === view && (S.route.id == null || view === "games"); // GEÄNDERT (BE): „Spiele“ bleibt markiert, auch wenn ein Spiel offen ist
   return h("button", {
     class: "nav-item" + (on ? " on" : ""), dataset: { view },
     onclick: () => go({ view }, null), title: opts.title || null
@@ -2892,7 +2896,9 @@ function renderSidebar() {
     h("div", { class: "nav-sep" }),
     navItem("templates", "Vorlagen", "template", c.tmpl),
     navItem("archive", "Archiv", "archive", c.arch),
-    navItem("trash", "Papierkorb", "trash", c.trash));
+    navItem("trash", "Papierkorb", "trash", c.trash),
+    h("div", { class: "nav-sep" }), // NEU (BE)
+    navItem("games", "Spiele", "game"));
   const foot = h("div", { class: "side-foot" },
     h("div", { class: "sync-line", id: "sync-line" }),
     h("div", { class: "foot-actions" },
@@ -2911,7 +2917,7 @@ function renderSidebar() {
   updateSyncLine();
 }
 function renderSidebarActive() {
-  $$(".nav-item").forEach(el => el.classList.toggle("on", el.dataset.view === S.route.view && S.route.id == null));
+  $$(".nav-item").forEach(el => el.classList.toggle("on", el.dataset.view === S.route.view && (S.route.id == null || S.route.view === "games"))); // GEÄNDERT (BE)
   $$(".tree-row").forEach(el => {
     const on = (el.dataset.folder && S.route.view === "folder" && Number(el.dataset.folder) === S.route.id) ||
       (el.dataset.label && S.route.view === "label" && Number(el.dataset.label) === S.route.id);
@@ -3052,8 +3058,9 @@ function renderList() {
   const list = $(".list");
   if (!list) return;
   const shell = $(".shell");
-  shell && shell.classList.toggle("tiles", tilesActive() && S.noteId == null);
+  shell && shell.classList.toggle("tiles", S.route.view === "games" || (tilesActive() && S.noteId == null)); // GEÄNDERT (BE)
   const r = S.route;
+  if (r.view === "games") { clear(list); return; } // NEU (BE): „Spiele“ nutzt die ganze Breite, die Liste bleibt leer
   if (r.view === "search") return renderSearchList(list);
   if (r.view === "tasks") return renderTaskList(list);
   if (r.view === "reminders") return renderReminderList(list);
@@ -3148,7 +3155,7 @@ function markListSelection() {
   $$(".list .card[data-note], .tiles-grid .card[data-note]").forEach(c => c.classList.toggle("on", Number(c.dataset.note) === S.noteId));
   $$(".list .card[data-pc]").forEach(c => c.classList.toggle("on", c.dataset.pc === S.pcId));
   const shell = $(".shell");
-  if (shell) shell.classList.toggle("tiles", tilesActive() && S.noteId == null);
+  if (shell) shell.classList.toggle("tiles", S.route.view === "games" || (tilesActive() && S.noteId == null)); // GEÄNDERT (BE)
 }
 function focusListItem(index, open) {
   const cards = $$(".list-body .card, .list-body .task-row");
@@ -3291,17 +3298,84 @@ function renderReminderList(list) {
   }
 }
 // =====================================================================
+// NEU (BE): Spiele – Katalog und Spiele liegen als Module in games/ und werden erst beim Öffnen geladen.
+// Spielstände: verschlüsselt im Drive (mynotes-games.enc), nie im Browser. Die Spiele selbst sehen weder Schlüssel noch Notizen.
+// =====================================================================
+let gamesMod = null;
+const gamesRemote = { fileId: null, modifiedTime: null };
+/** Läuft gerade ein Spiel? Dann gehören Tastatur und Hauptbereich dem Spiel. */
+function gameOpen() { return !!(gamesMod && S.route.view === "games" && S.route.id != null && gamesMod.isOpen()); }
+async function gamesFetch(id) {
+  try {
+    const json = await decryptJson(await downloadFile(id), S.key);
+    return json && json.format === "mynotes-games" ? json : null;
+  } catch (e) { if (e instanceof WrongKeyError) return null; throw e; } // anderes Passwort → wie leer behandeln
+}
+async function gamesRead() {
+  if (DEMO) return null;
+  const f = S.files.get(F_GAMES);
+  if (!f) { gamesRemote.fileId = null; gamesRemote.modifiedTime = null; return null; }
+  const json = await gamesFetch(f.id);
+  gamesRemote.fileId = f.id; gamesRemote.modifiedTime = f.modifiedTime;
+  return json;
+}
+/** Stand speichern; hat ein anderer PC/Tab inzwischen gespeichert, wird mit merge() zusammengeführt */
+async function gamesWrite(local, merge) {
+  if (DEMO) return local;
+  if (!tokenValid() || !S.folderId || !S.key) throw new AuthError("Google-Verbindung abgelaufen");
+  let data = local;
+  if (gamesRemote.fileId) {
+    let meta = null;
+    try { meta = await fileMeta(gamesRemote.fileId); } catch (e) { if (e.status !== 404) throw e; }
+    if (!meta || meta.trashed) gamesRemote.fileId = null;
+    else if (meta.modifiedTime !== gamesRemote.modifiedTime) data = merge(await gamesFetch(gamesRemote.fileId), local);
+  }
+  if (!gamesRemote.fileId) {
+    S.files = await listFolder();
+    const f = S.files.get(F_GAMES);
+    if (f) { gamesRemote.fileId = f.id; data = merge(await gamesFetch(f.id), local); }
+  }
+  const res = await uploadFile(F_GAMES, await encryptBytes(TE.encode(JSON.stringify(data)), S.key), gamesRemote.fileId);
+  gamesRemote.fileId = res.id; gamesRemote.modifiedTime = res.modifiedTime;
+  S.files.set(F_GAMES, { id: res.id, name: F_GAMES, modifiedTime: res.modifiedTime });
+  return data;
+}
+function gamesApi() {
+  return {
+    h, icon, iconBtn, replace, toast, mainBar, openNav, demo: DEMO,
+    blocked: () => !!($(".overlay") || $(".lightbox") || $(".menu")), // Dialog/Menü/Großansicht offen → Spiel pausiert und ignoriert Tasten
+    route: () => S.route,
+    open: id => go({ view: "games", id: id || undefined }, null),
+    store: { canWrite: () => !DEMO && tokenValid() && !!S.folderId && !!S.key, read: gamesRead, write: gamesWrite }
+  };
+}
+function renderGames(main) {
+  if (gamesMod) { gamesMod.render(main, gamesApi()); return; }
+  replace(main, h("div", { class: "main-empty" }, h("span", { class: "spinner" }), h("div", null, "Spiele werden geladen …")));
+  import("./games/shell.js?v=1").then(m => {
+    gamesMod = m;
+    if (!S.unlocked || S.route.view !== "games" || $(".main") !== main) return;
+    m.render(main, gamesApi());
+  }).catch(e => {
+    if (S.route.view === "games" && $(".main") === main)
+      replace(main, h("div", { class: "main-empty" }, icon("warn"), h("h3", null, "Spiele konnten nicht geladen werden"), h("div", null, e.message)));
+  });
+}
+
+// =====================================================================
 // Hauptbereich (rechte Spalte)
 // =====================================================================
 function renderMain(opts = {}) {
   const main = $(".main");
   if (!main) return;
   const shell = $(".shell");
-  shell && shell.classList.toggle("tiles", tilesActive() && S.noteId == null && !S.pcId);
+  shell && shell.classList.toggle("tiles", S.route.view === "games" || (tilesActive() && S.noteId == null && !S.pcId)); // GEÄNDERT (BE)
   // Aufräumen nach der Nebeneinander-Ansicht (BD)
   main.classList.remove("split");
   if (main._splitObs && !splitActive()) { main._splitObs.disconnect(); main._splitObs = null; }
   renderShellSplit();
+  if (S.route.view !== "games" && gamesMod) gamesMod.stop(); // NEU (BE): Spiel beenden, sobald man woanders hingeht
+  if (S.route.view === "games") return renderGames(main);    // NEU (BE)
   if (S.route.view === "pc" || S.pcId) return renderPcMain(main);
   if (splitActive()) return renderSplit(main); // BD
   if (S.noteId != null) return renderNote(main, opts);
@@ -5535,7 +5609,7 @@ function startApp() {
   history.replaceState(null, "", routeHash());
   renderShell();
   revealFolder();
-  setMobilePane(S.noteId != null || S.pcId ? "main" : (S.route.view === "home" ? "main" : "list"));
+  setMobilePane(S.noteId != null || S.pcId ? "main" : (S.route.view === "home" || S.route.view === "games" ? "main" : "list")); // GEÄNDERT (BE): auch „Spiele“
   schedulePoll();
   clearInterval(S.lockTimer);
   S.lockTimer = setInterval(checkIdle, 20_000);
@@ -5655,7 +5729,7 @@ async function refreshMirror(file) {
   S.zip = zip;
   S.mirror = { id: file.id, modifiedTime: file.modifiedTime };
   // Ansicht auffrischen, ohne die Position zu verlieren
-  const editing = (document.activeElement && document.activeElement.closest(".editor-wrap, .quick, .search-box")) || (S.edit && S.edit.dirty);
+  const editing = (document.activeElement && document.activeElement.closest(".editor-wrap, .quick, .search-box")) || (S.edit && S.edit.dirty) || gameOpen(); // GEÄNDERT (BE): laufendes Spiel nicht neu zeichnen
   const mainScroll = $(".main-scroll")?.scrollTop || 0;
   rememberScroll();
   const searchFocus = document.activeElement && document.activeElement.closest(".search-box");
@@ -5687,9 +5761,11 @@ async function lock(message) {
   if (!S.unlocked) return;
   if (DEMO) { toast("Demo – Sperren ist hier ausgeschaltet"); return; }
   if (pcDirty()) { saveInboxSoon.cancel(); try { await saveInbox(); } catch (_) {} }
+  if (gamesMod) { try { await gamesMod.flush(); } catch (_) {} } // NEU (BE): Spielstand noch sichern
   S.unlocked = false;
   clearTimeout(S.pollTimer); clearInterval(S.lockTimer); clearInterval(S.clockTimer);
   closeDialog(); closeLightbox(); closeMenu();
+  if (gamesMod) gamesMod.reset(); // NEU (BE): Spiel beenden, Spielstand aus dem Speicher werfen
   S.key = null; S.db = null; S.extras = { calc: {}, work: {} };
   S.inbox = { notes: [], checks: [], edits: [], fileId: null, modifiedTime: null, base: new Map(), readable: true, taken: [] };
   // GEÄNDERT (BD): appliedEdits ist seit BB eine Map (vorher wurde hier ein Array gesetzt → Fehler nach Entsperren)
@@ -5713,6 +5789,7 @@ async function lock(message) {
 }
 async function logout() {
   if (S.unlocked && pcDirty()) { try { await saveInbox(); } catch (_) {} }
+  if (gamesMod) { try { await gamesMod.flush(); } catch (_) {} gamesMod.reset(); gamesRemote.fileId = null; gamesRemote.modifiedTime = null; } // NEU (BE)
   S.unlocked = false;
   clearTimeout(S.pollTimer); clearInterval(S.lockTimer); clearInterval(S.clockTimer);
   S.key = null; S.db = null; S.zip = null; S.meta = null; S.mirror = null;
@@ -5807,6 +5884,7 @@ addEventListener("keydown", e => {
     if (e.key === "Escape") e.target.blur();
     return;
   }
+  if (gameOpen()) return; // NEU (BE): Spiel läuft – Buchstaben, Pfeiltasten und Leertaste gehören dem Spiel
   if (mod || e.altKey) return;
   // Während des Bearbeitens keine Ein-Buchstaben-Kürzel (nur Esc) – BB
   if (S.edit && S.noteId != null && e.key !== "Escape") return;

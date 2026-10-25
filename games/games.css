@@ -1,0 +1,75 @@
+/* =====================================================================
+   Spiele – nutzt die Farben und Abstände von app.css, wird von games/shell.js nachgeladen
+   ===================================================================== */
+
+/* ---------------- Katalog ---------------- */
+.game-wrap { max-width: 1040px; margin: 0 auto; padding: 8px 28px 56px; }
+.game-h1 { margin: 6px 0 4px; font-size: 1.8rem; letter-spacing: -.015em; }
+.game-lead { margin: 0 0 22px; color: var(--muted); max-width: 62ch; }
+.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.game-card {
+  display: flex; gap: 16px; align-items: flex-start; text-align: left; padding: 16px 18px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 16px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.game-card:hover:not(:disabled) { border-color: var(--accent); box-shadow: var(--shadow); }
+.game-card:disabled { opacity: .6; cursor: default; }
+.game-emoji { flex: 0 0 auto; width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; font-size: 1.9rem; background: var(--accent-soft); }
+.game-info { min-width: 0; }
+.game-name { font-weight: 650; font-size: 1.05rem; }
+.game-desc { margin-top: 2px; color: var(--muted); font-size: .9rem; line-height: 1.45; }
+.game-sum { margin-top: 8px; font-size: .82rem; color: var(--accent); min-height: 1.2em; }
+.game-card:disabled .game-sum { color: var(--faint); }
+
+/* ---------------- Spiel-Seite ---------------- */
+.game-stage { display: flex; justify-content: center; }
+.game-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 48px 0; }
+
+/* ---------------- Tetris ---------------- */
+.tg { display: flex; gap: 28px; justify-content: center; align-items: flex-start; flex-wrap: wrap; width: 100%; }
+.tg-main { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.tg-board-wrap { position: relative; line-height: 0; }
+.tg-board {
+  display: block; height: min(calc(100vh - 150px), 700px); min-height: 300px; aspect-ratio: 1 / 2; width: auto;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px;
+}
+.tg-overlay {
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 20px; text-align: center;
+  background: color-mix(in srgb, var(--bg) 80%, transparent); border-radius: 10px; line-height: 1.4;
+}
+.tg-overlay[hidden] { display: none; }
+.tg-ov-title { font-size: 1.9rem; font-weight: 750; letter-spacing: -.02em; }
+.tg-ov-text { color: var(--muted); max-width: 22ch; }
+.tg-right { display: flex; flex-direction: column; gap: 14px; width: 168px; }
+.tg-side { display: flex; flex-direction: column; gap: 10px; }
+.tg-box { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px 10px; }
+.tg-label { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+.tg-mini { display: block; width: 96px; height: 72px; margin: 0 auto; }
+.tg-mini.tall { height: 216px; }
+.tg-box.stats { display: grid; gap: 6px; }
+.tg-stat { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .88rem; color: var(--muted); }
+.tg-stat b { color: var(--text); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.tg-help { display: grid; gap: 5px; font-size: .82rem; color: var(--muted); }
+.tg-help kbd { margin-right: 3px; }
+
+/* Touch-Tasten: nur auf Geräten ohne Maus bzw. schmalen Fenstern */
+.tg-touch { display: none; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; max-width: 360px; user-select: none; -webkit-user-select: none; }
+.tg-tb {
+  touch-action: none; padding: 14px 0; border-radius: 14px; border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--text); font-size: 1.15rem; line-height: 1; -webkit-tap-highlight-color: transparent;
+}
+.tg-tb.on { background: var(--accent-soft); border-color: var(--accent); }
+@media (pointer: coarse), (max-width: 760px) {
+  .tg-touch { display: grid; }
+  .tg-help { display: none; }
+}
+@media (max-width: 760px) {
+  .game-wrap { padding: 8px 14px 40px; }
+  .tg { gap: 12px; }
+  .tg-board { height: min(56vh, 520px); min-height: 260px; }
+  .tg-right { width: 100%; flex-direction: row; }
+  .tg-side { flex-direction: row; flex-wrap: wrap; width: 100%; }
+  .tg-side .tg-box { flex: 1 1 96px; }
+  .tg-side .tg-box.stats { flex: 2 1 160px; }
+  .tg-mini.tall { height: 108px; width: 48px; }   /* gleiches Seitenverhältnis wie die Zeichenfläche (96 × 216) */
+}
