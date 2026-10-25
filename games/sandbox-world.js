@@ -7,8 +7,8 @@
 //   Bauwerke: Dörfer, Verliese, Minenschächte
 // Gleiche Zahl → gleiche Welt.
 // =====================================================================
-import { B, BLOCKS } from "./sandbox-data.js?v=4";
-import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=4";
+import { B, BLOCKS } from "./sandbox-data.js?v=5";
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=5";
 
 export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const SEA = SURF + 4;                         // Wasserspiegel
@@ -18,7 +18,7 @@ export const BIOME_NAMES = { plains: "Ebene", forest: "Wald", birch: "Birkenwald
 const BI = Object.fromEntries(BIOMES.map((b, i) => [b, i]));
 
 /** Truheninhalt */
-function loot(rnd, kind) {
+function loot(rnd, kind, xr) {
   const pick = (id, a, b = a) => ({ id, n: a + Math.floor(rnd() * (b - a + 1)), d: 0 });
   const t = {
     village: [["apple", 2, 5, 0.9], ["torch", 4, 10, 0.8], ["stick", 3, 8, 0.7], ["coal", 2, 6, 0.6], ["iron_ingot", 1, 3, 0.35], ["bucket", 1, 1, 0.15], ["gold_ingot", 1, 2, 0.15], ["planks", 4, 10, 0.5]],
@@ -27,7 +27,15 @@ function loot(rnd, kind) {
   }[kind];
   const out = [];
   for (const [id, a, b, p] of t) if (rnd() < p) { const s = pick(id, a, b); if (id === "iron_pick") s.n = 1; out.push(s); }
-  return out.slice(0, 7);
+  // Etappe 4: Saatgut, Bücher und Alchemie-Zutaten – mit eigenem Zufall, damit Welten der Etappe 3 gleich bleiben
+  const extra = {
+    village: [["wheat_seeds", 3, 8, 0.5], ["carrot", 2, 5, 0.45], ["potato", 2, 5, 0.4], ["bread", 1, 3, 0.4], ["pumpkin_seeds", 1, 3, 0.25], ["melon_seeds", 1, 3, 0.2], ["book", 1, 2, 0.25]],
+    dungeon: [["enchanted_book", 1, 1, 0.3], ["nether_wart", 2, 4, 0.3], ["blaze_rod", 1, 2, 0.22], ["book", 1, 2, 0.3], ["glass_bottle", 2, 4, 0.2]],
+    shaft: [["book", 1, 2, 0.3], ["enchanted_book", 1, 1, 0.12], ["redstone", 3, 8, 0.4], ["bread", 1, 3, 0.3]]
+  }[kind];
+  const xo = [];
+  for (const [id, a, b, p] of extra) if (xr() < p) xo.push({ id, n: a + Math.floor(xr() * (b - a + 1)), d: 0 });
+  return [...out.slice(0, 7), ...xo.slice(0, 3)];
 }
 
 export function generateWorld(seed) {
@@ -240,6 +248,16 @@ export function generateWorld(seed) {
     const grass = { plains: 0.22, forest: 0.18, birch: 0.18, savanna: 0.4, jungle: 0.4, swamp: 0.25, taiga: 0.18 }[b] || 0;
     if (r < flower) put(x, gy - 1, B.FLOWER); else if (r < flower + grass) put(x, gy - 1, B.TALLGRASS);
   }
+  // Etappe 4: Zuckerrohr am Ufer, Kürbisse in Ebenen und Wäldern, Melonen im Dschungel (nur mit Hash-Zufall, ändert die übrige Welt nicht)
+  for (let x = 4; x < W - 4; x++) {
+    const gy = ground[x], b = bname[x], id = at(x, gy);
+    if (Math.abs(x - SPAWN_X) < 28 || at(x, gy - 1) !== B.AIR && !(at(x, gy - 1) === B.TALLGRASS || at(x, gy - 1) === B.FLOWER)) continue;
+    if ((id === B.SAND || id === B.GRASS || id === B.DIRT) && (at(x - 1, gy) === B.WATER || at(x + 1, gy) === B.WATER) && hash2(x, 71, seed) < 0.4) {
+      const h = 1 + Math.floor(hash2(x, 72, seed) * 3);
+      for (let i = 1; i <= h; i++) put(x, gy - i, B.CANE);
+    } else if (id === B.GRASS && gy <= SEA && (b === "plains" || b === "forest" || b === "birch") && hash2(x, 73, seed) < 0.012) put(x, gy - 1, B.PUMPKIN);
+    else if (id === B.GRASS && gy <= SEA && b === "jungle" && hash2(x, 75, seed) < 0.025) put(x, gy - 1, B.MELON);
+  }
 
   // ---------- Bauwerke ----------
   // Dorf: Platz ebnen, Häuser, Laternenpfähle, Truhen
@@ -265,7 +283,7 @@ export function generateWorld(seed) {
       put(x0 + 6, S - 3, B.GLASS);
       put(x0 + 1, S - 4, B.TORCH);
       if (withBench) put(x0 + 4, S - 1, B.BENCH);
-      if (chest) { put(x0 + 2, S - 1, B.CHEST); chests.push({ x: x0 + 2, y: S - 1, items: main && chest === 1 ? [{ id: "apple", n: 3, d: 0 }, { id: "torch", n: 8, d: 0 }, { id: "stick", n: 6, d: 0 }, { id: "coal", n: 4, d: 0 }] : loot(rnd, "village") }); }
+      if (chest) { put(x0 + 2, S - 1, B.CHEST); chests.push({ x: x0 + 2, y: S - 1, items: main && chest === 1 ? [{ id: "apple", n: 3, d: 0 }, { id: "torch", n: 8, d: 0 }, { id: "stick", n: 6, d: 0 }, { id: "coal", n: 4, d: 0 }, { id: "wheat_seeds", n: 5, d: 0 }, { id: "carrot", n: 3, d: 0 }, { id: "potato", n: 3, d: 0 }] : loot(rnd, "village", mulberry32(seed + chests.length * 977 + 5)) }); }
     };
     house(cx - 20, false, 1);
     house(cx - 3, main, main ? 0 : 1);
@@ -294,7 +312,7 @@ export function generateWorld(seed) {
     if (!isStoneish(at(x + (w >> 1), y)) || bname[x] === "ocean") continue;
     for (let yy = y - 1; yy <= y + hh; yy++) for (let xx = x - 1; xx <= x + w; xx++) put(xx, yy, xx === x - 1 || xx === x + w || yy === y - 1 || yy === y + hh ? B.COBBLE : B.AIR);
     const cxp = x + 1 + Math.floor(rnd() * (w - 2));
-    put(cxp, y + hh - 1, B.CHEST); chests.push({ x: cxp, y: y + hh - 1, items: loot(rnd, "dungeon") });
+    put(cxp, y + hh - 1, B.CHEST); chests.push({ x: cxp, y: y + hh - 1, items: loot(rnd, "dungeon", mulberry32(seed + chests.length * 977 + 7)) });
     placed.push({ x, y }); n++;
   }
   // Minenschacht: Gang mit Holzbalken, Fackeln und Truhe am Ende
@@ -308,7 +326,7 @@ export function generateWorld(seed) {
       if ((xx - x) % 6 === 0) { put(xx, y - 3, B.PLANKS); put(xx, y - 2, B.PLANKS); }
       if ((xx - x) % 12 === 6) put(xx, y, B.TORCH);
     }
-    if (rnd() < 0.7) { const cxp = x + len - 2; put(cxp, y, B.CHEST); chests.push({ x: cxp, y, items: loot(rnd, "shaft") }); }
+    if (rnd() < 0.7) { const cxp = x + len - 2; put(cxp, y, B.CHEST); chests.push({ x: cxp, y, items: loot(rnd, "shaft", mulberry32(seed + chests.length * 977 + 9)) }); }
     placed.push({ x, y }); n++;
   }
   // fließendes Wasser/Lava, das durch Bauwerke ungültig wurde, bereinigen

@@ -3,19 +3,20 @@
 // Alles wird beim Start per Code gemalt, es gibt keine Bilddateien. Die Texturen sind eigene Malereien im
 // kantigen Minecraft-Stil (nicht die Originale).
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=4";
-import { mulberry32 } from "./sandbox-noise.js?v=4";
+import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=5";
+import { mulberry32 } from "./sandbox-noise.js?v=5";
+import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=5";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 
-// Spalte = Block-ID (0…50); Zusatz-Bilder ab 60. Zeile 1 enthält die nach Biom gefärbten Varianten von Gras, Laub und hohem Gras.
-export const IDX = { FLOWER2: 60, FLOWER3: 61, WALL_DIRT: 62, WALL_STONE: 63, FURNACE_LIT: 64, CRACK: 65 /* 65…69 = Risse in 5 Stufen */, LAVA2: 70, WALL_DEEP: 71, WATER2: 72, ORE_DEEP: 80 /* 80…87 */ };
-export const ORE_DEEP = { [B.COAL]: 80, [B.IRON]: 81, [B.GOLD]: 82, [B.DIAMOND]: 83, [B.COPPER]: 84, [B.REDSTONE]: 85, [B.LAPIS]: 86, [B.EMERALD]: 87 };
+// Spalte = Block-ID (0…80); Zusatz-Bilder ab 120 (Etappe 4: ab 150, siehe sandbox-art4.js). Zeile 1 enthält die nach Biom gefärbten Varianten von Gras, Laub und hohem Gras.
+export const IDX = { FLOWER2: 120, FLOWER3: 121, WALL_DIRT: 122, WALL_STONE: 123, FURNACE_LIT: 124, CRACK: 125 /* 125…129 = Risse in 5 Stufen */, LAVA2: 130, WALL_DEEP: 131, WATER2: 132, ORE_DEEP: 140 /* 140…147 */ };
+export const ORE_DEEP = { [B.COAL]: 140, [B.IRON]: 141, [B.GOLD]: 142, [B.DIAMOND]: 143, [B.COPPER]: 144, [B.REDSTONE]: 145, [B.LAPIS]: 146, [B.EMERALD]: 147 };
 // Farb-Faktoren (R, G, B) für Gras/Laub je Biom – Reihenfolge wie BIOMES in sandbox-world.js
 export const BIOME_TINT = [[1, 1, 1], [0.9, 0.96, 0.88], [1.04, 1.02, 0.88], [0.7, 0.92, 0.86], [0.82, 0.98, 0.94], [1.4, 0.96, 0.6], [1.38, 0.97, 0.62], [0.72, 1.14, 0.58], [0.74, 0.8, 0.56], [0.86, 1.0, 0.92], [1, 1, 1]];
-const ATLAS_N = 96;
+const ATLAS_N = 192;
 
 export function makeAtlas() {
   const cv = document.createElement("canvas");
@@ -293,6 +294,8 @@ export function makeAtlas() {
     for (let y = 3; y < 10; y++) { set(0, y, [104, 72, 40]); set(1, y, [128, 90, 50]); }                                        // Kopfteil
     for (let x = 6; x < 16; x++) set(x, 9, [140, 24, 30]);
   });
+  // ---------- Etappe 4: Ackerbau, Redstone, Verzauberung, Brauen ----------
+  paintAtlas4(paint, noise, specks);
   // ---------- gefärbte Varianten (Zeile 2): Gras, Laub, hohes Gras je Biom ----------
   {
     const grab = i => g.getImageData(i * T, 0, T, T);
@@ -321,7 +324,7 @@ const MAT_COL = {
 };
 const STICK = "#7a5230";
 
-function paintItem(g, atlas, id) {
+function paintItem(g, atlas, id, st) {
   const it = ITEMS[id];
   const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
   const P = (x, y, c) => R(x, y, 1, 1, c);
@@ -361,6 +364,7 @@ function paintItem(g, atlas, id) {
     else { R(3, 5, 4, 8, c); R(9, 5, 4, 8, c); R(2, 10, 5, 4, c); R(9, 10, 5, 4, c); R(3, 5, 4, 1, hi); R(9, 5, 4, 1, hi); R(2, 13, 5, 1, lo); R(9, 13, 5, 1, lo); }
     return;
   }
+  if (paintItem4(id, g, atlas, st)) return;
   switch (id) {
     case "coal": R(3, 7, 7, 6, "#222228"); R(7, 4, 6, 6, "#30303a"); R(4, 8, 2, 1, "#5c5c68"); R(9, 5, 2, 1, "#6a6a76"); break;
     case "charcoal": R(3, 7, 7, 6, "#3a3028"); R(7, 4, 6, 6, "#4a3e34"); R(4, 8, 2, 1, "#7a6a58"); R(9, 5, 2, 1, "#8a7a68"); break;
@@ -424,14 +428,21 @@ function paintItem(g, atlas, id) {
 export function makeArt() {
   const { cv: atlas, avg } = makeAtlas();
   const cache = new Map();
-  const base = id => {
-    let c = cache.get(id);
-    if (!c) { c = document.createElement("canvas"); c.width = c.height = T; const g = c.getContext("2d"); g.imageSmoothingEnabled = false; paintItem(g, atlas, id); cache.set(id, c); }
+  /** st (optional): { d, e } – Farbe der Tränke und Schimmer verzauberter Gegenstände */
+  const base = (id, st) => {
+    const shiny = !!(st && ((st.e && Object.keys(st.e).length) || id === "enchanted_book"));
+    const key = (id === "potion" || id === "splash_potion") && st ? `${id}:${st.d | 0}${shiny ? ":g" : ""}` : shiny ? id + ":g" : id;
+    let c = cache.get(key);
+    if (!c) {
+      c = document.createElement("canvas"); c.width = c.height = T; const g = c.getContext("2d"); g.imageSmoothingEnabled = false; paintItem(g, atlas, id, st);
+      if (shiny) glint(g);
+      cache.set(key, c);
+    }
     return c;
   };
-  const icon = (id, size) => {
+  const icon = (id, size, st) => {
     const c = document.createElement("canvas"); c.width = c.height = size; c.className = "sb-ic";
-    const g = c.getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(base(id), 0, 0, size, size);
+    const g = c.getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(base(id, st), 0, 0, size, size);
     return c;
   };
   const hud = {};

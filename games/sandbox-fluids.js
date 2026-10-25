@@ -5,7 +5,7 @@
 //   Wasser + Lava: Lavaquelle → Obsidian, fließende Lava → Bruchstein.
 //   Dazu: Schwimmen, Luft anhalten, Lava- und Kaktusschaden, Eimer.
 // =====================================================================
-import { B, BLOCKS, ITEMS, isFluid, isPlant } from "./sandbox-data.js?v=4";
+import { B, BLOCKS, ITEMS, isFluid, isPlant, isSoft } from "./sandbox-data.js?v=5";
 
 export const SRC = 9, FALL = 8;
 
@@ -13,7 +13,7 @@ export function installFluids(Sandbox, K) {
   const { clamp, W, H } = K;
   const P = Sandbox.prototype;
   const WATER_DT = 0.2, LAVA_DT = 0.9;
-  const replaceable = id => id === B.AIR || isPlant(id) || id === B.TORCH;
+  const replaceable = id => id === B.AIR || isSoft(id);
   const eff = l => (l >= FALL ? 8 : l);
 
   P._fluidInit = function () {
@@ -30,13 +30,15 @@ export function installFluids(Sandbox, K) {
   };
   P._setFluid = function (i, id, level) {
     const old = this.tiles[i];
-    this.tiles[i] = id; this.lvl[i] = level;
+    this.tiles[i] = id; this.lvl[i] = level; this.aux[i] = 0;
+    if (this._rsTouch && old !== id) this._rsTouch(i % W, (i / W) | 0, old, id);
     this.lightDirty = true;
     this._fluidWake(i % W, (i / W) | 0);
   };
   P._clearFluid = function (i, id = B.AIR) {
     const old = this.tiles[i];
-    this.tiles[i] = id; this.lvl[i] = 0;
+    this.tiles[i] = id; this.lvl[i] = 0; this.aux[i] = 0;
+    if (this._rsTouch && old !== id) this._rsTouch(i % W, (i / W) | 0, old, id);
     this.lightDirty = true;
     this._fluidWake(i % W, (i / W) | 0);
   };
@@ -130,12 +132,12 @@ export function installFluids(Sandbox, K) {
     p.inWater = body === B.WATER || feet === B.WATER;
     p.inLava = body === B.LAVA || feet === B.LAVA;
     if (p.air === undefined) p.air = 15;
-    if (head === B.WATER) {
+    if (head === B.WATER && !(this.fx && this.fx.water_breathing)) {
       p.air -= dt;
       if (p.air <= 0) { p.air += 1; this.hurt(2, 0, "drown"); }
     } else p.air = Math.min(15, p.air + dt * 6);
     if (p.inLava) {
-      p.burn = 4; p.lavaT = (p.lavaT || 0) - dt;
+      p.burn = this.fx && this.fx.fire_resistance ? 0 : 4; p.lavaT = (p.lavaT || 0) - dt;
       if (p.lavaT <= 0) { p.lavaT = 0.5; p.invuln = 0; this.hurt(4, 0, "lava"); }
     } else if (p.burn > 0) {
       if (p.inWater) p.burn = 0;

@@ -27,13 +27,14 @@ function tint(c, k) {
  * art.base(id) liefert Gegenstandsbilder (für den Bogen des Skeletts).
  */
 export function drawMob(g, m, bx, by, S, T, now, art) {
-  const bw = m.w * T, bh = m.h * T, flip = m.face < 0;
+  const bsc = m.baby > 0 ? 0.55 : 1, bw = m.w * T / bsc, bh = m.h * T / bsc, flip = m.face < 0;
   const k = m.hurtT > 0 ? Math.min(1, m.hurtT / 0.2) : 0;
   const moving = m.onGround && Math.abs(m.vx) > 0.4;
   const sw = moving ? Math.sin(now / 105 + m.id * 1.7) * 1.7 : 0;
   g.save();
-  g.translate(bx + (flip ? Math.round(bw * S) : 0), by);
+  g.translate(bx + (flip ? Math.round(bw * bsc * S) : 0), by);
   g.scale(flip ? -1 : 1, 1);
+  if (bsc !== 1) g.scale(bsc, bsc);                                  // Jungtiere: dieselbe Figur, kleiner (Etappe 4)
   const R = (x, y, w, h, c) => { g.fillStyle = k ? tint(c, k) : c; g.fillRect(Math.round(x * S), Math.round(y * S), Math.max(1, Math.round(w * S)), Math.max(1, Math.round(h * S))); };
   let fireH = bh;
   switch (m.type) {
