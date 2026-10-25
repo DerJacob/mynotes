@@ -13,7 +13,13 @@ export const B = {
   BIRCH_LOG: 33, BIRCH_LEAVES: 34, SPRUCE_LOG: 35, SPRUCE_LEAVES: 36, JUNGLE_LOG: 37, JUNGLE_LEAVES: 38, ACACIA_LOG: 39, ACACIA_LEAVES: 40,
   WATER: 41, LAVA: 42, DEEPSLATE: 43, COPPER: 44, REDSTONE: 45, LAPIS: 46, EMERALD: 47, OBSIDIAN: 48, ICE: 49, CLAY: 50,
   // Etappe 3
-  WOOL: 51, BED: 52
+  WOOL: 51, BED: 52,
+  // Etappe 4: Landwirtschaft
+  FARMLAND: 53, WHEAT: 54, CARROT: 55, POTATO: 56, PUMPKIN: 57, PUMPKIN_STEM: 58, MELON: 59, MELON_STEM: 60, CANE: 61, WART: 62,
+  // Etappe 4: Redstone
+  RS_WIRE: 63, RS_TORCH: 64, LEVER: 65, BUTTON: 66, PLATE: 67, PISTON: 68, STICKY: 69, PISTON_HEAD: 70, DISPENSER: 71, LAMP: 72, LAMP_ON: 73, RS_BLOCK: 74, RS_TORCH_OFF: 80,
+  // Etappe 4: Verzaubern, Amboss, Brauen
+  ENCHANT: 75, BOOKSHELF: 76, ANVIL: 77, BREWING: 78, IRON_BLOCK: 79
 };
 export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG];
 export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES];
@@ -22,6 +28,10 @@ export const isLeaves = id => id === B.LEAVES || id === B.BIRCH_LEAVES || id ===
 export const isFluid = id => id === B.WATER || id === B.LAVA;
 /** Pflanzen, die einen festen Boden brauchen */
 export const isPlant = id => id === B.FLOWER || id === B.TALLGRASS || id === B.DEADBUSH;
+/** Nutzpflanzen: brauchen Ackerland (Zuckerrohr: Sand/Erde am Wasser), lassen sich nicht einfach überbauen */
+export const isCrop = id => id === B.WHEAT || id === B.CARROT || id === B.POTATO || id === B.PUMPKIN_STEM || id === B.MELON_STEM || id === B.WART || id === B.CANE;
+/** Redstone-Bauteile (halten die Liste im Spiel kurz: nur diese Blöcke werden beobachtet) */
+export const RS_IDS = new Set([B.RS_WIRE, B.RS_TORCH, B.RS_TORCH_OFF, B.LEVER, B.BUTTON, B.PLATE, B.PISTON, B.STICKY, B.PISTON_HEAD, B.DISPENSER, B.LAMP, B.LAMP_ON, B.RS_BLOCK]);
 
 const def = (key, o) => ({ key, fluid: false, dropN: null, solid: false, lcost: 0, hard: 0.75, tier: 0, tool: null, drop: null, emit: 0, climb: false, ...o });
 /**
@@ -80,6 +90,49 @@ BLOCKS[B.CLAY] = def("clay", { solid: true, lcost: 3, hard: 0.9, tool: "shovel",
 BLOCKS[B.WOOL] = def("wool", { solid: true, lcost: 3, hard: 1.2, tool: "shears", drop: "wool" });
 BLOCKS[B.BED] = def("bed", { hard: 0.3, drop: "bed", interact: true });
 
+// Etappe 4: Landwirtschaft
+BLOCKS[B.FARMLAND] = def("farmland", { solid: true, lcost: 3, hard: 0.9, tool: "shovel", drop: "dirt" });
+BLOCKS[B.WHEAT] = def("wheat", { hard: 0.05 });
+BLOCKS[B.CARROT] = def("carrot", { hard: 0.05 });
+BLOCKS[B.POTATO] = def("potato", { hard: 0.05 });
+BLOCKS[B.PUMPKIN] = def("pumpkin", { solid: true, lcost: 3, hard: 1.5, tool: "axe", drop: "pumpkin" });
+BLOCKS[B.PUMPKIN_STEM] = def("pumpkin_stem", { hard: 0.05 });
+BLOCKS[B.MELON] = def("melon", { solid: true, lcost: 3, hard: 1.5, tool: "axe", drop: "melon_slice", dropN: [3, 7] });
+BLOCKS[B.MELON_STEM] = def("melon_stem", { hard: 0.05 });
+BLOCKS[B.CANE] = def("cane", { hard: 0.05, drop: "sugar_cane" });
+BLOCKS[B.WART] = def("wart", { hard: 0.05 });
+// Etappe 4: Redstone (Zustand steht im Zusatzfeld aux, siehe sandbox-redstone.js)
+BLOCKS[B.RS_WIRE] = def("rs_wire", { hard: 0.05, drop: "redstone" });
+BLOCKS[B.RS_TORCH] = def("rs_torch", { hard: 0.05, drop: "redstone_torch", emit: 7 });
+BLOCKS[B.RS_TORCH_OFF] = def("rs_torch_off", { hard: 0.05, drop: "redstone_torch" });
+BLOCKS[B.LEVER] = def("lever", { hard: 0.6, drop: "lever", interact: true });
+BLOCKS[B.BUTTON] = def("button", { hard: 0.6, tool: "pick", drop: "button", interact: true });
+BLOCKS[B.PLATE] = def("plate", { hard: 0.6, tool: "axe", drop: "pressure_plate" });
+BLOCKS[B.PISTON] = def("piston", { solid: true, lcost: 3, hard: 0.8, tool: "pick", drop: "piston" });
+BLOCKS[B.STICKY] = def("sticky", { solid: true, lcost: 3, hard: 0.8, tool: "pick", drop: "sticky_piston" });
+BLOCKS[B.PISTON_HEAD] = def("piston_head", { solid: true, lcost: 3, hard: 0.8, tool: "pick", drop: null });
+BLOCKS[B.DISPENSER] = def("dispenser", { solid: true, lcost: 3, hard: 5.25, tool: "pick", tier: 1, drop: "dispenser", interact: true, entity: "disp" });
+BLOCKS[B.LAMP] = def("lamp", { solid: true, lcost: 3, hard: 0.45, drop: "redstone_lamp" });
+BLOCKS[B.LAMP_ON] = def("lamp_on", { solid: true, lcost: 3, hard: 0.45, drop: "redstone_lamp", emit: 15 });
+BLOCKS[B.RS_BLOCK] = def("rs_block", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 1, drop: "redstone_block" });
+// Etappe 4: Verzaubern, Amboss, Brauen
+BLOCKS[B.ENCHANT] = def("enchant", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 1, drop: "enchanting_table", interact: true, emit: 7 });
+BLOCKS[B.BOOKSHELF] = def("bookshelf", { solid: true, lcost: 3, hard: 2.25, tool: "axe", drop: "book", dropN: [3, 3] });
+BLOCKS[B.ANVIL] = def("anvil", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 1, drop: "anvil", interact: true });
+BLOCKS[B.BREWING] = def("brewing", { solid: true, lcost: 3, hard: 0.75, tool: "pick", drop: "brewing_stand", interact: true, entity: "brew", emit: 1 });
+BLOCKS[B.IRON_BLOCK] = def("iron_block", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 2, drop: "iron_block" });
+
+/** Behutsamkeit (Silk Touch): welcher Gegenstand fällt statt der üblichen Beute */
+export const SILK = {
+  [B.STONE]: "stone", [B.COAL]: "coal_ore", [B.IRON]: "iron_ore", [B.GOLD]: "gold_ore", [B.DIAMOND]: "diamond_ore", [B.COPPER]: "copper_ore", [B.REDSTONE]: "redstone_ore",
+  [B.LAPIS]: "lapis_ore", [B.EMERALD]: "emerald_ore", [B.GRASS]: "grass_block", [B.GRASS_SNOW]: "grass_block", [B.DEEPSLATE]: "deepslate", [B.ICE]: "ice", [B.GLASS]: "glass",
+  [B.LEAVES]: "leaves", [B.BOOKSHELF]: "bookshelf", [B.MELON]: "melon", [B.CLAY]: "clay", [B.SNOW]: "snow"
+};
+/** Glück (Fortune) erhöht die Ausbeute dieser Blöcke */
+export const FORTUNE_BLOCKS = new Set([B.COAL, B.DIAMOND, B.EMERALD, B.LAPIS, B.REDSTONE, B.COPPER]);
+/** Wasser zerstört diese weichen Blöcke */
+export const isSoft = id => isPlant(id) || isCrop(id) || id === B.TORCH || id === B.RS_WIRE || id === B.RS_TORCH || id === B.RS_TORCH_OFF || id === B.LEVER || id === B.BUTTON || id === B.PLATE;
+
 // ---------------------------------------------------------------------
 // Gegenstände
 // ---------------------------------------------------------------------
@@ -100,7 +153,7 @@ blockItem("gravel", "Kies", B.GRAVEL); blockItem("snow", "Schneeblock", B.SNOW);
 blockItem("cactus", "Kaktus", B.CACTUS); blockItem("obsidian", "Obsidian", B.OBSIDIAN); blockItem("clay", "Ton", B.CLAY);
 blockItem("birch_log", "Birkenholz", B.BIRCH_LOG, { fuel: 15, tags: ["logs"] }); blockItem("spruce_log", "Fichtenholz", B.SPRUCE_LOG, { fuel: 15, tags: ["logs"] });
 blockItem("jungle_log", "Tropenholz", B.JUNGLE_LOG, { fuel: 15, tags: ["logs"] }); blockItem("acacia_log", "Akazienholz", B.ACACIA_LOG, { fuel: 15, tags: ["logs"] });
-item("raw_copper", "Rohkupfer"); item("copper_ingot", "Kupferbarren"); item("redstone", "Redstone"); item("lapis", "Lapislazuli"); item("emerald", "Smaragd");
+item("raw_copper", "Rohkupfer"); item("copper_ingot", "Kupferbarren"); item("lapis", "Lapislazuli"); item("emerald", "Smaragd");
 item("bucket", "Eimer", { stack: 16 }); item("water_bucket", "Wassereimer", { stack: 1 }); item("lava_bucket", "Lavaeimer", { stack: 1, fuel: 1000 });
 item("coal", "Kohle", { fuel: 80, tags: ["coals"] }); item("charcoal", "Holzkohle", { fuel: 80, tags: ["coals"] });
 item("raw_iron", "Roheisen"); item("raw_gold", "Rohgold");
@@ -120,6 +173,37 @@ item("raw_chicken", "Rohes Hühnchen", { food: [2, 1.2] }); item("cooked_chicken
 item("raw_mutton", "Rohes Hammelfleisch", { food: [2, 1.2] }); item("cooked_mutton", "Gebratenes Hammelfleisch", { food: [6, 9.6] });
 item("raw_rabbit", "Rohes Kaninchen", { food: [3, 1.8] }); item("cooked_rabbit", "Gebratenes Kaninchen", { food: [5, 6] });
 item("rotten_flesh", "Verrottetes Fleisch", { food: [4, 0.8] });
+
+// Etappe 4: Landwirtschaft, Angeln, Redstone, Verzaubern, Brauen
+// put: [Art, Block] – Gegenstände, die nicht einfach als Block gesetzt werden (Pflanzen brauchen Boden, Redstone-Teile haben eine Richtung)
+const putItem = (id, name, kind, block, o = {}) => item(id, name, { put: [kind, block], ...o });
+putItem("wheat_seeds", "Weizensamen", "plant", B.WHEAT); item("wheat", "Weizen");
+putItem("carrot", "Karotte", "plant", B.CARROT, { food: [3, 3.6] }); putItem("potato", "Kartoffel", "plant", B.POTATO, { food: [1, 0.6] });
+item("baked_potato", "Ofenkartoffel", { food: [5, 6] }); item("bread", "Brot", { food: [5, 6] });
+blockItem("pumpkin", "Kürbis", B.PUMPKIN); putItem("pumpkin_seeds", "Kürbiskerne", "plant", B.PUMPKIN_STEM); item("pumpkin_pie", "Kürbiskuchen", { food: [8, 4.8] });
+blockItem("melon", "Melone", B.MELON); putItem("melon_seeds", "Melonenkerne", "plant", B.MELON_STEM); item("melon_slice", "Melonenscheibe", { food: [2, 1.2] });
+putItem("sugar_cane", "Zuckerrohr", "plant", B.CANE); item("sugar", "Zucker"); item("paper", "Papier"); item("book", "Buch", { fuel: 5 });
+item("golden_carrot", "Goldene Karotte", { food: [6, 14.4] }); item("gold_nugget", "Goldklumpen"); item("glistering_melon_slice", "Glitzernde Melonenscheibe");
+item("fishing_rod", "Angel", { stack: 1, dur: 64, fuel: 15 });
+item("raw_cod", "Roher Kabeljau", { food: [2, 0.4] }); item("cooked_cod", "Gebratener Kabeljau", { food: [5, 6] });
+item("raw_salmon", "Roher Lachs", { food: [2, 0.4] }); item("cooked_salmon", "Gebratener Lachs", { food: [6, 9.6] }); item("pufferfish", "Kugelfisch", { food: [1, 0.2] });
+item("rabbit_foot", "Hasenpfote");
+// Redstone
+putItem("redstone", "Redstone", "rs", B.RS_WIRE);
+putItem("redstone_torch", "Redstone-Fackel", "rs", B.RS_TORCH); putItem("lever", "Hebel", "rs", B.LEVER); putItem("button", "Knopf", "rs", B.BUTTON); putItem("pressure_plate", "Druckplatte", "rs", B.PLATE, { fuel: 5 });
+putItem("piston", "Kolben", "rs", B.PISTON); putItem("sticky_piston", "Klebriger Kolben", "rs", B.STICKY); putItem("dispenser", "Spender", "rs", B.DISPENSER);
+blockItem("redstone_lamp", "Redstone-Lampe", B.LAMP); blockItem("redstone_block", "Redstone-Block", B.RS_BLOCK);
+// Verzaubern, Amboss, Brauen
+blockItem("enchanting_table", "Verzauberungstisch", B.ENCHANT); blockItem("bookshelf", "Bücherregal", B.BOOKSHELF, { fuel: 15 });
+blockItem("anvil", "Amboss", B.ANVIL); blockItem("iron_block", "Eisenblock", B.IRON_BLOCK); blockItem("brewing_stand", "Braustand", B.BREWING);
+item("enchanted_book", "Verzaubertes Buch", { stack: 1 });
+item("glass_bottle", "Glasflasche"); item("potion", "Trank", { stack: 1 }); item("splash_potion", "Wurftrank", { stack: 1 });
+putItem("nether_wart", "Netherwarze", "plant", B.WART); item("blaze_rod", "Lohenrute", { fuel: 120 }); item("blaze_powder", "Lohenstaub"); item("fermented_spider_eye", "Fermentiertes Spinnenauge");
+item("glowstone_dust", "Glowstone-Staub");
+// Erzblöcke und Co. als Gegenstände (für Behutsamkeit / Silk Touch)
+blockItem("coal_ore", "Kohleerz", B.COAL); blockItem("iron_ore", "Eisenerz", B.IRON); blockItem("gold_ore", "Golderz", B.GOLD); blockItem("diamond_ore", "Diamanterz", B.DIAMOND);
+blockItem("copper_ore", "Kupfererz", B.COPPER); blockItem("redstone_ore", "Redstone-Erz", B.REDSTONE); blockItem("lapis_ore", "Lapiserz", B.LAPIS); blockItem("emerald_ore", "Smaragderz", B.EMERALD);
+blockItem("grass_block", "Grasblock", B.GRASS); blockItem("deepslate", "Tiefenschiefer", B.DEEPSLATE); blockItem("ice", "Eis", B.ICE);
 
 // Werkzeuge und Rüstung: Stufe (tier) bestimmt, welche Erze etwas fallen lassen
 export const MATERIALS = {
@@ -175,6 +259,36 @@ shaped("shears", 1, [" I", "I "], { I: "iron_ingot" });
 shaped("bed", 1, ["WWW", "PPP"], { W: "wool", P: "#planks" });
 shaped("wool", 1, ["SS", "SS"], { S: "string" });
 shapeless("bone_meal", 3, ["bone"]);
+// Etappe 4
+shaped("bread", 1, ["WWW"], { W: "wheat" });
+shapeless("sugar", 1, ["sugar_cane"]);
+shaped("paper", 3, ["CCC"], { C: "sugar_cane" });
+shapeless("book", 1, ["paper", "paper", "paper", "leather"]);
+shapeless("pumpkin_pie", 1, ["pumpkin", "sugar", "egg"]);
+shaped("fishing_rod", 1, ["  S", " SX", "S X"], { S: "stick", X: "string" });
+shapeless("gold_nugget", 9, ["gold_ingot"]);
+shaped("gold_ingot_n", 1, ["NNN", "NNN", "NNN"], { N: "gold_nugget" }, { out: ["gold_ingot", 1] });
+shaped("golden_carrot", 1, ["NNN", "NCN", "NNN"], { N: "gold_nugget", C: "carrot" });
+shaped("glistering_melon_slice", 1, ["NNN", "NMN", "NNN"], { N: "gold_nugget", M: "melon_slice" });
+shaped("iron_block", 1, ["III", "III", "III"], { I: "iron_ingot" });
+shapeless("iron_ingot_b", 9, ["iron_block"], { out: ["iron_ingot", 9] });
+shaped("redstone_block", 1, ["RRR", "RRR", "RRR"], { R: "redstone" });
+shapeless("redstone_b", 9, ["redstone_block"], { out: ["redstone", 9] });
+shaped("redstone_torch", 1, ["R", "S"], { R: "redstone", S: "stick" });
+shaped("lever", 1, ["S", "C"], { S: "stick", C: "cobble" });
+shapeless("button", 1, ["stone"]);
+shaped("pressure_plate", 1, ["PP"], { P: "#planks" });
+shaped("piston", 1, ["PPP", "CIC", "CRC"], { P: "#planks", C: "cobble", I: "iron_ingot", R: "redstone" });
+shaped("sticky_piston", 1, ["S", "P"], { S: "slimeball", P: "piston" });
+shaped("dispenser", 1, ["CCC", "CBC", "CRC"], { C: "cobble", B: "bow", R: "redstone" });
+shaped("redstone_lamp", 1, [" R ", "RTR", " R "], { R: "redstone", T: "torch" });
+shaped("enchanting_table", 1, [" B ", "DOD", "OOO"], { B: "book", D: "diamond", O: "obsidian" });
+shaped("bookshelf", 1, ["PPP", "BBB", "PPP"], { P: "#planks", B: "book" });
+shaped("anvil", 1, ["III", " i ", "iii"], { I: "iron_block", i: "iron_ingot" });
+shaped("brewing_stand", 1, [" B ", "CCC"], { B: "blaze_rod", C: "cobble" });
+shaped("glass_bottle", 3, ["G G", " G "], { G: "glass" });
+shapeless("blaze_powder", 2, ["blaze_rod"]);
+shapeless("fermented_spider_eye", 1, ["spider_eye", "sugar", "flower"]);
 { const k = { X: "leather" };
   shaped("leather_helmet", 1, ["XXX", "X X"], k); shaped("leather_chest", 1, ["X X", "XXX", "XXX"], k);
   shaped("leather_legs", 1, ["XXX", "X X", "X X"], k); shaped("leather_boots", 1, ["X X", "X X"], k); }
@@ -197,6 +311,7 @@ for (const [m, M] of Object.entries(MATERIALS)) {
 export const SMELT = {
   raw_iron: ["iron_ingot", 0.7], raw_gold: ["gold_ingot", 1], raw_copper: ["copper_ingot", 0.7], sand: ["glass", 0.1], cobble: ["stone", 0.1], clay: ["brick", 0.3],
   raw_beef: ["steak", 0.35], raw_porkchop: ["cooked_porkchop", 0.35], raw_chicken: ["cooked_chicken", 0.35], raw_mutton: ["cooked_mutton", 0.35], raw_rabbit: ["cooked_rabbit", 0.35],
+  potato: ["baked_potato", 0.35], raw_cod: ["cooked_cod", 0.35], raw_salmon: ["cooked_salmon", 0.35],
   log: ["charcoal", 0.15], birch_log: ["charcoal", 0.15], spruce_log: ["charcoal", 0.15], jungle_log: ["charcoal", 0.15], acacia_log: ["charcoal", 0.15]
 };
 export const SMELT_TIME = 10;
