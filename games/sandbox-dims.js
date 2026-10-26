@@ -7,9 +7,9 @@
 //   Speichern (Version 6): Oberwelt wie bisher, dazu dim, dimData (Nether/Ende), strongholds, flags.
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS, isFluid } from "./sandbox-data.js?v=6";
-import { generateNether, generateEnd, placeStronghold, END_CX, END_TOP, END_ARRIVE, END_PILLARS } from "./sandbox-nether.js?v=6";
-import { BIOME_NAMES } from "./sandbox-world.js?v=6";
+import { B, BLOCKS, ITEMS, isFluid } from "./sandbox-data.js?v=7";
+import { generateNether, generateEnd, placeStronghold, END_CX, END_TOP, END_ARRIVE, END_PILLARS } from "./sandbox-nether.js?v=7";
+import { BIOME_NAMES } from "./sandbox-world.js?v=7";
 
 Object.assign(BIOME_NAMES, { nether: "Nether", soul_valley: "Seelensandtal", end: "Das Ende" });
 

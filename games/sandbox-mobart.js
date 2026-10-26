@@ -1,4 +1,4 @@
-import { drawMob5, drawProjectile5, MOB_COLORS5 } from "./sandbox-mobart5.js?v=6";
+import { drawMob5, drawProjectile5, MOB_COLORS5 } from "./sandbox-mobart5.js?v=7";
 // =====================================================================
 // Blockdorf – Tiere und Monster malen (Etappe 3)
 // Alle Figuren sind aus Rechtecken zusammengesetzt (1 Bildpunkt = S Bildschirmpixel), eigene Entwürfe im

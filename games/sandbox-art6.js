@@ -4,8 +4,8 @@
 // Gefärbte Blöcke (Wolle, Beton und ihre Formen) werden je Farbe einmal gemalt und zwischengespeichert,
 // damit der Atlas nicht 16-mal größer wird.
 // =====================================================================
-import { B, COLORS, ITEMS, boxesOf, BLOCKS } from "./sandbox-data.js?v=6";
-import { mulberry32 } from "./sandbox-noise.js?v=6";
+import { B, COLORS, ITEMS, boxesOf, BLOCKS } from "./sandbox-data.js?v=7";
+import { mulberry32 } from "./sandbox-noise.js?v=7";
 
 export const T6 = 16;
 /** Spalte im Atlas für Blöcke 102…125 (die Spalten 120… gehören schon älteren Zusatzbildern) */

@@ -5,15 +5,20 @@
 //   A/D laufen · W/Leertaste springen (Leiter: W hoch, S runter) · linke Maustaste abbauen/kämpfen
 //   rechte Maustaste benutzen/bauen/essen · 1–9 oder Mausrad: Platz wählen · E Inventar · Q werfen · P/Esc Pause
 // =====================================================================
-import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV } from "./sandbox-engine.js?v=6";
-import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=6";
-import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=6";
-import { drawBlock4 } from "./sandbox-art4.js?v=6";
-import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=6";
-import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=6";
-import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=6";
-import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=6";
-import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=6";
+import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV, MODES, WEATHER_NAMES, MOON_FULL } from "./sandbox-engine.js?v=7";
+import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=7";
+import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=7";
+import { drawBlock4 } from "./sandbox-art4.js?v=7";
+import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=7";
+import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=7";
+import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=7";
+import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=7";
+import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=7";
+import { createAudio, stepMaterial, musicMood } from "./sandbox-audio.js?v=7";
+import { loadRecord, addWorld, switchWorld, renameWorld, deleteWorld, canAdd, nextId, cleanSettings } from "./sandbox-worlds.js?v=7";
+import { padStep, readPad, aimPoint, moveCursor } from "./sandbox-pad.js?v=7";
+import { Precip, drawMoon, drawBolt, drawDebug } from "./sandbox-fx7.js?v=7";
+import { settingsPanel, worldsPanel, newWorldPanel } from "./sandbox-menus.js?v=7";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -34,17 +39,32 @@ export function mount(root, ctx) {
   const art = makeArt(), atlas = art.atlas, avg = art.avg;
 
   // ---------- Welt laden oder neu erzeugen ----------
+  const rec0 = loadRecord(ctx.record);
+  let settings = rec0.settings;
+  const meta = { wid: rec0.wid, wname: rec0.wname, others: rec0.others };
   let game;
   let hadSave = false;
-  try { if (ctx.record && ctx.record.w) { game = new Sandbox({ data: ctx.record.w }); hadSave = true; } } catch (_) { game = null; }
-  if (!game) game = new Sandbox({});
-  let state = "ready", raf = 0, last = 0, destroyed = false, confirmNew = false;
-  let saveT = 0, dirty = false, flash = 0, toastT = 0, sound = false, touchMode = "mine", placeCd = 0, swingT = 0, walkPh = 0, shake = 0, fade = 0, whiteout = 0;
+  try { if (rec0.w) { game = new Sandbox({ data: rec0.w }); hadSave = true; } } catch (_) { game = null; }
+  if (!game) { game = new Sandbox({}); if (rec0.wmode === "creative") game.setMode("creative"); }
+  game.events.length = 0;
+  let state = "ready", raf = 0, last = 0, destroyed = false;
+  let saveT = 0, dirty = false, flash = 0, toastT = 0, touchMode = "mine", placeCd = 0, swingT = 0, walkPh = 0, shake = 0, fade = 0, whiteout = 0;
   const keys = { left: false, right: false, jump: false, down: false };
   const mouse = { px: 0, py: 0, in: false, down: false, btn: 0 };
   const cam = { x: game.player.x, y: game.player.y };
   const parts = [], floats = [];
-  let audio = null;
+  const audio = createAudio();
+  audio.apply(settings);
+  const ensureAudio = () => audio.ensure();
+  const sfx = k => audio.sfx(k);
+  const precip = new Precip();
+  const pad = { left: false, right: false, jump: false, down: false };
+  let padPrev = null, padHad = false, padPt = { x: 0, y: 0 }, padMine = false, padUse = false, padShown = false;
+  let page = "main", wrec = null, wstate = {}, ovKind = "ready";
+  let chatHist = [], chatIdx = 0, chatSig = "";
+  const chatLines = [];
+  let fps = 60, drawMs = 0, stepAcc = 0;
+  const cre = { tab: "block", q: "" };
 
   // ---------- Oberfläche ----------
   const canvas = h("canvas", { class: "sb-canvas" });
@@ -64,15 +84,22 @@ export function mount(root, ctx) {
   const bookPanel = h("div", { class: "sb-book" });
   const winWrap = h("div", { class: "sb-winwrap", hidden: true }, h("div", { class: "sb-wincol" }, winPanel, bookPanel));
   const btn = (label, title, fn, cls = "") => h("button", { class: "sb-btn " + cls, type: "button", title, "aria-label": title, onclick: fn }, label);
-  const soundBtn = btn("🔇", "Ton an/aus", () => { sound = !sound; if (sound) ensureAudio(); soundBtn.textContent = sound ? "🔊" : "🔇"; blurFocus(); });
+  const soundBtn = btn(settings.sound ? "🔊" : "🔇", "Ton an/aus (M)", () => { setSetting("sound", !settings.sound); blurFocus(); });
+  const chatBtn = btn("⌨", "Befehle (T)", () => { if (chatIn.hidden) openChat("/"); else closeChat(); });
   const invBtn = btn("🎒", "Inventar (E)", () => { toggleInv(); blurFocus(); });
   const advBtn = btn("🏆", "Fortschritte (G)", () => { toggleAdv(); blurFocus(); });
   const pauseBtn = btn("⏸", "Pause (P)", () => { pause(); });
   const ovTitle = h("div", { class: "tg-ov-title" }, "Blockdorf");
   const ovText = h("div", { class: "sb-ov-text" });
   const ovBtn = h("button", { class: "btn", type: "button", onclick: () => primary() });
-  const ovNew = h("button", { class: "btn ghost small", type: "button", onclick: () => newWorld() }, "Neue Welt");
-  const overlay = h("div", { class: "tg-overlay sb-overlay" }, ovTitle, ovText, ovBtn, ovNew);
+  const ovSet = h("button", { class: "btn ghost small", type: "button", onclick: () => { page = "settings"; renderPage(); } }, "Einstellungen");
+  const ovWorlds = h("button", { class: "btn ghost small", type: "button", onclick: () => { page = "worlds"; wrec = null; wstate = {}; renderPage(); } }, "Welten");
+  const ovRow = h("div", { class: "sb-ovrow" }, ovSet, ovWorlds);
+  const ovPanel = h("div", { class: "sb-ovpanel", hidden: true });
+  const overlay = h("div", { class: "tg-overlay sb-overlay" }, ovTitle, ovText, ovBtn, ovRow, ovPanel);
+  const chatLog = h("div", { class: "sb-chatlog", "aria-live": "polite" });
+  const chatIn = h("input", { class: "sb-chatin", type: "text", maxlength: 120, placeholder: "Befehl, z. B. /hilfe", "aria-label": "Befehl", autocomplete: "off", spellcheck: "false", hidden: true });
+  const padEl = h("div", { class: "sb-padptr", hidden: true });
   const kbd = t => h("kbd", null, t);
   const help = h("div", { class: "sb-help" },
     h("div", null, kbd("A"), kbd("D"), " laufen · ", kbd("W"), " / ", kbd("Leertaste"), " springen · ", kbd("S"), " Leiter runter"),
@@ -91,10 +118,16 @@ export function mount(root, ctx) {
 
   root.appendChild(h("div", { class: "sb" },
     h("div", { class: "sb-view" }, canvas,
-      h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, soundBtn, pauseBtn)),
-      toastEl, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), winWrap, cursorEl, overlay),
+      h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, chatBtn, soundBtn, pauseBtn)),
+      toastEl, chatLog, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), chatIn, winWrap, cursorEl, padEl, overlay),
     touch, help));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
+  function applySettings() {
+    audio.apply(settings);
+    soundBtn.textContent = settings.sound ? "🔊" : "🔇";
+    touch.className = "sb-touch" + (settings.touch === "on" ? " force" : settings.touch === "off" ? " off" : "");
+  }
+  applySettings();
 
   function blurFocus() { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
 
@@ -146,7 +179,9 @@ export function mount(root, ctx) {
       for (const [k, f] of Object.entries(game.fx)) { const s = Math.ceil(f.t); fxRow.appendChild(h("span", { class: "sb-fxi" + (EFFECT_BAD.has(k) ? " bad" : "") }, `${EFFECT_NAMES[k] || k}${ROMAN2[f.amp + 1] || ""} ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`)); }
     }
     const hour = Math.floor(game.time * 24), min = Math.floor((game.time * 24 - hour) * 60);
-    const si = game.dim ? `${BIOME_NAMES[game.biomeAt(p.x + p.w / 2)]} · Höhe ${SURF - Math.floor(p.y + p.h / 2)}` : `Tag ${game.day} · ${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")} · ${BIOME_NAMES[game.biomeAt(p.x + p.w / 2)]} · Höhe ${SURF - Math.floor(p.y + p.h / 2)}`;
+    let si = game.dim ? `${BIOME_NAMES[game.biomeAt(p.x + p.w / 2)]} · Höhe ${SURF - Math.floor(p.y + p.h / 2)}` : `Tag ${game.day} · ${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")} · ${BIOME_NAMES[game.biomeAt(p.x + p.w / 2)]} · Höhe ${SURF - Math.floor(p.y + p.h / 2)}`;
+    if (!game.dim && game.weather && game.weather.kind !== "clear" && game.weather.k > 0.3) si += " · " + weatherName();
+    if (game.mode === "creative") si += " · Kreativ" + (p.flying ? " (fliegt)" : "");
     if (si !== sig.info) { sig.info = si; info.textContent = si; }
     syncWindow();
   }
@@ -159,7 +194,7 @@ export function mount(root, ctx) {
     if (!w) { if (!winWrap.hidden) { winWrap.hidden = true; cursorEl.hidden = true; sig.win = ""; } return; }
     if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.blocking = false; game.bow = null; }
     const e = game.winEnt();
-    const sg = JSON.stringify([w.kind, game.inv, game.armor, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "trade" && w.v ? [w.v.offers.map(o => o.uses), w.v.lvl, w.v.xp, game.hero()] : 0, w.kind === "map" ? Math.floor(game.player.x / 3) : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
+    const sg = JSON.stringify([w.kind, cre.tab, game.inv, game.armor, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "trade" && w.v ? [w.v.offers.map(o => o.uses), w.v.lvl, w.v.xp, game.hero()] : 0, w.kind === "map" ? Math.floor(game.player.x / 3) : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
     if (sg !== sig.win) { sig.win = sg; renderWindow(); renderBook(); updateCursor(); }
     if (w.kind === "brew" && e) { const f = winPanel.querySelector(".sb-bfuel i"), a = winPanel.querySelector(".sb-bprog i"); if (f) f.style.width = Math.round(clamp(e.fuel / 20, 0, 1) * 100) + "%"; if (a) a.style.height = Math.round(clamp(e.brewT / BREW_TIME, 0, 1) * 100) + "%"; }
     if (w.kind === "furnace" && e) { const f = winPanel.querySelector(".sb-flame i"), a = winPanel.querySelector(".sb-arrow i"); if (f) f.style.height = e.burnMax ? Math.round((e.burn / e.burnMax) * 100) + "%" : "0%"; if (a) a.style.width = Math.round((e.cook / 10) * 100) + "%"; }
@@ -190,7 +225,7 @@ export function mount(root, ctx) {
   }
   function renderWindow() {
     const w = game.win; winPanel.textContent = "";
-    const title = { inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe", adv: "Fortschritte", ench: "Verzaubern", anvil: "Amboss", brew: "Braustand", disp: "Spender", beacon: "Leuchtfeuer", trade: "Handel", map: "Entdeckerkarte" }[w.kind];
+    const title = { creative: "Kreativ-Inventar", inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe", adv: "Fortschritte", ench: "Verzaubern", anvil: "Amboss", brew: "Braustand", disp: "Spender", beacon: "Leuchtfeuer", trade: "Handel", map: "Entdeckerkarte" }[w.kind];
     winPanel.appendChild(h("div", { class: "sb-wt" }, h("b", null, title), h("button", { class: "sb-x", type: "button", title: "Schließen (E)", onclick: () => { game.closeWindow(); blurFocus(); } }, "✕")));
     if (w.kind === "adv") {
       const ids = Object.keys(ADV), done = ids.filter(k => game.adv[k]).length;
@@ -206,7 +241,19 @@ export function mount(root, ctx) {
     const row = (area, from, n, cls = "") => { const r = h("div", { class: "sb-srow " + cls }); for (let i = from; i < from + n; i++) r.appendChild(slotEl(area, i, game.slots(area)[i])); return r; };
     const grid = size => { const gEl = h("div", { class: "sb-grid", style: { gridTemplateColumns: `repeat(${size}, 40px)` } }); for (let i = 0; i < size * size; i++) gEl.appendChild(slotEl("grid", i, game.grid[i])); return gEl; };
     const outStack = () => { const r = game.craftResult(); return r ? { id: r.id, n: r.n, d: 0 } : null; };
-    if (w.kind === "inv") {
+    if (w.kind === "creative") {
+      const tabs = h("div", { class: "sb-ctabs" }, ...CRE_TABS.map(([k, n]) => h("button", { type: "button", class: "sb-ctab" + (!cre.q.trim() && cre.tab === k ? " on" : ""), onclick: () => { cre.tab = k; cre.q = ""; creScroll = 0; sig.win = ""; blurFocus(); } }, n)));
+      const body = () => (cre.tab === "inv" && !cre.q.trim() ? h("div", { class: "sb-cinv" }, row("inv", 9, 9), row("inv", 18, 9), row("inv", 27, 9)) : creGrid());
+      const holder = h("div", { class: "sb-cholder" }, body());
+      const search = h("input", { class: "sb-csearch", type: "search", placeholder: "Suchen …", value: cre.q, "aria-label": "Gegenstand suchen",
+        oninput: e => { cre.q = e.target.value; creScroll = 0; holder.textContent = ""; holder.appendChild(body()); tabs.querySelectorAll(".sb-ctab").forEach(b => b.classList.remove("on")); },
+        onkeydown: e => { if (e.key === "Escape") { e.preventDefault(); e.target.blur(); game.closeWindow(); sig.win = ""; } } });
+      holder.addEventListener("scroll", () => { creScroll = holder.scrollTop; });
+      const trash = h("div", { class: "sb-s sb-trash", "data-area": "trash", "data-idx": "0", title: "Papierkorb: legt den Gegenstand in der Hand weg" }, h("span", { class: "sb-trashic" }, "🗑"));
+      const armorRow2 = h("div", { class: "sb-srow sb-crow" }); for (let i = 0; i < 4; i++) armorRow2.appendChild(slotEl("armor", i, game.armor[i], "sb-armor" + i)); armorRow2.appendChild(trash);
+      winPanel.append(tabs, search, holder, armorRow2);
+      creScrollApply = () => { holder.scrollTop = creScroll; };
+    } else if (w.kind === "inv") {
       const armor = h("div", { class: "sb-armorcol" }); for (let i = 0; i < 4; i++) armor.appendChild(slotEl("armor", i, game.armor[i], "sb-armor" + i));
       winPanel.appendChild(h("div", { class: "sb-top" }, armor, h("div", { class: "sb-defense" }, h("div", { class: "sb-big" }, String(game.defense())), h("div", null, "Rüstung")), h("div", { class: "sb-craftbox" }, grid(2), arrow(), slotEl("out", 0, outStack(), "sb-out"))));
     } else if (w.kind === "bench") {
@@ -276,8 +323,29 @@ export function mount(root, ctx) {
       winPanel.appendChild(h("div", { class: "sb-top" }, h("div", { class: "sb-enchslots" }, slotEl("bn", 0, e.s[0])), list));
       winPanel.appendChild(h("div", { class: "sb-hint" }, `Pyramide: Stufe ${lv} von 4 · ${game.beaconClear(w.x, w.y) ? "Der Strahl ist frei." : "Etwas verdeckt den Strahl!"} Bezahlung: Eisen-, Gold-Barren, Smaragd oder Diamant.`));
     }
-    winPanel.appendChild(h("div", { class: "sb-wl" }, "Inventar"));
-    winPanel.appendChild(h("div", { class: "sb-invbox" }, row("inv", 9, 9), row("inv", 18, 9), row("inv", 27, 9), h("div", { class: "sb-gap" }), row("inv", 0, 9)));
+    if (w.kind === "creative") winPanel.appendChild(h("div", { class: "sb-invbox" }, row("inv", 0, 9)));
+    else {
+      winPanel.appendChild(h("div", { class: "sb-wl" }, "Inventar"));
+      winPanel.appendChild(h("div", { class: "sb-invbox" }, row("inv", 9, 9), row("inv", 18, 9), row("inv", 27, 9), h("div", { class: "sb-gap" }), row("inv", 0, 9)));
+    }
+    if (creScrollApply) { creScrollApply(); creScrollApply = null; }
+  }
+  // Kreativ-Fenster: Gegenstände nach Art, mit Suche; der Raster-Inhalt wird nur bei Wechsel neu gebaut
+  const weatherName = () => { const w = game.weather; return w.kind === "thunder" ? "Gewitter" : game.precipAt(game.player.x + 0.4) === "snow" ? "Schneefall" : "Regen"; };
+  const CRE_TABS = [["block", "Blöcke"], ["tool", "Werkzeug"], ["armor", "Rüstung"], ["food", "Essen"], ["other", "Sonstiges"], ["inv", "Inventar"]];
+  let creItems = null, creScroll = 0, creScrollApply = null;
+  const creKind = it => (it.armor ? "armor" : it.tool ? "tool" : it.food ? "food" : it.block ? "block" : "other");
+  function creList() {
+    if (!creItems) { creItems = {}; for (const [k] of CRE_TABS) creItems[k] = []; for (const it of Object.values(ITEMS)) creItems[creKind(it)].push(it.id); }
+    const q = cre.q.trim().toLowerCase();
+    if (q) return Object.values(ITEMS).filter(it => it.name.toLowerCase().includes(q) || it.id.includes(q)).map(it => it.id);
+    return creItems[cre.tab];
+  }
+  function creGrid() {
+    const box = h("div", { class: "sb-cgrid" });
+    for (const id of creList()) { const el = slotEl("cre", 0, game.newStack(id, 1), "sb-cs"); el.setAttribute("data-id", id); box.appendChild(el); }
+    if (!box.firstChild) box.appendChild(h("div", { class: "sb-hint" }, "Nichts gefunden."));
+    return box;
   }
   function ingText(r) {
     const cnt = new Map();
@@ -316,13 +384,16 @@ export function mount(root, ctx) {
   });
   winWrap.addEventListener("contextmenu", e => e.preventDefault());
   winWrap.addEventListener("pointerdown", e => {
+    if (e.target.closest && e.target.closest("input, select, textarea")) return;
     e.preventDefault();
     const s = e.target.closest && e.target.closest(".sb-s");
     const r = winWrap.getBoundingClientRect();
     cursorEl.style.transform = `translate(${e.clientX - r.left - 16}px, ${e.clientY - r.top - 16}px)`;
     if (s) {
       const area = s.getAttribute("data-area"), idx = Number(s.getAttribute("data-idx")), right = e.button === 2;
-      if (e.shiftKey && !right) game.shiftClick(area, idx); else game.click(area, idx, right);
+      if (area === "cre") { const id = s.getAttribute("data-id"); if (!game.creativeTake(id, !right)) { game.creativeTrash(); game.creativeTake(id, !right); } }
+      else if (area === "trash") game.creativeTrash();
+      else if (e.shiftKey && !right) game.shiftClick(area, idx); else game.click(area, idx, right);
       sfx("click"); dirty = true; sig.win = "";
     } else if (!e.target.closest(".sb-win") && !e.target.closest(".sb-book")) { if (game.cursor) game.throwCursor(true); else game.closeWindow(); sig.win = ""; }
   });
@@ -334,59 +405,224 @@ export function mount(root, ctx) {
   function toggleAdv() { if (game.win && game.win.kind === "adv") game.closeWindow(); else game.openWindow("adv"); sig.win = ""; }
   function say(text, ms = 2600) { toastEl.textContent = text; toastEl.hidden = false; toastT = ms / 1000; }
 
-  // ---------- Ton (winzige Synthesizer-Klänge, standardmäßig aus) ----------
-  function ensureAudio() { if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) { audio = null; } } if (audio && audio.state === "suspended") audio.resume(); }
-  function tone(f, d, type = "square", v = 0.04, slide = 0) {
-    if (!sound || !audio) return;
-    const o = audio.createOscillator(), gn = audio.createGain(), t = audio.currentTime;
-    o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
-    gn.gain.setValueAtTime(v, t); gn.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o.connect(gn); gn.connect(audio.destination); o.start(t); o.stop(t + d + 0.02);
-  }
-  function sfx(k) {
-    if (k === "break") tone(180, 0.09, "square", 0.05, -80); else if (k === "place") tone(300, 0.06, "triangle", 0.06, 60);
-    else if (k === "hurt") tone(160, 0.22, "sawtooth", 0.06, -90); else if (k === "craft") { tone(520, 0.08, "triangle", 0.06); setTimeout(() => tone(780, 0.1, "triangle", 0.06), 70); }
-    else if (k === "pick") tone(120 + Math.random() * 40, 0.04, "square", 0.025); else if (k === "kill") tone(420, 0.14, "square", 0.05, -250); else if (k === "jump") tone(250, 0.07, "triangle", 0.03, 90);
-    else if (k === "door") tone(200, 0.08, "square", 0.04, -60); else if (k === "eat") { tone(300, 0.05, "square", 0.04); setTimeout(() => tone(260, 0.05, "square", 0.04), 80); }
-    else if (k === "hiss") tone(700, 0.18, "sawtooth", 0.025, -450);
-    else if (k === "boom") { tone(70, 0.55, "sawtooth", 0.09, -40); tone(120, 0.4, "square", 0.06, -80); }
-    else if (k === "shoot") tone(520, 0.12, "triangle", 0.05, -380); else if (k === "thunk") tone(150, 0.06, "square", 0.04, -60);
-    else if (k === "block") { tone(900, 0.05, "square", 0.04); tone(600, 0.07, "square", 0.03); }
-    else if (k === "tame") { tone(660, 0.08, "triangle", 0.05); setTimeout(() => tone(880, 0.12, "triangle", 0.05), 90); }
-    else if (k === "tp") tone(900, 0.2, "sine", 0.04, -700); else if (k === "splash") tone(300, 0.2, "sawtooth", 0.025, 200);
-    else if (k === "adv") { tone(523, 0.12, "triangle", 0.06); setTimeout(() => tone(659, 0.12, "triangle", 0.06), 120); setTimeout(() => tone(784, 0.25, "triangle", 0.06), 240); }
-    else if (k === "xp") tone(900 + Math.random() * 300, 0.06, "sine", 0.03); else if (k === "click") tone(420, 0.03, "square", 0.02);
-    else if (k === "portal") { tone(150, 0.7, "sine", 0.06, 260); setTimeout(() => tone(230, 0.6, "triangle", 0.04, 200), 120); }
-    else if (k === "roar") { tone(80, 0.7, "sawtooth", 0.09, -30); tone(130, 0.5, "square", 0.04, -60); }
-    else if (k === "gcharge") tone(420, 0.7, "sine", 0.04, 520); else if (k === "gshoot") tone(240, 0.3, "sawtooth", 0.07, -170);
-  }
-
-  // ---------- Zustand ----------
+  // ---------- Zustand, Einstellungen, Welten ----------
+  const curRec = () => ({
+    w: game.toData(), day: game.day, mined: game.stats.mined, built: game.stats.built, kills: game.stats.kills, level: game.level(),
+    wid: meta.wid, wname: meta.wname, wmode: game.mode, others: meta.others, settings, t: Date.now()
+  });
+  const getRec = () => wrec || (wrec = loadRecord(curRec()));
   function showOverlay(kind) {
     overlay.hidden = kind == null;
     if (kind == null) return;
-    const day = game.day;
+    ovKind = kind;
+    const day = game.day, nm = meta.others.length ? `„${meta.wname}“ – ` : "";
     ovTitle.textContent = kind === "paused" ? "Pause" : "Blockdorf";
-    ovText.textContent = kind === "paused" ? "Deine Welt wird gespeichert." : hadSave || game.stats.mined || game.stats.built ? `Dein Dorf wartet – Tag ${day}, ${fmt(game.stats.mined)} Blöcke abgebaut, ${fmt(game.stats.built)} gebaut.` : "Baue ab, handwerke und errichte dein Dorf. Nachts wird es gefährlich – bring Fackeln mit.";
+    ovText.textContent = nm + (kind === "paused" ? "Deine Welt wird gespeichert." : hadSave || game.stats.mined || game.stats.built ? `Dein Dorf wartet – Tag ${day}, ${fmt(game.stats.mined)} Blöcke abgebaut, ${fmt(game.stats.built)} gebaut.` : "Baue ab, handwerke und errichte dein Dorf. Nachts wird es gefährlich – bring Fackeln mit.");
     ovBtn.textContent = kind === "paused" || hadSave || game.stats.mined ? "Weiter" : "Spielen";
-    ovNew.textContent = confirmNew ? "Wirklich? Alles geht verloren" : "Neue Welt";
-    ovNew.className = "btn ghost small" + (confirmNew ? " danger" : "");
+    renderPage();
   }
-  function primary() { ensureAudio(); if (state === "playing") return; confirmNew = false; start(); }
+  /** Overlay-Seiten: Start/Pause, Einstellungen, Welten, neue Welt */
+  function renderPage() {
+    if (overlay.hidden) return;
+    const main = page === "main";
+    ovTitle.hidden = ovText.hidden = ovBtn.hidden = ovRow.hidden = !main;
+    ovPanel.hidden = main;
+    if (main) return;
+    ovPanel.textContent = "";
+    if (page === "settings") ovPanel.appendChild(settingsPanel(h, { ...settings, mode: game.mode }, settingsApi));
+    else if (page === "worlds") ovPanel.appendChild(worldsPanel(h, getRec(), worldsApi, wstate));
+    else ovPanel.appendChild(newWorldPanel(h, { name: "Welt " + Number(nextId(getRec()).slice(1)), mode: "survival" }, newApi));
+  }
+  function backToMain() { page = "main"; wstate = {}; wrec = null; if (dirty) saveNow(); showOverlay(ovKind); }
+  function setSetting(key, value, live) {
+    if (key === "mode") { if (game.mode !== value) game.setMode(value); dirty = true; sig.win = ""; if (!live) renderPage(); return; }
+    settings = cleanSettings({ ...settings, [key]: value });
+    applySettings(); dirty = true;
+    if (key === "sound" && settings.sound) audio.ensure();
+    if (key === "sound" || key === "zoom") resize();
+    if (live) {
+      const inp = ovPanel.querySelector ? ovPanel.querySelector(`input[aria-label="${key}"]`) : null;
+      if (inp && inp.nextSibling) inp.nextSibling.textContent = key === "padSens" ? settings.padSens.toFixed(1) + "×" : Math.round(settings[key] * 100) + " %";
+    } else renderPage();
+    if (state !== "playing") draw(0);
+  }
+  const settingsApi = { change: (k, v, live) => setSetting(k, v, live), back: () => backToMain() };
+  /** Eine Welt zeigen oder austauschen; r kommt aus sandbox-worlds.js, seed nur bei einer neuen Welt */
+  function applyRecord(r, seed) {
+    meta.wid = r.wid; meta.wname = r.wname; meta.others = r.others;
+    let ng = null, had = false;
+    try { if (r.w) { ng = new Sandbox({ data: r.w }); had = true; } } catch (_) { ng = null; }
+    if (!ng) { ng = new Sandbox(seed === undefined ? {} : { seed }); if (r.wmode === "creative") ng.setMode("creative"); }
+    ng.events.length = 0;
+    game = ng; hadSave = had; parts.length = 0; floats.length = 0; chatLines.length = 0; chatSig = "";
+    precip.drops.length = 0; precip.splash.length = 0;
+    cam.x = game.player.x; cam.y = game.player.y;
+    for (const k of Object.keys(sig)) sig[k] = "";
+    lastHeld = null; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; stepAcc = 0;
+    state = "ready";
+  }
+  function commit(r, reload) {
+    const wid0 = meta.wid;
+    const swap = reload === null ? (r.wid !== wid0 || !r.w) : reload;
+    if (swap) applyRecord(r); else { meta.wname = r.wname; meta.others = r.others; }
+    wrec = null; saveNow();
+    if (swap) { page = "main"; wstate = {}; showOverlay("ready"); hud(); draw(0); } else renderPage();
+  }
+  const worldsApi = {
+    play: id => {
+      if (id === meta.wid) { page = "main"; primary(); return; }
+      commit(switchWorld(getRec(), id), true); primary();
+    },
+    edit: id => { wstate = { editing: id }; renderPage(); },
+    cancel: () => { wstate = {}; renderPage(); },
+    rename: (id, name) => { wstate = {}; commit(renameWorld(getRec(), id, name), false); },
+    remove: id => {
+      if (wstate.confirm !== id) { wstate = { confirm: id }; renderPage(); return; }
+      wstate = {}; commit(deleteWorld(getRec(), id), null);
+    },
+    create: () => { if (canAdd(getRec())) { page = "newworld"; renderPage(); } },
+    back: () => backToMain()
+  };
+  const newApi = {
+    submit: ({ name, seed, mode }) => {
+      const r = addWorld(getRec(), { name, mode });
+      if (!r) return;
+      applyRecord(r, seed); wrec = null; saveNow(); page = "main"; wstate = {};
+      showOverlay("ready"); hud(); draw(0);
+    },
+    back: () => { page = "worlds"; renderPage(); }
+  };
+  function primary() { ensureAudio(); if (state === "playing") return; page = "main"; start(); }
   function start() {
     state = "playing"; showOverlay(null); blurFocus(); last = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(frame);
   }
   function pause() {
     if (state !== "playing") return;
     state = "paused"; cancelAnimationFrame(raf); raf = 0; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop(); game.bow = null; game.blocking = false;
-    saveNow(); confirmNew = false; showOverlay("paused"); draw(0);
+    padMine = padUse = false; pad.left = pad.right = pad.jump = pad.down = false; padEl.hidden = true; padShown = false;
+    if (!chatIn.hidden) closeChat();
+    saveNow(); page = "main"; showOverlay("paused"); draw(0);
   }
-  function newWorld() {
-    if (!confirmNew) { confirmNew = true; showOverlay(state === "paused" ? "paused" : "ready"); return; }
-    confirmNew = false; game = new Sandbox({}); hadSave = false; parts.length = 0; floats.length = 0; cam.x = game.player.x; cam.y = game.player.y;
-    for (const k of Object.keys(sig)) sig[k] = ""; lastHeld = null; saveNow(); state = "ready"; showOverlay("ready"); hud(); draw(0);
+  function saveNow() { ctx.save(curRec()); dirty = false; saveT = 0; }
+
+  // ---------- Chat und Befehle ----------
+  function chatPrint(text, cls = "") {
+    for (const line of String(text).split("\n")) chatLines.push({ text: line, cls, life: 10 });
+    if (chatLines.length > 14) chatLines.splice(0, chatLines.length - 14);
+    chatSig = "";
   }
-  function saveNow() { ctx.save({ w: game.toData(), day: game.day, mined: game.stats.mined, built: game.stats.built, kills: game.stats.kills, level: game.level() }); dirty = false; saveT = 0; }
+  function renderChat() {
+    const open = !chatIn.hidden, vis = chatLines.filter(l => open || l.life > 0).slice(open ? -10 : -6);
+    const sg = vis.map(l => l.text + "|" + l.cls + "|" + (l.life < 1.5 && !open ? 1 : 0)).join("\n");
+    if (sg === chatSig) return;
+    chatSig = sg; chatLog.textContent = "";
+    for (const l of vis) chatLog.appendChild(h("div", { class: "sb-cl " + l.cls + (l.life < 1.5 && !open ? " fade" : "") }, l.text));
+  }
+  function openChat(pre = "") {
+    if (state !== "playing") return;
+    keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop();
+    chatIn.hidden = false; chatIn.value = pre; chatIdx = chatHist.length; chatSig = ""; chatIn.focus();
+  }
+  function closeChat() { chatIn.hidden = true; chatIn.value = ""; chatSig = ""; blurFocus(); }
+  function runChat(line) {
+    line = line.trim();
+    if (!line) return;
+    chatHist.push(line); if (chatHist.length > 30) chatHist.shift();
+    chatPrint(line, "me");
+    if (!line.startsWith("/")) return;
+    let r;
+    try { r = game.command(line); } catch (_) { r = { ok: false, lines: ["Das ging schief – der Befehl wurde nicht ausgeführt."] }; }
+    for (const l of r.lines) chatPrint(l, r.ok ? "ok" : "bad");
+    sfx(r.ok ? "chat" : "error"); dirty = true; sig.win = "";
+  }
+  chatIn.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); const v = chatIn.value; closeChat(); runChat(v); }
+    else if (e.key === "Escape") { e.preventDefault(); closeChat(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); if (chatIdx > 0) chatIn.value = chatHist[--chatIdx]; }
+    else if (e.key === "ArrowDown") { e.preventDefault(); chatIdx = Math.min(chatHist.length, chatIdx + 1); chatIn.value = chatHist[chatIdx] || ""; }
+  });
+  chatIn.addEventListener("blur", () => { if (!chatIn.hidden) closeChat(); });
+
+  // ---------- Gamepad ----------
+  function getPad() {
+    try { const l = navigator.getGamepads ? navigator.getGamepads() : []; for (const x of l) if (x && x.connected) return x; } catch (_) {}
+    return null;
+  }
+  function buzz(ms) {
+    if (!settings.vibrate) return;
+    try {
+      if (navigator.vibrate) navigator.vibrate(ms);
+      const gp = getPad(), a = gp && gp.vibrationActuator;
+      if (a && a.playEffect) a.playEffect("dual-rumble", { duration: ms, weakMagnitude: 0.4, strongMagnitude: 0.7 });
+    } catch (_) {}
+  }
+  function placeCursor(x, y) {
+    cursorEl.style.transform = `translate(${x - 16}px, ${y - 16}px)`;
+    padEl.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  /** Klick des Gamepads im Fenster: Plätze bekommen ein echtes pointerdown, Knöpfe einen Klick */
+  function padClick(r, btn, shift) {
+    const cx = r.left + padPt.x, cy = r.top + padPt.y;
+    const el = document.elementFromPoint ? document.elementFromPoint(cx, cy) : null;
+    if (!el || !el.closest) return;
+    const b = el.closest("button, input");
+    if (b && !el.closest(".sb-s")) { if (btn === 0 && b.click) b.click(); return; }
+    const opts = { bubbles: true, cancelable: true, clientX: cx, clientY: cy, button: btn, shiftKey: !!shift };
+    el.dispatchEvent(typeof PointerEvent === "function" ? new PointerEvent("pointerdown", opts) : new MouseEvent("pointerdown", opts));
+  }
+  function pollPad(dt) {
+    const gp = getPad();
+    const res = padStep(gp ? readPad(gp) : null, padPrev, { win: !!game.win, sens: settings.padSens });
+    padPrev = res.state;
+    if (!gp) {
+      if (padHad) { padHad = false; pad.left = pad.right = pad.jump = pad.down = false; if (padMine || padUse) { padMine = padUse = false; up(); } padEl.hidden = true; padShown = false; }
+      return;
+    }
+    padHad = true;
+    const e = res.edges;
+    if (game.win) {
+      pad.left = pad.right = pad.jump = pad.down = false;
+      if (padMine || padUse) { padMine = padUse = false; up(); }
+      const r = winWrap.getBoundingClientRect();
+      if (!padShown) { padPt = { x: (r.width || 400) / 2, y: (r.height || 300) / 2 }; padShown = true; }
+      if (res.cursor) padPt = moveCursor(padPt, res.cursor, dt, r.width || 400, r.height || 300);
+      placeCursor(padPt.x, padPt.y); padEl.hidden = false;
+      if (e.click != null) padClick(r, e.click, e.shift);
+      if (e.close) { game.closeWindow(); sig.win = ""; }
+      return;
+    }
+    padShown = false; padEl.hidden = true;
+    pad.left = res.move.left; pad.right = res.move.right; pad.jump = res.move.jump; pad.down = res.move.down;
+    if (e.slot) game.select((game.sel + e.slot + 9) % 9);
+    if (e.inventory) toggleInv();
+    if (e.advancements) toggleAdv();
+    if (e.drop) { game.throwHeld(false); dirty = true; }
+    if (e.pause) { pause(); return; }
+    if (res.mine || res.use || res.aim) {
+      const p = game.player, pt = aimPoint(p.x + p.w / 2, p.y + 0.6, p.face, res.aim, REACH), tile = T * S;
+      mouse.px = (pt.x - (cam.x - canvas.width / 2 / tile)) * tile; mouse.py = (pt.y - (cam.y - canvas.height / 2 / tile)) * tile; mouse.in = true;
+    }
+    const want = res.use ? 2 : res.mine ? 0 : -1, cur = padUse ? 2 : padMine ? 0 : -1;
+    if (want !== cur) {
+      if (cur !== -1) up();
+      padMine = want === 0; padUse = want === 2;
+      if (want !== -1) pressAt(want);
+    }
+  }
+  // Im Menü (Spiel angehalten): Start oder A setzt fort
+  let idlePrev = null, idleA = false;
+  const idleTimer = setInterval(() => {
+    if (destroyed) return;
+    if (state === "playing") { idlePrev = null; return; }
+    const gp = getPad(), res = padStep(gp ? readPad(gp) : null, idlePrev, { win: false });
+    const a = !!(res.state && res.state.a);
+    if (idlePrev === null) { idlePrev = res.state || {}; idleA = a; return; }
+    idlePrev = res.state || {};
+    if (page === "main" && gp && (res.edges.pause || (a && !idleA))) primary();
+    idleA = a;
+  }, 100);
+  const onPadConnect = () => { if (state === "playing") say("Gamepad verbunden.", 2000); };
+  window.addEventListener("gamepadconnected", onPadConnect);
 
   // ---------- Eingabe ----------
   function act(a, on) {
@@ -398,10 +634,13 @@ export function mount(root, ctx) {
     const t = e.target;
     if (t && t.closest && t.closest("input, textarea, select, [contenteditable]")) return;
     if (state !== "playing") {
+      if (page !== "main") { if (e.key === "Escape") { e.preventDefault(); if (page === "newworld") { page = "worlds"; renderPage(); } else backToMain(); } return; }
       if (e.key === "Enter" || (e.key === " " && state !== "paused")) { e.preventDefault(); if (!e.repeat) primary(); }
       else if (state === "paused" && (e.key === "p" || e.key === "P" || e.key === "Escape")) { e.preventDefault(); if (!e.repeat) primary(); }
       return;
     }
+    if (e.key === "F3") { e.preventDefault(); if (!e.repeat) setSetting("debug", !settings.debug); return; }
+    if ((e.key === "t" || e.key === "T" || e.key === "/") && !game.win) { e.preventDefault(); if (!e.repeat) openChat(e.key === "/" ? "/" : ""); return; }
     if (e.key === "e" || e.key === "E") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
     if (e.key === "g" || e.key === "G") { e.preventDefault(); if (!e.repeat) toggleAdv(); return; }
     if (e.key === "Escape" && game.win) { e.preventDefault(); game.closeWindow(); sig.win = ""; return; }
@@ -420,11 +659,9 @@ export function mount(root, ctx) {
     const r = canvas.getBoundingClientRect(), w = r.width || 1, hh = r.height || 1;
     mouse.px = (e.clientX - r.left) * (canvas.width / w); mouse.py = (e.clientY - r.top) * (canvas.height / hh); mouse.in = true;
   }
-  canvas.addEventListener("pointerdown", e => {
-    if (state !== "playing") return;
-    e.preventDefault(); try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-    setPointer(e); mouse.down = true; ensureAudio();
-    mouse.btn = e.pointerType === "touch" || e.pointerType === "pen" ? (touchMode === "use" ? 2 : 0) : (e.button === 2 ? 2 : 0);
+  /** Taste drücken (Maus, Touch oder Gamepad): btn 0 = abbauen/kämpfen, 2 = benutzen/bauen */
+  function pressAt(btn) {
+    mouse.down = true; mouse.btn = btn;
     placeCd = 0; mouse.first = true;
     if (mouse.btn === 2) {                       // Benutzen sofort ausführen, damit auch ganz kurze Klicks/Tipper zählen
       const m = worldMouse();
@@ -432,6 +669,12 @@ export function mount(root, ctx) {
       if (game.use(Math.floor(m.x), Math.floor(m.y))) { placeCd = 0.25; dirty = true; mouse.used = true; }
       else if (game.selItem() === "bow" && game.count("arrow") === 0) say("Du brauchst Pfeile für den Bogen.", 1800);
     } else mouse.used = false;
+  }
+  canvas.addEventListener("pointerdown", e => {
+    if (state !== "playing") return;
+    e.preventDefault(); try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    setPointer(e); ensureAudio();
+    pressAt(e.pointerType === "touch" || e.pointerType === "pen" ? (touchMode === "use" ? 2 : 0) : (e.button === 2 ? 2 : 0));
   });
   canvas.addEventListener("pointermove", setPointer);
   const up = () => {
@@ -452,7 +695,7 @@ export function mount(root, ctx) {
     const r = canvas.getBoundingClientRect();
     const cw = Math.max(240, Math.round((r.width || 800) * dpr)), ch = Math.max(200, Math.round((r.height || 520) * dpr));
     if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
-    S = Math.max(2, Math.round(ch / 330));
+    S = clamp(Math.max(2, Math.round(ch / 330)) + settings.zoom, 1, 6);
   }
   let ro = null;
   if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(() => { resize(); if (state !== "playing") draw(0); }); ro.observe(canvas); }
@@ -464,9 +707,13 @@ export function mount(root, ctx) {
     if (destroyed || state !== "playing") return;
     if (ctx.blocked()) { pause(); return; }
     const dt = Math.min(0.05, Math.max(0, (t - last) / 1000)); last = t;
+    const t0 = performance.now();
+    pollPad(dt);
     step(dt);
     draw(dt);
     hud();
+    drawMs += (performance.now() - t0 - drawMs) * 0.1;
+    if (dt > 0) fps += (1 / dt - fps) * 0.05;
     if (state === "playing") raf = requestAnimationFrame(frame);
   }
   function worldMouse() {
@@ -475,7 +722,7 @@ export function mount(root, ctx) {
   }
   function step(dt) {
     const lock = !!game.win;
-    game.input.left = !lock && keys.left; game.input.right = !lock && keys.right; game.input.jump = !lock && keys.jump; game.input.down = !lock && keys.down;
+    game.input.left = !lock && (keys.left || pad.left); game.input.right = !lock && (keys.right || pad.right); game.input.jump = !lock && (keys.jump || pad.jump); game.input.down = !lock && (keys.down || pad.down);
     // Maus: abbauen, kämpfen, bauen
     let mining = false;
     if (mouse.down && mouse.in !== false) {
@@ -493,12 +740,21 @@ export function mount(root, ctx) {
     game.aim = mouse.in ? worldMouse() : null;
     swingT = Math.max(0, swingT - dt);
     game.player.swing = mining ? 1 : swingT > 0 ? 1 : 0;
+    const air0 = !game.player.onGround, vy0 = game.player.vy;
     game.update(dt);
     const p = game.player;
     if (Math.abs(p.vx) > 0.5 && p.onGround) walkPh += dt * Math.abs(p.vx) * 1.7;
+    // Schritte, Landung, Wetter- und Höhlenklang, Musik
+    if (p.onGround && !p.flying && Math.abs(p.vx) > 0.5 && !game.win) {
+      stepAcc += Math.abs(p.vx) * dt;
+      if (stepAcc > 2.4) { stepAcc = 0; audio.step(stepMaterial(game.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h + 0.1))), Math.abs(p.vx) / 4); }
+    } else if (!p.onGround) stepAcc = 1.6;
+    if (air0 && p.onGround && vy0 > 9) audio.sfx("land");
+    if (settings.sound) soundScape(dt);
     // Kamera folgt weich
     const tx = p.x + p.w / 2, ty = p.y + p.h / 2 - 0.4, k = 1 - Math.pow(0.0005, dt);
     cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+    if (Math.abs(cam.x - tx) > 30 || Math.abs(cam.y - ty) > 30) { cam.x = tx; cam.y = ty; }      // nach einem Sprung (/tp) sofort mitkommen
     // Ereignisse verarbeiten
     for (const e of game.events) {
       if (e.t === "break") { spark(e.x + 0.5, e.y + 0.5, e.id, 9); sfx("break"); dirty = true; }
@@ -512,7 +768,7 @@ export function mount(root, ctx) {
       else if (e.t === "noharvest") say("Damit bekommst du davon nichts – du brauchst das richtige Werkzeug.", 2800);
       else if (e.t === "craft") sfx("craft");
       else if (e.t === "pickup") floatText(`+${e.n} ${ITEMS[e.item].name}`, "#fff3b0");
-      else if (e.t === "hurt") { flash = 0.5; shake = 0.25; sfx("hurt"); if (e.why === "lava") say("Autsch – Lava!", 1200); else if (e.why === "drown") say("Du ertrinkst! Schwimm nach oben (Leertaste).", 1500); }
+      else if (e.t === "hurt") { flash = 0.5; kick(0.25); buzz(40); sfx("hurt"); if (e.why === "lava") say("Autsch – Lava!", 1200); else if (e.why === "drown") say("Du ertrinkst! Schwimm nach oben (Leertaste).", 1500); }
       else if (e.t === "hiss") { spark(e.x + 0.5, e.y + 0.5, B.STONE, 7); sfx("hiss"); }
       else if (e.t === "bucket") { spark(e.x + 0.5, e.y + 0.5, e.fill ? B.WATER : B.LAVA, 6); sfx("place"); dirty = true; }
       else if (e.t === "died") say("Du bist gestorben. Deine Sachen liegen dort, wo es passiert ist – du hast 5 Minuten.", 5000);
@@ -543,7 +799,7 @@ export function mount(root, ctx) {
       else if (e.t === "fuse") sfx("hiss");
       else if (e.t === "boom") {
         spark(e.x, e.y, B.STONE, 26); spark(e.x, e.y, B.DIRT, 14); spark(e.x, e.y, [70, 70, 70], 22); spark(e.x, e.y, [255, 190, 70], 14); sfx("boom"); whiteout = 0.35; dirty = true;
-        const d = Math.hypot(e.x - game.player.x, e.y - game.player.y); shake = Math.max(shake, clamp(1 - d / 16, 0, 1) * 0.8);
+        const d = Math.hypot(e.x - game.player.x, e.y - game.player.y); kick(clamp(1 - d / 16, 0, 1) * 0.8);
       }
       else if (e.t === "tp") { spark(e.x + 0.3, e.y + 1, [176, 60, 232], 10); sfx("tp"); if (e.self) { cam.x = game.player.x + game.player.w / 2; cam.y = game.player.y; } }
       else if (e.t === "tame") { for (let i = 0; i < 4; i++) floats.push({ x: e.x + (i - 1.5) * 0.4, y: e.y - 0.3 - (i % 2) * 0.3, text: "❤", color: "#ff6080", life: 1.1 }); sfx("tame"); dirty = true; }
@@ -583,11 +839,14 @@ export function mount(root, ctx) {
       else if (e.t === "ghast_shoot") sfx("gshoot");
       else if (e.t === "blaze_shoot") sfx("shoot");
       else if (e.t === "wither_summon") { say("Der Wither wird beschworen …", 3000); sfx("roar"); }
-      else if (e.t === "wither_awake") { sfx("boom"); whiteout = 0.35; shake = 0.6; }
+      else if (e.t === "wither_awake") { sfx("boom"); whiteout = 0.35; kick(0.6); }
       else if (e.t === "dragon_dive") sfx("roar");
       else if (e.t === "dragon_dead") { say("Der Enderdrache ist besiegt! Ein Tor öffnet sich …", 6000); sfx("adv"); whiteout = 0.6; spark(game.player.x, game.player.y, [200, 120, 255], 30); dirty = true; }
       else if (e.t === "beacon_set") { say(`Leuchtfeuer: ${EFFECT_NAMES[e.name] || e.name}`, 2200); sfx("adv"); dirty = true; }
       else if (e.t === "beacon_no") { say(e.why === "lvl" ? "Dafür ist die Pyramide zu klein." : "Lege einen Eisen-, Gold-Barren, Smaragd oder Diamanten als Bezahlung ein.", 2600); sfx("block"); }
+      else if (e.t === "lightning") { const d = Math.abs(e.x - game.player.x); spark(e.x + 0.5, e.y, [255, 255, 200], 14); audio.thunder(d); if (d < 14) { kick(0.35); buzz(70); } }
+      else if (e.t === "weather") { if (!game.dim) say(e.kind === "clear" ? "Der Himmel klart auf." : e.kind === "thunder" ? "Ein Gewitter zieht auf." : game.precipAt(game.player.x) === "snow" ? "Es beginnt zu schneien." : game.precipAt(game.player.x) === "none" ? "Wolken ziehen auf." : "Es beginnt zu regnen.", 2400); }
+      else if (e.t === "mode") { say(`Spielmodus: ${MODES[e.m]}`, 2200); sfx("mode"); dirty = true; sig.win = ""; }
       else if (e.t === "spark") spark(e.x, e.y, [255, 150, 40], 8);
     }
     game.events.length = 0;
@@ -596,10 +855,24 @@ export function mount(root, ctx) {
     for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.life -= dt; f.y -= dt * 0.9; if (f.life <= 0) floats.splice(i, 1); }
     flash = Math.max(0, flash - dt); shake = Math.max(0, shake - dt); fade = Math.max(0, fade - dt); whiteout = Math.max(0, whiteout - dt);
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
+    for (const l of chatLines) l.life -= dt;
+    renderChat();
     if (heldT > 0) { heldT -= dt; if (heldT <= 0) heldName.hidden = true; }
     saveT += dt; if (saveT > 20 && dirty) saveNow();
   }
+  const kick = v => { if (settings.shake) shake = Math.max(shake, v); };
+  /** Klang der Umgebung: Regen (draußen laut, unter Dach leise), Höhlenbrummen, Musik je nach Stimmung */
+  function soundScape(dt) {
+    const p = game.player, px = p.x + p.w / 2, wk = game.weather, depth = game.dim ? 0 : p.y - SURF;
+    let rain = 0;
+    if (!game.dim && wk.k > 0.05 && game.precipAt(px) === "rain") rain = wk.k * (game.rainsOn(px, p.y) ? 1 : 0.25);
+    audio.ambient({ rain, cave: game.dim ? 0 : clamp((depth - 14) / 20, 0, 1) });
+    let boss = false;
+    for (const m of game.mobs) if (m.boss) { boss = true; break; }
+    audio.music(dt, musicMood({ dim: game.dim || 0, boss, depth, raining: rain > 0.4, time: game.time }));
+  }
   function spark(x, y, id, n) {
+    if (!settings.particles) n = Math.min(n, 2);
     const col = Array.isArray(id) ? id : id === 1000 ? [90, 210, 120] : avg[id] || [200, 200, 200];
     for (let i = 0; i < n; i++) parts.push({ x: x + (Math.random() - 0.5) * 0.6, y: y + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 6, vy: -Math.random() * 5 - 1, life: 0.5 + Math.random() * 0.5, c: col, s: 0.1 + Math.random() * 0.12 });
   }
@@ -643,6 +916,7 @@ export function mount(root, ctx) {
   function draw(dt) {
     const cw = canvas.width, ch = canvas.height, tile = T * S;
     const d = Math.min(1, game.dayFactor() * 1.3), sunAlt = Math.sin(2 * Math.PI * (game.time - 0.25));
+    const wk = game.dim || !game.weather ? 0 : game.weather.k;          // wie stark es gerade regnet (0…1)
     g.imageSmoothingEnabled = false;
     const sx = shake > 0 ? Math.round((Math.random() - 0.5) * 6 * S * shake * 4) : 0, sy = shake > 0 ? Math.round((Math.random() - 0.5) * 6 * S * shake * 4) : 0;
     g.setTransform(1, 0, 0, 1, sx, sy);
@@ -655,30 +929,36 @@ export function mount(root, ctx) {
     const dim = game.dim || 0;
     const horizon = Math.round((60 - top) * tile);        // Höhe der Dorfwiese auf dem Bildschirm
     if (dim) drawDimSky(dim, cw, ch); else {
-    const [c1, c2] = skyColors(d, sunAlt);
+    let [c1, c2] = skyColors(d, sunAlt);
+    if (wk > 0) { const gv = 0.3 + 0.7 * d; c1 = mix(c1, [64 * gv, 70 * gv, 84 * gv], wk * 0.7); c2 = mix(c2, [110 * gv, 118 * gv, 130 * gv], wk * 0.75); }
     const grad = g.createLinearGradient(0, 0, 0, Math.max(ch, horizon + tile * 6));
     grad.addColorStop(0, rgb(c1)); grad.addColorStop(1, rgb(c2));
     g.fillStyle = grad; g.fillRect(-8, -8, cw + 16, ch + 16);
-    if (d < 0.7) { const a = clamp((0.7 - d) * 1.6, 0, 1); g.fillStyle = "#fff"; for (const [sx0, sy0, sz] of stars) { g.globalAlpha = a * (0.5 + 0.5 * Math.sin(game.time * 400 + sx0 * 50)); g.fillRect(Math.round(sx0 * cw), Math.round(sy0 * Math.max(60, horizon)), Math.ceil(sz * S * 0.7), Math.ceil(sz * S * 0.7)); } g.globalAlpha = 1; }
+    if (d < 0.7) { const a = clamp((0.7 - d) * 1.6, 0, 1); g.fillStyle = "#fff"; for (const [sx0, sy0, sz] of stars) { g.globalAlpha = a * (1 - wk * 0.85) * (0.5 + 0.5 * Math.sin(game.time * 400 + sx0 * 50)); g.fillRect(Math.round(sx0 * cw), Math.round(sy0 * Math.max(60, horizon)), Math.ceil(sz * S * 0.7), Math.ceil(sz * S * 0.7)); } g.globalAlpha = 1; }
     // Sonne und Mond ziehen im Bogen über den Himmel
     const arcY = Math.max(80 * S, Math.min(horizon, ch)), arcH = Math.min(arcY * 0.85, ch * 0.6);
-    const body = (u, col, glow, r) => {
+    const body = (u, col, glow, r, paint) => {
       if (u < -0.1 || u > 1.1) return;
       const bx = u * cw, by = arcY - Math.sin(clamp(u, 0, 1) * Math.PI) * arcH;
       const gr = g.createRadialGradient(bx, by, r * 0.4, bx, by, r * 4); gr.addColorStop(0, glow); gr.addColorStop(1, "rgba(255,255,255,0)");
       g.fillStyle = gr; g.fillRect(bx - r * 4, by - r * 4, r * 8, r * 8);
-      g.fillStyle = col; g.fillRect(Math.round(bx - r), Math.round(by - r), r * 2, r * 2);
+      if (paint) paint(bx, by, r); else { g.fillStyle = col; g.fillRect(Math.round(bx - r), Math.round(by - r), r * 2, r * 2); }
     };
     const tt = game.time;
-    if (tt >= 0.2 && tt <= 0.8) body((tt - 0.2) / 0.6, "#fff6c8", "rgba(255,230,140,.45)", 7 * S);
+    if (tt >= 0.2 && tt <= 0.8) { g.globalAlpha = 1 - wk * 0.8; body((tt - 0.2) / 0.6, "#fff6c8", "rgba(255,230,140,.45)", 7 * S); g.globalAlpha = 1; }
     const mt = tt >= 0.7 ? (tt - 0.7) / 0.6 : (tt + 0.3) / 0.6;
-    if (mt >= 0 && mt <= 1 && d < 0.8) { g.globalAlpha = clamp((0.8 - d) * 2, 0, 1); body(mt, "#e6ecff", "rgba(170,190,255,.35)", 5 * S); g.globalAlpha = 1; }
+    if (mt >= 0 && mt <= 1 && d < 0.8) {
+      const mph = game.moonPhase();
+      g.globalAlpha = clamp((0.8 - d) * 2, 0, 1) * (1 - wk * 0.8);
+      body(mt, "#e6ecff", `rgba(170,190,255,${0.12 + 0.23 * MOON_FULL[mph]})`, 6 * S, (bx, by, r) => drawMoon(g, bx, by, r, mph));
+      g.globalAlpha = 1;
+    }
     // Wolken
-    g.globalAlpha = clamp(d * 1.1, 0.08, 0.9);
+    g.globalAlpha = Math.min(0.95, clamp(d * 1.1, 0.08, 0.9) + wk * 0.35);
     for (const c of clouds) {
       const wx = ((c.x + game.time * DAY_LEN * c.s - cam.x * tile * 0.15) % (cw + 600) + cw + 600) % (cw + 600) - 300;
       const cy = Math.round(c.y * S * 0.6 - (top - 40) * tile * 0.05);
-      g.fillStyle = d > 0.4 ? "#ffffff" : "#8b92b8";
+      g.fillStyle = wk > 0.3 ? (d > 0.4 ? "#9ba2b0" : "#555c78") : d > 0.4 ? "#ffffff" : "#8b92b8";
       for (let i = 0; i < c.w; i++) { const hh = (i === 0 || i === c.w - 1 ? 1 : 2 + (i % 2)) * 3 * S; g.fillRect(Math.round(wx + i * 5 * S), cy - hh, 5 * S, hh + 3 * S); }
     }
     g.globalAlpha = 1;
@@ -759,9 +1039,17 @@ export function mount(root, ctx) {
     for (const q of parts) { const [bx, by] = scr(q.x, q.y); g.globalAlpha = clamp(q.life * 2, 0, 1); g.fillStyle = rgb(q.c); g.fillRect(bx, by, Math.max(2, q.s * tile), Math.max(2, q.s * tile)); }
     g.globalAlpha = 1;
 
+    // --- Regen und Schnee (nur unter freiem Himmel) ---
+    if (!dim) { precip.update(dt, game, { left, top, vw: cw / tile, vh: ch / tile }, W, H, settings); precip.draw(g, game, scr, S, tile); }
+
     // --- Licht: eine Pixelkarte (1 Pixel = 1 Block), weich auf den Bildschirm gezogen ---
     drawLight(vw, vh, x0, y0, offX, offY, d, tile, cw, ch);
     drawBeams(scr, cw, ch, tile);
+    const bo = game.weather && game.weather.bolt;
+    if (bo && settings.weatherFx) {
+      drawBolt(g, bo, scr, top, S, mulberry32((bo.x * 977 + (bo.t > 0.2 ? 1 : 2)) | 0));
+      g.fillStyle = `rgba(235,240,255,${clamp(bo.t / 0.4, 0, 1) * 0.4})`; g.fillRect(-8, -8, cw + 16, ch + 16);
+    }
 
     // --- Text über den Figuren (nicht abgedunkelt) ---
     g.textBaseline = "middle"; g.textAlign = "center";
@@ -790,6 +1078,17 @@ export function mount(root, ctx) {
     if (flash > 0) { g.fillStyle = `rgba(210,30,30,${flash * 0.5})`; g.fillRect(-8, -8, cw + 16, ch + 16); }
     if (whiteout > 0) { g.fillStyle = `rgba(255,240,210,${whiteout * 1.1})`; g.fillRect(-8, -8, cw + 16, ch + 16); }
     if (fade > 0) { g.fillStyle = `rgba(4,6,20,${Math.min(1, fade * 1.6)})`; g.fillRect(-8, -8, cw + 16, ch + 16); }
+    if (settings.debug) drawDebug(g, debugLines(), S, cw);
+  }
+  function debugLines() {
+    const p = game.player, w = game.weather;
+    return [
+      `Blockdorf · ${Math.round(fps)} FPS · ${drawMs.toFixed(1)} ms je Bild`,
+      `X ${(p.x + p.w / 2).toFixed(1)} · Höhe ${(SURF - p.y).toFixed(1)} · Tempo ${p.vx.toFixed(1)} / ${p.vy.toFixed(1)}`,
+      `${BIOME_NAMES[game.biomeAt(p.x + p.w / 2)]} · Seed ${game.seed} · ${MODES[game.mode]}`,
+      `Wetter ${w.kind} ${w.k.toFixed(2)} (noch ${Math.round(w.t)} s) · Mond ${game.moonPhase()}`,
+      `Figuren ${game.mobs.length} · Drops ${game.drops.length} · Teilchen ${parts.length} · Regen ${precip.drops.length}`
+    ];
   }
 
   /** Leuchtfeuer-Strahlen und die Heilstrahlen der Endkristalle (leuchten, also nach dem Licht gezeichnet) */
@@ -978,7 +1277,7 @@ export function mount(root, ctx) {
       if (ro) ro.disconnect();
       window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", autoPause);
       document.removeEventListener("visibilitychange", onVisibility);
-      if (audio) { try { audio.close(); } catch (_) {} }
+      audio.destroy(); clearInterval(idleTimer); window.removeEventListener("gamepadconnected", onPadConnect);
     }
   };
 }

@@ -3,11 +3,11 @@
 // Alles wird beim Start per Code gemalt, es gibt keine Bilddateien. Die Texturen sind eigene Malereien im
 // kantigen Minecraft-Stil (nicht die Originale).
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=6";
-import { mulberry32 } from "./sandbox-noise.js?v=6";
-import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=6";
-import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=6";
-import { paintAtlas6, paintItem6, COL6 } from "./sandbox-art6.js?v=6";
+import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=7";
+import { mulberry32 } from "./sandbox-noise.js?v=7";
+import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=7";
+import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=7";
+import { paintAtlas6, paintItem6, COL6 } from "./sandbox-art6.js?v=7";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);

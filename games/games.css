@@ -237,3 +237,73 @@
 .sb-ar { font-weight: 700; color: #ffe; margin: 0 2px; }
 .sb-uses { margin-left: auto; font-size: .66rem; opacity: .85; white-space: nowrap; }
 .sb-map { display: block; width: 100%; max-width: 480px; height: auto; border: 3px solid #5c4326; image-rendering: pixelated; background: #e8d6a4; margin: 4px auto; }
+
+/* ---- Blockdorf: Etappe 7 (Optik, Gefühl, Politur) ---- */
+.sb-overlay { overflow: auto; place-content: center; place-content: safe center; }
+.sb-ovrow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.sb-ovpanel { width: min(460px, 100%); max-height: 100%; }
+.sb-ovpanel[hidden] { display: none; }
+.sb-panel { display: grid; gap: 8px; text-align: left; background: rgba(10, 14, 30, .78); border: 1px solid rgba(255, 255, 255, .22); border-radius: 12px; padding: 12px 14px; }
+.sb-ph { font-size: 1.25rem; font-weight: 750; text-align: center; margin-bottom: 2px; }
+.sb-set { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.sb-set-l { flex: 1 1 auto; font-size: .9rem; display: grid; gap: 1px; min-width: 0; }
+.sb-set-l small { color: #a9b3d6; font-size: .72rem; }
+.sb-set-c { flex: 0 0 auto; display: flex; align-items: center; }
+.sb-tog, .sb-seg button, .sb-step button { border: 1px solid rgba(255, 255, 255, .3); background: rgba(255, 255, 255, .08); color: #fff; border-radius: 8px; padding: 5px 10px; font-size: .82rem; min-width: 44px; cursor: pointer; }
+.sb-tog.on, .sb-seg button.on { background: #3f8f4f; border-color: #6fd08a; }
+.sb-seg { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.sb-step { display: flex; align-items: center; gap: 8px; font-size: .82rem; }
+.sb-step span { min-width: 5.5em; text-align: center; }
+.sb-sl { display: flex; align-items: center; gap: 8px; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.sb-sl input { width: 130px; accent-color: #6fd08a; }
+.sb-sl span { min-width: 3.6em; text-align: right; }
+.sb-wname { background: rgba(255, 255, 255, .1); color: #fff; border: 1px solid rgba(255, 255, 255, .3); border-radius: 8px; padding: 6px 8px; font-size: .9rem; width: 100%; box-sizing: border-box; min-width: 150px; }
+.sb-wlist { display: grid; gap: 6px; max-height: 46vh; overflow: auto; }
+.sb-world { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .06); border: 1px solid transparent; }
+.sb-world.on { border-color: #6fd08a; background: rgba(111, 208, 138, .12); }
+.sb-winfo { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.sb-winfo b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-winfo em { font-style: normal; font-weight: 500; color: #8fe0a4; font-size: .78rem; }
+.sb-winfo small { color: #a9b3d6; font-size: .72rem; }
+.sb-wact { display: flex; gap: 4px; flex: 0 0 auto; }
+.sb-wact button { border: 1px solid rgba(255, 255, 255, .3); background: rgba(255, 255, 255, .08); color: #fff; border-radius: 8px; padding: 5px 9px; font-size: .8rem; cursor: pointer; }
+.sb-wact .play { background: #3f8f4f; border-color: #6fd08a; }
+.sb-wact .danger { background: #c0392b; border-color: transparent; }
+.sb-wfoot { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.sb-wfoot small { color: #a9b3d6; }
+/* Chat, Kreativfenster, Gamepad-Zeiger */
+.sb-chatlog { position: absolute; left: 10px; bottom: 96px; z-index: 4; display: grid; gap: 2px; max-width: min(520px, calc(100% - 20px)); pointer-events: none; }
+.sb-cl { background: rgba(10, 14, 30, .62); color: #fff; font-size: .78rem; padding: 2px 8px; border-radius: 6px; width: fit-content; max-width: 100%; overflow-wrap: anywhere; transition: opacity .8s; }
+.sb-cl.me { color: #cfd6ee; } .sb-cl.ok { color: #9be39b; } .sb-cl.bad { color: #ff9b9b; } .sb-cl.fade { opacity: .25; }
+.sb-chatin { position: absolute; left: 10px; right: 10px; bottom: 60px; z-index: 5; background: rgba(10, 14, 30, .88); color: #fff; border: 1px solid rgba(255, 255, 255, .4); border-radius: 8px; padding: 7px 10px; font-size: .9rem; max-width: 520px; box-sizing: border-box; }
+.sb-chatin[hidden] { display: none; }
+.sb-ctabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.sb-ctab { border: 2px solid; border-color: #fff #555 #555 #fff; background: #b4b4b4; color: #303030; font-size: .78rem; padding: 3px 8px; cursor: pointer; }
+.sb-ctab.on { background: #8b8b8b; border-color: #555 #fff #fff #555; font-weight: 700; }
+.sb-csearch { width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 4px 8px; border: 2px solid; border-color: #555 #fff #fff #555; background: #e4e4e4; color: #303030; font-size: .85rem; }
+.sb-cholder { height: 168px; max-width: 408px; overflow-y: auto; overflow-x: hidden; margin-bottom: 6px; background: #8b8b8b; border: 2px solid; border-color: #373737 #fff #fff #373737; }
+.sb-cgrid { display: grid; grid-template-columns: repeat(9, 40px); width: max-content; }
+.sb-cgrid .sb-s { border-width: 1px; }
+.sb-crow { display: flex; gap: 0; justify-content: space-between; margin-bottom: 4px; }
+.sb-trash { margin-left: auto; cursor: pointer; }
+.sb-trashic { font-size: 1.2rem; }
+.sb-padptr { position: absolute; left: 0; top: 0; z-index: 10; width: 14px; height: 14px; pointer-events: none; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 2px #000; margin: -7px 0 0 -7px; }
+.sb-padptr[hidden] { display: none; }
+.sb-touch.force { display: grid; }
+.sb-touch.off { display: none !important; }
+@media (max-width: 760px) { .sb-chatlog { bottom: 132px; } .sb-chatin { bottom: 100px; } .sb-cholder { height: 140px; } .sb-sl input { width: 90px; } }
+.sb-ovrow[hidden] { display: none; }
+.sb-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px; }
+.sb-ovpanel { overflow: auto; min-height: 0; flex: 0 1 auto; }
+.sb-cinv { display: grid; gap: 0; padding: 4px 0 0 0; width: max-content; }
+.sb-cholder .sb-srow { margin: 0; }
+@media (min-width: 900px) {
+  .sb-ovpanel:has(.sb-settings) { width: min(860px, 100%); }
+  .sb-settings { grid-template-columns: 1fr 1fr; column-gap: 28px; }
+  .sb-settings .sb-ph, .sb-settings > .btn { grid-column: 1 / -1; }
+  .sb-settings > .btn { justify-self: center; }
+}
+.sb-overlay [hidden] { display: none !important; }
+.sb-ctab { font-size: .72rem; padding: 3px 6px; }
+.sb-cholder { width: 378px; max-width: 100%; }
+.sb-cgrid, .sb-cinv { margin: 0; }

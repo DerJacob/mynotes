@@ -9,9 +9,9 @@
 //   Möbel:      Kissen (man sitzt), Strohbett (überspringt die Nacht, ohne den Spawnpunkt zu ändern), Lagerfeuer (verbrennt)
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS, WORKSTATIONS } from "./sandbox-data.js?v=6";
-import { MOBS, ADV } from "./sandbox-mobs.js?v=6";
-import { EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=6";
+import { B, BLOCKS, ITEMS, WORKSTATIONS } from "./sandbox-data.js?v=7";
+import { MOBS, ADV } from "./sandbox-mobs.js?v=7";
+import { EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=7";
 
 export const PROFS = {
   farmer: { name: "Bauer", ws: B.COMPOSTER, color: "#7a9a3a", lines: ["Frisches Brot, gerade gebacken!", "Der Weizen steht prächtig dieses Jahr.", "Brauchst du Kürbisse?"] },

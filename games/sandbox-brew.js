@@ -6,8 +6,8 @@
 //   Effekte: Schnelligkeit, Langsamkeit, Stärke, Schwäche, Sprungkraft, Regeneration, Gift, Heilung, Schaden, Feuerschutz, Wasseratmung, Nachtsicht, Unsichtbarkeit, Federfall
 // Engine ohne Oberfläche; Anzeige in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag } from "./sandbox-data.js?v=6";
-import { mulberry32 } from "./sandbox-noise.js?v=6";
+import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag } from "./sandbox-data.js?v=7";
+import { mulberry32 } from "./sandbox-noise.js?v=7";
 
 // ---------------------------------------------------------------------
 // Verzauberungen

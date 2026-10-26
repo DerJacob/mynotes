@@ -7,9 +7,9 @@
 //   Arbeitsblöcke in den Dörfern (Komposter, Lesepult, Kartentisch, Amboss)
 // Alles in der Seitenansicht: Bauwerke sind Querschnitte, in denen man herumlaufen kann.
 // =====================================================================
-import { B } from "./sandbox-data.js?v=6";
-import { mulberry32 } from "./sandbox-noise.js?v=6";
-import { BIOMES } from "./sandbox-world.js?v=6";
+import { B } from "./sandbox-data.js?v=7";
+import { mulberry32 } from "./sandbox-noise.js?v=7";
+import { BIOMES } from "./sandbox-world.js?v=7";
 
 const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1, SEA = SURF + 4;
 export const DAPPLED = "dappled";

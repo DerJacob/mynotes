@@ -8,8 +8,8 @@
 //   Festung: versiegelter Raum tief unter der Erde mit dem Endportal-Rahmen
 // Reine Funktionen: gleiche Zahl → gleiche Welt. Spielregeln stehen in sandbox-dims.js / sandbox-boss.js.
 // =====================================================================
-import { B } from "./sandbox-data.js?v=6";
-import { mulberry32, hash2, fbm, smooth, clamp } from "./sandbox-noise.js?v=6";
+import { B } from "./sandbox-data.js?v=7";
+import { mulberry32, hash2, fbm, smooth, clamp } from "./sandbox-noise.js?v=7";
 
 export const W = 512, H = 192;
 export const NETHER_BIOMES = ["nether", "soul_valley"];
