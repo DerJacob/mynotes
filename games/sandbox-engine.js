@@ -7,19 +7,21 @@
 //   Speichern: Blöcke als Lauflängen (Base64) – klein genug für den Spielstand im Drive
 // =====================================================================
 
-import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid, boxesOf } from "./sandbox-data.js?v=6";
-import { installInventory } from "./sandbox-inventory.js?v=6";
-import { installFluids, SRC } from "./sandbox-fluids.js?v=6";
-import { installMobs } from "./sandbox-mobs.js?v=6";
-import { installFarm } from "./sandbox-farm.js?v=6";
-import { installRedstone } from "./sandbox-redstone.js?v=6";
-import { installBrew, ENCH } from "./sandbox-brew.js?v=6";
-import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=6";
-import { addContent6 } from "./sandbox-world6.js?v=6";
-import { installDims } from "./sandbox-dims.js?v=6";
-import { installBoss } from "./sandbox-boss.js?v=6";
-import { installVillagers } from "./sandbox-vill.js?v=6";
-import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=6";
+import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid, boxesOf } from "./sandbox-data.js?v=7";
+import { installInventory } from "./sandbox-inventory.js?v=7";
+import { installFluids, SRC } from "./sandbox-fluids.js?v=7";
+import { installMobs } from "./sandbox-mobs.js?v=7";
+import { installFarm } from "./sandbox-farm.js?v=7";
+import { installRedstone } from "./sandbox-redstone.js?v=7";
+import { installBrew, ENCH } from "./sandbox-brew.js?v=7";
+import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=7";
+import { addContent6 } from "./sandbox-world6.js?v=7";
+import { installDims } from "./sandbox-dims.js?v=7";
+import { installBoss } from "./sandbox-boss.js?v=7";
+import { installVillagers } from "./sandbox-vill.js?v=7";
+import { installPolish } from "./sandbox-polish.js?v=7";
+export { MODES, WEATHER_NAMES, MOON_NAMES, MOON_FULL, findItem, findMob } from "./sandbox-polish.js?v=7";
+import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=7";
 export { BIOMES, BIOME_NAMES };
 export { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS };
 
@@ -27,12 +29,12 @@ export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
-import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=6";
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=7";
 export { mulberry32 };
-export { MOBS, ADV } from "./sandbox-mobs.js?v=6";
-export { ENCH, ROMAN, POTION_KINDS, POTION_FX, EFFECT_NAMES, EFFECT_BAD, stackName, stackLines, enchLines, potionKind, potionMod, potionCode, potionColor, brewResult, BREW_TIME } from "./sandbox-brew.js?v=6";
+export { MOBS, ADV } from "./sandbox-mobs.js?v=7";
+export { ENCH, ROMAN, POTION_KINDS, POTION_FX, EFFECT_NAMES, EFFECT_BAD, stackName, stackLines, enchLines, potionKind, potionMod, potionCode, potionColor, brewResult, BREW_TIME } from "./sandbox-brew.js?v=7";
 
 // ---------------------------------------------------------------------
 // Blöcke ↔ Text (Lauflängen, Base64)
@@ -164,12 +166,12 @@ export class Sandbox {
       mobs: this._mobsToData(ow.mobs), adv: { ...this.adv }, bed: this.bed ? { ...this.bed } : null,
       aux: encodeTiles(ow.aux), fx: Object.fromEntries(Object.entries(this.fx).map(([k, f]) => [k, [+f.t.toFixed(1), f.amp]])), es: this.enchSeed
     };
-    Object.assign(data, this._villSave());
+    Object.assign(data, this._villSave(), this._polishSave());
     this._saveDims(data);
     return data;
   }
   _fromData(d) {
-    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3 && d.v !== 4 && d.v !== 5 && d.v !== 6 && d.v !== 7) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
+    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3 && d.v !== 4 && d.v !== 5 && d.v !== 6 && d.v !== 7 && d.v !== 8) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
     this.seed = d.seed | 0;
     this.tiles = decodeTiles(d.tiles);
     this.aux = new Uint8Array(W * H);
@@ -215,6 +217,7 @@ export class Sandbox {
     if (Array.isArray(d.strongholds)) this.strongholds = d.strongholds.filter(s => s && Number.isFinite(s.x) && Number.isFinite(s.y)).map(s => ({ x: s.x | 0, y: s.y | 0 }));
     if (d.flags && typeof d.flags === "object") this.flags.dragonDead = !!d.flags.dragonDead;
     this._villLoad(d);
+    this._polishLoad(d);
     // Falls der Spielstand im Boden steckt (beschädigt), zurück ins Dorf (steht der Spieler im Nether/Ende, prüft _restoreDim das)
     if (!d.dim && this._hit(p)) { p.x = SPAWN_X - 6.4; p.y = SURF - 1.8 - 0.001; }
   }
@@ -449,3 +452,4 @@ installBrew(Sandbox, { clamp, W, H, MAX_HP });
 installDims(Sandbox, { clamp, W, H, SURF, SPAWN_X, encodeTiles, decodeTiles, ENCH, stackMax });
 installBoss(Sandbox, { clamp, W, H });
 installVillagers(Sandbox, { clamp, W, H, SPAWN_X, REACH });
+installPolish(Sandbox, { clamp, W, H, SURF, stackMax });

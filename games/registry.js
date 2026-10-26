@@ -6,6 +6,8 @@
 //   merge    optional: zwei Stände zusammenführen (z. B. von zwei PCs) – ohne merge gewinnt der neuere
 //   soon     true = steht schon im Katalog, ist aber noch nicht spielbar
 // =====================================================================
+import { summary as worldsSummary, mergeRecords } from "./sandbox-worlds.js?v=7";
+
 const fmt = n => new Intl.NumberFormat("de-DE").format(n);
 
 export const GAMES = [
@@ -26,9 +28,10 @@ export const GAMES = [
     id: "sandbox",
     title: "Blockdorf",
     emoji: "⛏️",
-    desc: "Abbauen, handwerken, bauen, kämpfen, Felder bestellen, Redstone-Schaltungen und Tränke brauen – eine Pixelwelt mit Höhlen, Tieren, Monstern, Tag und Nacht. Durch Portale geht es in den Nether und ins Ende zu Enderdrache und Wither. Dein Dorf wartet schon auf dich – mit Dorfbewohnern zum Handeln, Überfällen, Karten zu Waldvilla und Ozeanmonument, dem Gesprenkelten Wald, verlassenen Lagern und Wolle, Beton und Kissen in 16 Farben.",
-    load: () => import("./sandbox.js?v=6"),
-    summary: r => r && r.day ? "Tag " + r.day + " · " + fmt(r.mined || 0) + " abgebaut · " + fmt(r.built || 0) + " gebaut" : "Neue Welt"
+    desc: "Abbauen, handwerken, bauen, kämpfen, Felder bestellen, Redstone-Schaltungen und Tränke brauen – eine Pixelwelt mit Höhlen, Tieren, Monstern, Tag und Nacht. Durch Portale geht es in den Nether und ins Ende zu Enderdrache und Wither. Dein Dorf wartet schon auf dich – mit Dorfbewohnern zum Handeln, Überfällen, Karten zu Waldvilla und Ozeanmonument, dem Gesprenkelten Wald, verlassenen Lagern und Wolle, Beton und Kissen in 16 Farben. Mit Regen, Schnee und Gewitter, Mondphasen, Ton und Musik, Kreativmodus, Befehlen, mehreren Welten und Gamepad.",
+    load: () => import("./sandbox.js?v=7"),
+    summary: worldsSummary,
+    merge: mergeRecords
   },
   {
     id: "zivilisation",

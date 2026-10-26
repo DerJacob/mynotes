@@ -6,8 +6,8 @@
 //   Dazu: Spawnregeln nach Licht, Tiefe und Biom, Beute, Bett (Schlafen, Respawn) und Fortschritte.
 // Alles ist Engine-Logik ohne Oberfläche (Node-testbar); gezeichnet wird in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=6";
-import { mulberry32 } from "./sandbox-noise.js?v=6";
+import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=7";
+import { mulberry32 } from "./sandbox-noise.js?v=7";
 
 const sgn = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 

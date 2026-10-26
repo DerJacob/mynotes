@@ -7,9 +7,9 @@
 //   Spieler: Seelensand bremst, Magmablock brennt, Leere im Ende, Elytren (Gleiten), Enderperle
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=6";
-import { MOBS, ADV } from "./sandbox-mobs.js?v=6";
-import { END_CX, END_TOP } from "./sandbox-nether.js?v=6";
+import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=7";
+import { MOBS, ADV } from "./sandbox-mobs.js?v=7";
+import { END_CX, END_TOP } from "./sandbox-nether.js?v=7";
 
 Object.assign(MOBS, {
   piglin: { name: "Piglin", kind: "neutral", w: 0.7, h: 1.8, hp: 16, speed: 2.9, dmg: 4, range: 14, xp: [5, 5], drops: [["gold_nugget", 0, 2, 0.4]] },

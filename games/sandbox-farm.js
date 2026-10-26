@@ -5,9 +5,9 @@
 //   Tiere füttern → Liebe → Baby (wächst nach 2,5 Minuten heran) · Angeln mit Beute, Müll und Schätzen
 // Gewachsen wird nur in Spielernähe (±48 Blöcke) und nur bei Licht (Stufe 9) – wie in Minecraft, nur schneller.
 // =====================================================================
-import { B, BLOCKS, ITEMS, isCrop, isPlant, colorItem } from "./sandbox-data.js?v=6";
-import { mulberry32 } from "./sandbox-noise.js?v=6";
-import { MOBS } from "./sandbox-mobs.js?v=6";
+import { B, BLOCKS, ITEMS, isCrop, isPlant, colorItem } from "./sandbox-data.js?v=7";
+import { mulberry32 } from "./sandbox-noise.js?v=7";
+import { MOBS } from "./sandbox-mobs.js?v=7";
 
 const sgn = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 export const GROW_RANGE = 48;
