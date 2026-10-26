@@ -142,6 +142,9 @@ export function plantSprite(g, aux, ox, oy, k, now = 0, sd = 0) {
   else if (aux >= WP.FAN && aux < WP.FAN + 5) coralSprite(F, 1, CORAL_RGB[aux - WP.FAN], aux - WP.FAN, false);
   else if (aux >= WP.DEAD_CORAL && aux < WP.DEAD_CORAL + 5) coralSprite(F, 0, DEAD, aux - WP.DEAD_CORAL, true);
   else if (aux >= WP.DEAD_FAN && aux < WP.DEAD_FAN + 5) coralSprite(F, 1, DEAD, aux - WP.DEAD_FAN, true);
+  else if (aux === WP.SPAWN) {                         // Froschlaich: Gallertklumpen mit dunklen Punkten
+    for (const [x, y] of [[1, 13], [4, 14], [7, 13], [10, 14], [13, 13], [3, 12], [9, 12], [6, 14]]) { F(x, y, 3, 2, "#b8c8a0"); F(x, y, 3, 1, "#d8e4c4"); F(x + 1, y + 1, 1, 1, "#2a2a22"); }
+  }
 }
 /** Koralle (fan 0) oder Korallenfächer (fan 1) in Farbe col; kind = Form 0…4 */
 function coralSprite(F, fan, col, kind, dead) {
