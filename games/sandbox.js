@@ -5,20 +5,22 @@
 //   A/D laufen · W/Leertaste springen (Leiter: W hoch, S runter) · linke Maustaste abbauen/kämpfen
 //   rechte Maustaste benutzen/bauen/essen · 1–9 oder Mausrad: Platz wählen · E Inventar · Q werfen · P/Esc Pause
 // =====================================================================
-import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV, MODES, WEATHER_NAMES, MOON_FULL } from "./sandbox-engine.js?v=7";
-import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=7";
-import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=7";
-import { drawBlock4 } from "./sandbox-art4.js?v=7";
-import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=7";
-import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=7";
-import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=7";
-import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=7";
-import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=7";
-import { createAudio, stepMaterial, musicMood } from "./sandbox-audio.js?v=7";
-import { loadRecord, addWorld, switchWorld, renameWorld, deleteWorld, canAdd, nextId, cleanSettings } from "./sandbox-worlds.js?v=7";
-import { padStep, readPad, aimPoint, moveCursor } from "./sandbox-pad.js?v=7";
-import { Precip, drawMoon, drawBolt, drawDebug } from "./sandbox-fx7.js?v=7";
-import { settingsPanel, worldsPanel, newWorldPanel } from "./sandbox-menus.js?v=7";
+import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV, MODES, WEATHER_NAMES, MOON_FULL } from "./sandbox-engine.js?v=8";
+import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=8";
+import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=8";
+import { drawBlock4 } from "./sandbox-art4.js?v=8";
+import { drawBlock8 } from "./sandbox-art8.js?v=8";
+import { mcY } from "./sandbox-const.js?v=8";
+import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=8";
+import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=8";
+import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=8";
+import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=8";
+import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=8";
+import { createAudio, stepMaterial, musicMood } from "./sandbox-audio.js?v=8";
+import { loadRecord, addWorld, switchWorld, renameWorld, deleteWorld, canAdd, nextId, cleanSettings } from "./sandbox-worlds.js?v=8";
+import { padStep, readPad, aimPoint, moveCursor } from "./sandbox-pad.js?v=8";
+import { Precip, drawMoon, drawBolt, drawDebug } from "./sandbox-fx7.js?v=8";
+import { settingsPanel, worldsPanel, newWorldPanel } from "./sandbox-menus.js?v=8";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -927,7 +929,7 @@ export function mount(root, ctx) {
 
     // --- Himmel ---
     const dim = game.dim || 0;
-    const horizon = Math.round((60 - top) * tile);        // Höhe der Dorfwiese auf dem Bildschirm
+    const horizon = Math.round((SURF - top) * tile);        // Höhe der Dorfwiese auf dem Bildschirm
     if (dim) drawDimSky(dim, cw, ch); else {
     let [c1, c2] = skyColors(d, sunAlt);
     if (wk > 0) { const gv = 0.3 + 0.7 * d; c1 = mix(c1, [64 * gv, 70 * gv, 84 * gv], wk * 0.7); c2 = mix(c2, [110 * gv, 118 * gv, 130 * gv], wk * 0.75); }
@@ -995,7 +997,7 @@ export function mount(root, ctx) {
         else if (id === B.FURNACE) { const fe = game.ents.get(tx + "," + ty); if (fe && fe.burn > 0) idx = IDX.FURNACE_LIT; }
         else if (id === B.GRASS || id === B.LEAVES || id === B.TALLGRASS) { idx = game.biomes[tx] * 3 + (id === B.GRASS ? 0 : id === B.LEAVES ? 1 : 2); row = 1; }
         else if (ty >= DEEP_Y && ORE_DEEP[id] != null) idx = ORE_DEEP[id];
-        if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
+        if (id >= B.POWDER_SNOW && drawBlock8(g, atlas, id, 0, px, py, tile)) { /* Etappe 8 */ } else if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
         if (id === B.TORCH) { const fl = 0.5 + 0.5 * Math.sin(game.time * 3000 + tx * 2.1); g.fillStyle = `rgba(255,${180 + fl * 60 | 0},80,${0.35 + fl * 0.3})`; g.fillRect(px + 6 * S, py + (2 + (fl > 0.6 ? 0 : 1)) * S, 4 * S, 3 * S); }
       }
     }
@@ -1084,7 +1086,7 @@ export function mount(root, ctx) {
     const p = game.player, w = game.weather;
     return [
       `Blockdorf · ${Math.round(fps)} FPS · ${drawMs.toFixed(1)} ms je Bild`,
-      `X ${(p.x + p.w / 2).toFixed(1)} · Höhe ${(SURF - p.y).toFixed(1)} · Tempo ${p.vx.toFixed(1)} / ${p.vy.toFixed(1)}`,
+      `X ${(p.x + p.w / 2).toFixed(1)} · Höhe ${(SURF - p.y).toFixed(1)}${game.dim ? "" : ` · Y ${mcY(p.y).toFixed(1)}`} · Tempo ${p.vx.toFixed(1)} / ${p.vy.toFixed(1)}`,
       `${BIOME_NAMES[game.biomeAt(p.x + p.w / 2)]} · Seed ${game.seed} · ${MODES[game.mode]}`,
       `Wetter ${w.kind} ${w.k.toFixed(2)} (noch ${Math.round(w.t)} s) · Mond ${game.moonPhase()}`,
       `Figuren ${game.mobs.length} · Drops ${game.drops.length} · Teilchen ${parts.length} · Regen ${precip.drops.length}`

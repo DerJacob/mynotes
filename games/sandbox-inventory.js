@@ -2,7 +2,7 @@
 // Blockdorf – Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen, Hunger, Erfahrung
 // Wird an die Klasse Sandbox gehängt (installInventory) und hält sandbox-engine.js übersichtlich.
 // =====================================================================
-import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS, boxesOf, colorItem } from "./sandbox-data.js?v=7";
+import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS, boxesOf, colorItem } from "./sandbox-data.js?v=8";
 
 export function installInventory(Sandbox, K) {
   const { clamp, REACH } = K;

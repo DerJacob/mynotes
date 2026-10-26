@@ -7,10 +7,10 @@
 //   Befehle:   /help /gamemode /time /weather /tp /give /xp /heal /kill /spawnpoint /seed /locate /summon /clear
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=7";
-import { MOBS } from "./sandbox-mobs.js?v=7";
-import { BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=7";
-import { mulberry32 } from "./sandbox-noise.js?v=7";
+import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=8";
+import { MOBS } from "./sandbox-mobs.js?v=8";
+import { BIOMES, BIOME_NAMES, SNOWY_BIOMES } from "./sandbox-world.js?v=8";
+import { mulberry32 } from "./sandbox-noise.js?v=8";
 
 export const MODES = { survival: "Überleben", creative: "Kreativ" };
 export const WEATHER_NAMES = { clear: "Klar", rain: "Regen", thunder: "Gewitter" };
@@ -88,8 +88,8 @@ export function installPolish(Sandbox, K) {
     x = clamp(Math.floor(x), 0, W - 1);
     const name = BIOMES[this.biomes[x]];
     if (name === "desert" || name === "savanna") return "none";
-    if (name === "snow") return "snow";
-    if (name === "mountains" && this.ground[x] < SURF - 14) return "snow";
+    if (SNOWY_BIOMES.has(name)) return "snow";
+    if ((name === "mountains" && this.ground[x] < SURF - 14) || (name === "stony_peaks" && this.ground[x] < SURF - 60)) return "snow";
     return "rain";
   };
   /** Trifft Regen oder Schnee diesen Block (kein Dach darüber, Wetter aktiv)? */

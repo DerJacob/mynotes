@@ -6,8 +6,9 @@
 //   Dazu: Spawnregeln nach Licht, Tiefe und Biom, Beute, Bett (Schlafen, Respawn) und Fortschritte.
 // Alles ist Engine-Logik ohne Oberfläche (Node-testbar); gezeichnet wird in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=7";
-import { mulberry32 } from "./sandbox-noise.js?v=7";
+import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=8";
+import { mulberry32 } from "./sandbox-noise.js?v=8";
+import { NH } from "./sandbox-const.js?v=8";
 
 const sgn = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 
@@ -31,7 +32,9 @@ export const MOBS = {
 const HERD = { // Biom → Gewichte der Tiere beim Erzeugen der Welt
   plains: { cow: 3, pig: 2, sheep: 3, chicken: 2 }, forest: { pig: 2, sheep: 2, cow: 2, chicken: 1, wolf: 2 }, birch: { pig: 2, sheep: 2, cow: 2, chicken: 1 },
   taiga: { wolf: 3, rabbit: 2, sheep: 1, pig: 1, cow: 1 }, snow: { rabbit: 3, sheep: 1 }, desert: { rabbit: 2 }, savanna: { cow: 2, sheep: 2, pig: 1, chicken: 1 },
-  jungle: { chicken: 3, pig: 1 }, swamp: { cow: 1, chicken: 1 }, mountains: { sheep: 3 }, ocean: {}, dappled: { pig: 2, sheep: 2, cow: 2, wolf: 1, chicken: 1 }
+  jungle: { chicken: 3, pig: 1 }, swamp: { cow: 1, chicken: 1 }, mountains: { sheep: 3 }, ocean: {}, dappled: { pig: 2, sheep: 2, cow: 2, wolf: 1, chicken: 1 },
+  meadow: { sheep: 3, cow: 2, pig: 1, rabbit: 2 }, grove: { rabbit: 2, wolf: 2, sheep: 1 }, snowy_slopes: { rabbit: 2 }, jagged_peaks: {}, stony_peaks: { sheep: 1 },
+  cherry: { pig: 2, sheep: 2, rabbit: 2, cow: 1 }, mangrove: { cow: 1, chicken: 1 }, bamboo: { pig: 2, chicken: 2 }
 };
 
 /** Fortschritte (wie bei Minecraft): id → [Name, Beschreibung] */
@@ -436,7 +439,7 @@ export function installMobs(Sandbox, K) {
       if (m.dead) continue;
       if (nb !== 2) this._body(m, dt, m.type === "enderman" ? 36 : 42);
       m.x = clamp(m.x, 0, W - m.w);
-      if (m.y > H || (this.dim === 2 && !m.boss && m.y > H - 12)) this._remove(m);
+      if (m.y > H || (this.dim === 2 && !m.boss && m.y > NH - 12)) this._remove(m);
     }
     this._projectiles(dt);
     this.advT -= dt; if (this.advT <= 0) { this.advT = 1; this._advTick(); }

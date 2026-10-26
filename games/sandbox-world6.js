@@ -7,13 +7,14 @@
 //   Arbeitsblöcke in den Dörfern (Komposter, Lesepult, Kartentisch, Amboss)
 // Alles in der Seitenansicht: Bauwerke sind Querschnitte, in denen man herumlaufen kann.
 // =====================================================================
-import { B } from "./sandbox-data.js?v=7";
-import { mulberry32 } from "./sandbox-noise.js?v=7";
-import { BIOMES } from "./sandbox-world.js?v=7";
+import { B } from "./sandbox-data.js?v=8";
+import { mulberry32 } from "./sandbox-noise.js?v=8";
+import { BIOMES, MOUNTAIN_BIOMES } from "./sandbox-world.js?v=8";
 
-const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1, SEA = SURF + 4;
+import { W, H, SURF, SPAWN_X, SEA } from "./sandbox-const.js?v=8";
 export const DAPPLED = "dappled";
-const BI_OCEAN = BIOMES.indexOf("ocean"), BI_MOUNT = BIOMES.indexOf("mountains"), BI_DESERT = BIOMES.indexOf("desert");
+const BI_OCEAN = BIOMES.indexOf("ocean"), BI_DESERT = BIOMES.indexOf("desert");
+const MOUNT_IDS = new Set([...MOUNTAIN_BIOMES].map(n => BIOMES.indexOf(n)));
 const TENT_COLORS = [1, 4, 14, 11, 12, 5, 0, 13];                                // Orange, Gelb, Rot, Blau, Braun, Hellgrün, Weiß, Grün
 
 export function addContent6(w, seed) {
@@ -57,6 +58,26 @@ export function addContent6(w, seed) {
       put(x, base, topT === B.GRASS || topT === B.SAND || topT === B.SNOW ? topT : B.GRASS);
       ground[x] = base;
     }
+    // Rampen: seit Etappe 8 gibt es höhere Hügel; damit man ins Bauwerk hineinkommt, geht das Gelände links und rechts
+    // höchstens einen Block pro Spalte hinauf oder hinunter (bis 14 Spalten weit, nicht in anderen Bauwerken oder Wasser)
+    const mid = x0 + (wd >> 1), others = taken.filter(t => mid < t[0] || mid > t[1]);
+    for (const side of [-1, 1]) {
+      for (let k = 1; k <= 14; k++) {
+        const x = side < 0 ? x0 - k : x0 + wd - 1 + k;
+        if (x < 3 || x >= W - 3 || others.some(t => x >= t[0] && x <= t[1])) break;
+        const g = ground[x]; if (!g) break;
+        if (at(x, g) === B.WATER || at(x, g - 1) === B.WATER || biomes[x] === BI_OCEAN) break;
+        const topT = at(x, g) === B.SAND ? B.SAND : at(x, g) === B.SNOW ? B.SNOW : B.GRASS;
+        if (g > base + k) {                                                         // Gelände tiefer: auffüllen
+          for (let y = base + k; y < g; y++) put(x, y, y === base + k ? topT : B.DIRT);
+          for (let y = Math.max(1, base + k - 24); y < base + k; y++) put(x, y, B.AIR);
+          ground[x] = base + k;
+        } else if (g < base - k) {                                                  // Gelände höher: abtragen
+          for (let y = Math.max(1, g - 24); y < base - k; y++) put(x, y, B.AIR);
+          put(x, base - k, topT); ground[x] = base - k;
+        } else break;                                                               // passt schon
+      }
+    }
   };
   /** Platz für ein Bauwerk finden: ebenes Land, nicht im Wasser, nicht auf Dörfern */
   const findSite = (wd, minDist = 0, maxSlope = 4) => {
@@ -64,7 +85,7 @@ export function addContent6(w, seed) {
       const x0 = ri(6, W - wd - 6), cx = x0 + (wd >> 1);
       if (Math.abs(cx - SPAWN_X) < minDist || !free(x0, x0 + wd)) continue;
       let lo = 999, hi = -1, ok = true;
-      for (let x = x0; x < x0 + wd; x++) { if (!drySurface(x) || biomes[x] === BI_MOUNT) { ok = false; break; } lo = Math.min(lo, ground[x]); hi = Math.max(hi, ground[x]); }
+      for (let x = x0; x < x0 + wd; x++) { if (!drySurface(x) || MOUNT_IDS.has(biomes[x])) { ok = false; break; } lo = Math.min(lo, ground[x]); hi = Math.max(hi, ground[x]); }
       if (!ok || hi - lo > maxSlope) continue;
       const sorted = []; for (let x = x0; x < x0 + wd; x++) sorted.push(ground[x]); sorted.sort((a, b) => a - b);
       taken.push([x0, x0 + wd]);
@@ -81,7 +102,7 @@ export function addContent6(w, seed) {
       const wd = ri(48, 80), x0 = ri(4, W - wd - 4);
       if (!free(x0, x0 + wd, 4) || zones.some(z => x0 < z[1] + 24 && x0 + wd > z[0] - 24)) continue;
       let good = 0;
-      for (let x = x0; x < x0 + wd; x++) if (biomes[x] !== BI_OCEAN && biomes[x] !== BI_MOUNT && biomes[x] !== BI_DESERT && ground[x] && at(x, ground[x]) === B.GRASS && at(x, ground[x] - 1) !== B.WATER) good++;
+      for (let x = x0; x < x0 + wd; x++) if (biomes[x] !== BI_OCEAN && !MOUNT_IDS.has(biomes[x]) && biomes[x] !== BI_DESERT && ground[x] && at(x, ground[x]) === B.GRASS && at(x, ground[x] - 1) !== B.WATER) good++;
       if (good < wd * need) continue;
       zones.push([x0, x0 + wd]);
     }

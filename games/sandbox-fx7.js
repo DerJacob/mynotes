@@ -6,7 +6,7 @@
 // Zeichnen bekommt den Canvas-Kontext und alle Werte als Parameter (Node-testbar mit einem Attrappen-Kontext).
 // =====================================================================
 
-import { BLOCKS } from "./sandbox-data.js?v=7";
+import { BLOCKS } from "./sandbox-data.js?v=8";
 
 /** Mondphase 0–7 (0 = Vollmond, 4 = Neumond) als n×n-Raster */
 export function moonMask(phase, n = 12) {

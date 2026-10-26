@@ -7,9 +7,10 @@
 //   Spieler: Seelensand bremst, Magmablock brennt, Leere im Ende, Elytren (Gleiten), Enderperle
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=7";
-import { MOBS, ADV } from "./sandbox-mobs.js?v=7";
-import { END_CX, END_TOP } from "./sandbox-nether.js?v=7";
+import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=8";
+import { MOBS, ADV } from "./sandbox-mobs.js?v=8";
+import { END_CX, END_TOP } from "./sandbox-nether.js?v=8";
+import { NH } from "./sandbox-const.js?v=8";
 
 Object.assign(MOBS, {
   piglin: { name: "Piglin", kind: "neutral", w: 0.7, h: 1.8, hp: 16, speed: 2.9, dmg: 4, range: 14, xp: [5, 5], drops: [["gold_nugget", 0, 2, 0.4]] },
@@ -433,7 +434,7 @@ export function installBoss(Sandbox, K) {
       if (p.magT <= 0) { p.magT = 0.5; this.hurt(1, 0, "magma"); }
     } else p.magT = 0;
     // Leere im Ende
-    if (this.dim === 2 && p.y > H - 14) { p.voidT = (p.voidT || 0) - dt; if (p.voidT <= 0) { p.voidT = 0.4; this.hurt(4, 0, "void"); } }
+    if (this.dim === 2 && p.y > NH - 14) { p.voidT = (p.voidT || 0) - dt; if (p.voidT <= 0) { p.voidT = 0.4; this.hurt(4, 0, "void"); } }
     // Elytren: Wer sie trägt, gleitet beim Halten der Sprungtaste im Fall
     p.glideT = Math.max(0, (p.glideT || 0) - dt);
     if (p.glide) {

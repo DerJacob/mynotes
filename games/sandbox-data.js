@@ -26,15 +26,26 @@ export const B = {
   // Etappe 6: Farben (Zusatzfeld aux: Farbe 0–15 | 16 = oben/kopfüber | 32 = Stufe steigt nach links), Dappled Forest, Camps, Dorfbewohner-Arbeitsblöcke
   CONCRETE: 102, WOOL_STAIRS: 103, WOOL_SLAB: 104, CONC_STAIRS: 105, CONC_SLAB: 106, CUSHION: 107, STRAW_BED: 108,
   POPLAR_LOG: 109, PLEAVES_R: 110, PLEAVES_O: 111, PLEAVES_Y: 112, LITTER_R: 113, LITTER_O: 114, LITTER_Y: 115, RED_BUSH: 116, PARASOL: 117,
-  CAMPFIRE: 118, BARREL: 119, HAY: 120, COMPOSTER: 121, LECTERN: 122, CARTO: 123, PRISMARINE: 124, SEA_LANTERN: 125
+  CAMPFIRE: 118, BARREL: 119, HAY: 120, COMPOSTER: 121, LECTERN: 122, CARTO: 123, PRISMARINE: 124, SEA_LANTERN: 125,
+  // Etappe 8: Berge, üppige und Tropfstein-Höhlen, Kirschhain, Mangrovensumpf, Bambuswald, Fossilien
+  POWDER_SNOW: 126, PACKED_ICE: 127, CALCITE: 128, TUFF: 129, DRIPSTONE: 130, STALAGMITE: 131, STALACTITE: 132, AMETHYST_BLOCK: 133, AMETHYST_CLUSTER: 134,
+  MOSS_BLOCK: 135, MOSS_CARPET: 136, AZALEA: 137, FLOWERING_AZALEA: 138, AZALEA_LEAVES: 139, FLOWERING_AZALEA_LEAVES: 140, CAVE_VINES: 141, CAVE_VINES_BERRIES: 142, GLOW_LICHEN: 143,
+  CHERRY_LOG: 144, CHERRY_LEAVES: 145, PINK_PETALS: 146, MANGROVE_LOG: 147, MANGROVE_LEAVES: 148, MANGROVE_ROOTS: 149, MUD: 150, PROPAGULE: 151, BAMBOO: 152, BAMBOO_BLOCK: 153, FOSSIL: 154
 };
-export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG, B.POPLAR_LOG];
-export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES, B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y];
-export const isLog = id => id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG || id === B.JUNGLE_LOG || id === B.ACACIA_LOG || id === B.POPLAR_LOG;
-export const isLeaves = id => id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.SPRUCE_LEAVES || id === B.JUNGLE_LEAVES || id === B.ACACIA_LEAVES || (id >= B.PLEAVES_R && id <= B.PLEAVES_Y);
+export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG, B.POPLAR_LOG, B.CHERRY_LOG, B.MANGROVE_LOG, B.BAMBOO_BLOCK];
+export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES, B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y, B.AZALEA_LEAVES, B.FLOWERING_AZALEA_LEAVES, B.CHERRY_LEAVES, B.MANGROVE_LEAVES];
+export const isLog = id => id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG || id === B.JUNGLE_LOG || id === B.ACACIA_LOG || id === B.POPLAR_LOG || id === B.CHERRY_LOG || id === B.MANGROVE_LOG || id === B.MANGROVE_ROOTS || id === B.BAMBOO_BLOCK;
+export const isLeaves = id => id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.SPRUCE_LEAVES || id === B.JUNGLE_LEAVES || id === B.ACACIA_LEAVES || (id >= B.PLEAVES_R && id <= B.PLEAVES_Y) || id === B.AZALEA_LEAVES || id === B.FLOWERING_AZALEA_LEAVES || id === B.CHERRY_LEAVES || id === B.MANGROVE_LEAVES;
 export const isFluid = id => id === B.WATER || id === B.LAVA;
 /** Pflanzen, die einen festen Boden brauchen */
-export const isPlant = id => id === B.FLOWER || id === B.TALLGRASS || id === B.DEADBUSH || (id >= B.LITTER_R && id <= B.PARASOL);
+export const isPlant = id => id === B.FLOWER || id === B.TALLGRASS || id === B.DEADBUSH || (id >= B.LITTER_R && id <= B.PARASOL) || id === B.STALAGMITE || id === B.AMETHYST_CLUSTER || id === B.MOSS_CARPET ||
+  id === B.AZALEA || id === B.FLOWERING_AZALEA || id === B.PINK_PETALS || id === B.PROPAGULE;
+/** Hängende Blöcke: brauchen oben festen Halt (oder ihresgleichen) */
+export const isHang = id => id === B.STALACTITE || id === B.CAVE_VINES || id === B.CAVE_VINES_BERRIES;
+/** Leuchtflechte haftet an jeder Wand, Decke oder jedem Boden */
+export const isAttach = id => id === B.GLOW_LICHEN;
+/** Bambus braucht Erde, Gras, Sand, Schlamm, Moos oder Bambus darunter */
+export const bambooBase = id => id === B.DIRT || id === B.GRASS || id === B.SAND || id === B.MUD || id === B.MOSS_BLOCK || id === B.BAMBOO || id === B.GRASS_SNOW || id === B.CLAY || id === B.GRAVEL;
 /** Nutzpflanzen: brauchen Ackerland (Zuckerrohr: Sand/Erde am Wasser), lassen sich nicht einfach überbauen */
 export const isCrop = id => id === B.WHEAT || id === B.CARROT || id === B.POTATO || id === B.PUMPKIN_STEM || id === B.MELON_STEM || id === B.WART || id === B.CANE;
 /** Redstone-Bauteile (halten die Liste im Spiel kurz: nur diese Blöcke werden beobachtet) */
@@ -209,12 +220,14 @@ export const SILK = {
   [B.STONE]: "stone", [B.COAL]: "coal_ore", [B.IRON]: "iron_ore", [B.GOLD]: "gold_ore", [B.DIAMOND]: "diamond_ore", [B.COPPER]: "copper_ore", [B.REDSTONE]: "redstone_ore",
   [B.LAPIS]: "lapis_ore", [B.EMERALD]: "emerald_ore", [B.GRASS]: "grass_block", [B.GRASS_SNOW]: "grass_block", [B.DEEPSLATE]: "deepslate", [B.ICE]: "ice", [B.GLASS]: "glass",
   [B.LEAVES]: "leaves", [B.BOOKSHELF]: "bookshelf", [B.MELON]: "melon", [B.CLAY]: "clay", [B.SNOW]: "snow",
-  [B.QUARTZ_ORE]: "quartz_ore", [B.NETHER_GOLD]: "nether_gold_ore", [B.GLOWSTONE]: "glowstone"
+  [B.QUARTZ_ORE]: "quartz_ore", [B.NETHER_GOLD]: "nether_gold_ore", [B.GLOWSTONE]: "glowstone",
+  [B.PACKED_ICE]: "packed_ice", [B.AZALEA_LEAVES]: "azalea_leaves", [B.FLOWERING_AZALEA_LEAVES]: "flowering_azalea_leaves", [B.CHERRY_LEAVES]: "cherry_leaves",
+  [B.MANGROVE_LEAVES]: "mangrove_leaves", [B.FOSSIL]: "fossil", [B.AMETHYST_CLUSTER]: "amethyst_cluster", [B.GLOW_LICHEN]: "glow_lichen"
 };
 /** Glück (Fortune) erhöht die Ausbeute dieser Blöcke */
 export const FORTUNE_BLOCKS = new Set([B.COAL, B.DIAMOND, B.EMERALD, B.LAPIS, B.REDSTONE, B.COPPER, B.QUARTZ_ORE, B.NETHER_GOLD, B.GLOWSTONE]);
 /** Wasser zerstört diese weichen Blöcke */
-export const isSoft = id => isPlant(id) || isCrop(id) || id === B.TORCH || id === B.RS_WIRE || id === B.RS_TORCH || id === B.RS_TORCH_OFF || id === B.LEVER || id === B.BUTTON || id === B.PLATE;
+export const isSoft = id => isPlant(id) || isHang(id) || isAttach(id) || id === B.BAMBOO || isCrop(id) || id === B.TORCH || id === B.RS_WIRE || id === B.RS_TORCH || id === B.RS_TORCH_OFF || id === B.LEVER || id === B.BUTTON || id === B.PLATE;
 
 // ---------------------------------------------------------------------
 // Gegenstände
@@ -470,3 +483,59 @@ COLORS.forEach(([key], c) => {
   shaped(`slab_${cn}`, 6, ["XXX"], { X: cn }, { out: [cl, 6], hide: true });
   shaped(`cushion_${key}`, 1, ["XXX"], { X: wl }, { out: [colorItem("cushion", c), 1], hide: true });
 });
+
+// ---------------------------------------------------------------------
+// Etappe 8: Berge, Höhlen, Kirschhain, Mangrovensumpf, Bambuswald, Fossilien
+// ---------------------------------------------------------------------
+BLOCKS[B.POWDER_SNOW] = def("powder_snow", { lcost: 1, hard: 0.15, tool: "shovel", drop: null, slow: 0.4 });
+BLOCKS[B.PACKED_ICE] = def("packed_ice", { solid: true, lcost: 0, hard: 0.75, tool: "pick", drop: null });
+BLOCKS[B.CALCITE] = def("calcite", { solid: true, lcost: 3, hard: 0.75, tool: "pick", tier: 1, drop: "calcite" });
+BLOCKS[B.TUFF] = def("tuff", { solid: true, lcost: 3, hard: 2.25, tool: "pick", tier: 1, drop: "tuff" });
+BLOCKS[B.DRIPSTONE] = def("dripstone", { solid: true, lcost: 3, hard: 2.25, tool: "pick", tier: 1, drop: "dripstone_block" });
+BLOCKS[B.STALAGMITE] = def("stalagmite", { hard: 1.5, tool: "pick", tier: 1, drop: "pointed_dripstone" });
+BLOCKS[B.STALACTITE] = def("stalactite", { hard: 1.5, tool: "pick", tier: 1, drop: "pointed_dripstone" });
+BLOCKS[B.AMETHYST_BLOCK] = def("amethyst_block", { solid: true, lcost: 3, hard: 1.5, tool: "pick", tier: 1, drop: "amethyst_block" });
+BLOCKS[B.AMETHYST_CLUSTER] = def("amethyst_cluster", { hard: 1.5, tool: "pick", tier: 1, drop: "amethyst_shard", dropN: [2, 4], emit: 5 });
+BLOCKS[B.MOSS_BLOCK] = def("moss_block", { solid: true, lcost: 3, hard: 0.15, drop: "moss_block" });
+BLOCKS[B.MOSS_CARPET] = def("moss_carpet", { hard: 0.15, drop: "moss_carpet" });
+BLOCKS[B.AZALEA] = def("azalea", { hard: 0.05, drop: "azalea" });
+BLOCKS[B.FLOWERING_AZALEA] = def("flowering_azalea", { hard: 0.05, drop: "flowering_azalea" });
+BLOCKS[B.AZALEA_LEAVES] = def("azalea_leaves", { lcost: 1, hard: 0.3, drop: null });
+BLOCKS[B.FLOWERING_AZALEA_LEAVES] = def("flowering_azalea_leaves", { lcost: 1, hard: 0.3, drop: null });
+BLOCKS[B.CAVE_VINES] = def("cave_vines", { hard: 0.05, drop: null, climb: true });
+BLOCKS[B.CAVE_VINES_BERRIES] = def("cave_vines_berries", { hard: 0.05, drop: "glow_berries", dropN: [1, 2], climb: true, emit: 14, interact: true });
+BLOCKS[B.GLOW_LICHEN] = def("glow_lichen", { hard: 0.2, drop: "glow_lichen", emit: 7 });
+BLOCKS[B.CHERRY_LOG] = def("cherry_log", { solid: true, lcost: 3, hard: 3, tool: "axe", drop: "cherry_log" });
+BLOCKS[B.CHERRY_LEAVES] = def("cherry_leaves", { lcost: 1, hard: 0.3, drop: null });
+BLOCKS[B.PINK_PETALS] = def("pink_petals", { hard: 0.05, drop: "pink_petals" });
+BLOCKS[B.MANGROVE_LOG] = def("mangrove_log", { solid: true, lcost: 3, hard: 3, tool: "axe", drop: "mangrove_log" });
+BLOCKS[B.MANGROVE_LEAVES] = def("mangrove_leaves", { lcost: 1, hard: 0.3, drop: null });
+BLOCKS[B.MANGROVE_ROOTS] = def("mangrove_roots", { solid: true, lcost: 1, hard: 1.1, tool: "axe", drop: "mangrove_roots" });
+BLOCKS[B.MUD] = def("mud", { solid: true, lcost: 3, hard: 0.75, tool: "shovel", drop: "mud" });
+BLOCKS[B.PROPAGULE] = def("propagule", { hard: 0.05, drop: "mangrove_propagule" });
+BLOCKS[B.BAMBOO] = def("bamboo", { hard: 0.3, tool: "axe", drop: "bamboo" });
+BLOCKS[B.BAMBOO_BLOCK] = def("bamboo_block", { solid: true, lcost: 3, hard: 3, tool: "axe", drop: "bamboo_block" });
+BLOCKS[B.FOSSIL] = def("fossil", { solid: true, lcost: 3, hard: 3, tool: "pick", tier: 1, drop: "bone", dropN: [2, 4] });
+/** Erste und letzte Block-ID der Etappe 8 (Bilder: sandbox-art8.js) */
+export const FIRST8 = B.POWDER_SNOW, LAST8 = B.FOSSIL;
+
+blockItem("packed_ice", "Gepacktes Eis", B.PACKED_ICE); blockItem("calcite", "Kalzit", B.CALCITE); blockItem("tuff", "Tuff", B.TUFF);
+blockItem("dripstone_block", "Tropfsteinblock", B.DRIPSTONE); blockItem("pointed_dripstone", "Spitzer Tropfstein", B.STALAGMITE);
+blockItem("amethyst_block", "Amethystblock", B.AMETHYST_BLOCK); item("amethyst_shard", "Amethystscherbe"); blockItem("amethyst_cluster", "Amethystcluster", B.AMETHYST_CLUSTER);
+blockItem("moss_block", "Moosblock", B.MOSS_BLOCK); blockItem("moss_carpet", "Moosteppich", B.MOSS_CARPET);
+blockItem("azalea", "Azalee", B.AZALEA, { fuel: 5 }); blockItem("flowering_azalea", "Blühende Azalee", B.FLOWERING_AZALEA, { fuel: 5 });
+blockItem("azalea_leaves", "Azaleenlaub", B.AZALEA_LEAVES); blockItem("flowering_azalea_leaves", "Blühendes Azaleenlaub", B.FLOWERING_AZALEA_LEAVES);
+item("glow_berries", "Glühbeeren", { food: [2, 0.4] }); blockItem("glow_lichen", "Leuchtflechte", B.GLOW_LICHEN);
+blockItem("cherry_log", "Kirschholz", B.CHERRY_LOG, { fuel: 15, tags: ["logs"] }); blockItem("cherry_leaves", "Kirschlaub", B.CHERRY_LEAVES); blockItem("pink_petals", "Blütenblätter", B.PINK_PETALS);
+blockItem("mangrove_log", "Mangrovenholz", B.MANGROVE_LOG, { fuel: 15, tags: ["logs"] }); blockItem("mangrove_leaves", "Mangrovenlaub", B.MANGROVE_LEAVES);
+blockItem("mangrove_roots", "Mangrovenwurzeln", B.MANGROVE_ROOTS, { fuel: 15 }); blockItem("mud", "Schlamm", B.MUD); blockItem("mangrove_propagule", "Mangrovenschössling", B.PROPAGULE);
+blockItem("bamboo", "Bambus", B.BAMBOO, { fuel: 5 }); blockItem("bamboo_block", "Bambusholz", B.BAMBOO_BLOCK, { fuel: 15, tags: ["logs"] });
+blockItem("fossil", "Fossil", B.FOSSIL);
+
+shaped("packed_ice", 1, ["III", "III", "III"], { I: "ice" });
+shaped("amethyst_block", 1, ["SS", "SS"], { S: "amethyst_shard" }); shapeless("amethyst_shard_b", 4, ["amethyst_block"], { out: ["amethyst_shard", 4] });
+shaped("moss_carpet", 3, ["MM"], { M: "moss_block" });
+shaped("bamboo_block", 1, ["BBB", "BBB", "BBB"], { B: "bamboo" });
+shaped("stick_bamboo", 1, ["B", "B"], { B: "bamboo" }, { out: ["stick", 1] });
+shapeless("dye_pink_petals", 1, ["pink_petals"], { out: ["dye_pink", 1], hide: true });
+SMELT.mangrove_roots = ["charcoal", 0.15]; SMELT.cherry_log = ["charcoal", 0.15]; SMELT.mangrove_log = ["charcoal", 0.15];
