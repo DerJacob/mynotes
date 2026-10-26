@@ -30,7 +30,15 @@ export const B = {
   // Etappe 8: Berge, üppige und Tropfstein-Höhlen, Kirschhain, Mangrovensumpf, Bambuswald, Fossilien
   POWDER_SNOW: 126, PACKED_ICE: 127, CALCITE: 128, TUFF: 129, DRIPSTONE: 130, STALAGMITE: 131, STALACTITE: 132, AMETHYST_BLOCK: 133, AMETHYST_CLUSTER: 134,
   MOSS_BLOCK: 135, MOSS_CARPET: 136, AZALEA: 137, FLOWERING_AZALEA: 138, AZALEA_LEAVES: 139, FLOWERING_AZALEA_LEAVES: 140, CAVE_VINES: 141, CAVE_VINES_BERRIES: 142, GLOW_LICHEN: 143,
-  CHERRY_LOG: 144, CHERRY_LEAVES: 145, PINK_PETALS: 146, MANGROVE_LOG: 147, MANGROVE_LEAVES: 148, MANGROVE_ROOTS: 149, MUD: 150, PROPAGULE: 151, BAMBOO: 152, BAMBOO_BLOCK: 153, FOSSIL: 154
+  CHERRY_LOG: 144, CHERRY_LEAVES: 145, PINK_PETALS: 146, MANGROVE_LOG: 147, MANGROVE_LEAVES: 148, MANGROVE_ROOTS: 149, MUD: 150, PROPAGULE: 151, BAMBOO: 152, BAMBOO_BLOCK: 153, FOSSIL: 154,
+  // Etappe 9: Steine, Farben und Handwerk (Zusatzfeld aux: siehe auxKey9 weiter unten)
+  GRANITE: 155, DIORITE: 156, ANDESITE: 157, P_GRANITE: 158, P_DIORITE: 159, P_ANDESITE: 160, PRISM_BRICKS: 161, DARK_PRISM: 162,
+  SLIME: 163, HONEY: 164, BONE_BLOCK: 165, TERRACOTTA: 166, TERRA_C: 167, GLAZED: 168, POWDER: 169, BANNER: 170,
+  STONECUTTER: 171, SMITHING: 172, LOOM: 173, GRINDSTONE: 174, SMOKER: 175, BLAST: 176, ARMOR_STAND: 177,
+  CANDLE: 178, TINTED_GLASS: 179, COPPER_BLOCK: 180, CUT_COPPER: 181, CHISELED_COPPER: 182, COPPER_GRATE: 183, COPPER_BULB: 184,
+  TUFF_BRICKS: 185, P_TUFF: 186, CH_TUFF: 187, WPLANKS: 188, WSTAIRS: 189, WSLAB: 190, SSTAIRS: 191, SSLAB: 192,
+  DOORM_B: 193, DOORM_T: 194, DOORM_BO: 195, DOORM_TO: 196, TRAP: 197, TRAP_O: 198, SIGN: 199, HSIGN: 200, CBOOKSHELF: 201,
+  CANDLE_LIT: 202, BULB_ON: 203, TRAP_OL: 204
 };
 export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG, B.POPLAR_LOG, B.CHERRY_LOG, B.MANGROVE_LOG, B.BAMBOO_BLOCK];
 export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES, B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y, B.AZALEA_LEAVES, B.FLOWERING_AZALEA_LEAVES, B.CHERRY_LEAVES, B.MANGROVE_LEAVES];
@@ -182,6 +190,7 @@ export const boxesOf = (id, aux) => {
   const top = (aux & 16) !== 0;
   if (bd.shape === "slab") return top ? SLAB_TOP : SLAB_BOT;
   if (bd.shape === "cushion") return CUSHION_BOX;
+  if (bd.shape === "trap") return id === B.TRAP ? ((aux & 128) ? TRAP_BOXES[1] : TRAP_BOXES[0]) : id === B.TRAP_O ? TRAP_BOXES[3] : TRAP_BOXES[2];
   const right = (aux & 32) === 0;                                      // Stufe steigt nach rechts
   return STAIRS[(top ? 2 : 0) + (right ? 0 : 1)];
 };
@@ -539,3 +548,243 @@ shaped("bamboo_block", 1, ["BBB", "BBB", "BBB"], { B: "bamboo" });
 shaped("stick_bamboo", 1, ["B", "B"], { B: "bamboo" }, { out: ["stick", 1] });
 shapeless("dye_pink_petals", 1, ["pink_petals"], { out: ["dye_pink", 1], hide: true });
 SMELT.mangrove_roots = ["charcoal", 0.15]; SMELT.cherry_log = ["charcoal", 0.15]; SMELT.mangrove_log = ["charcoal", 0.15];
+
+// ---------------------------------------------------------------------
+// Etappe 9: Steine, Farben, Holzsätze, Werkblöcke, Kupfer, Kerzen, Banner
+//   aux (Zusatzfeld) je Blockart – gespeichert wird immer nur ein Byte:
+//     Terrakotta (farbig), Glasierte Terrakotta, Betonpulver, Banner : Farbe 0–15
+//     Kerze                : Farbe 0–15 | 16 = ungefärbt
+//     Holzbretter, -stufen, -halbblöcke, Schilder : Holzart 0–8 (WOODS)
+//     Stein-Treppen und -Stufen : Stoff 0–15 (STONE_MATS), +16 = oben, +32 = steigt nach links
+//     Kupferblöcke         : Alterung 0–3 | 64 = gewachst
+//     Türen, Falltüren     : Stoff 0–9 (0–8 Holz, 9 Kupfer) | Alterung (16·0–3, nur Kupfer) | 64 = gewachst
+//     Truhenregal          : Bit 0–5 = Fach belegt
+// ---------------------------------------------------------------------
+/** Holzarten: [Schlüssel, Name, Stamm-Gegenstand, Farbe der Bretter] – 0 = Eiche (alte Bretter bleiben Eiche) */
+export const WOODS = [
+  ["oak", "Eiche", "log", [162, 130, 78]], ["birch", "Birke", "birch_log", [196, 178, 120]], ["spruce", "Fichte", "spruce_log", [114, 84, 48]],
+  ["jungle", "Tropen", "jungle_log", [160, 114, 78]], ["acacia", "Akazien", "acacia_log", [170, 92, 52]], ["poplar", "Pappel", "poplar_log", [216, 202, 168]],
+  ["cherry", "Kirsch", "cherry_log", [228, 178, 172]], ["mangrove", "Mangroven", "mangrove_log", [120, 54, 48]], ["bamboo", "Bambus", "bamboo_block", [198, 172, 70]]
+];
+export const woodPlank = w => (w === 0 ? "planks" : `planks_${WOODS[w][0]}`);
+/** Stoffe für Stein-Treppen und -Stufen: [Schlüssel, Name, Gegenstand des vollen Blocks, Block-ID] */
+export const STONE_MATS = [
+  ["stone", "Stein", "stone", B.STONE], ["cobble", "Bruchstein", "cobble", B.COBBLE], ["brick", "Steinziegel", "brick", B.BRICK], ["sandstone", "Sandstein", "sandstone", B.SANDSTONE],
+  ["granite", "Granit", "granite", B.GRANITE], ["diorite", "Diorit", "diorite", B.DIORITE], ["andesite", "Andesit", "andesite", B.ANDESITE],
+  ["p_granite", "Polierter Granit", "polished_granite", B.P_GRANITE], ["p_diorite", "Polierter Diorit", "polished_diorite", B.P_DIORITE], ["p_andesite", "Polierter Andesit", "polished_andesite", B.P_ANDESITE],
+  ["prism_bricks", "Prismarinziegel", "prismarine_bricks", B.PRISM_BRICKS], ["tuff_bricks", "Tuffziegel", "tuff_bricks", B.TUFF_BRICKS], ["p_tuff", "Polierter Tuff", "polished_tuff", B.P_TUFF],
+  ["nether_bricks", "Netherziegel", "nether_bricks", B.NETHER_BRICK], ["quartz", "Quarz", "quartz_block", B.QUARTZ_BLOCK], ["purpur", "Purpur", "purpur_block", B.PURPUR]
+];
+export const COPPER_STAGES = ["", "exposed", "weathered", "oxidized"];
+/** Blöcke, die wie Kupfer altern (nur diese werden im Spiel beobachtet) */
+export const COPPER_IDS = new Set([B.COPPER_BLOCK, B.CUT_COPPER, B.CHISELED_COPPER, B.COPPER_GRATE, B.COPPER_BULB, B.BULB_ON]);
+export const isDoorM = id => id >= B.DOORM_B && id <= B.DOORM_TO;
+export const isTrap = id => id === B.TRAP || id === B.TRAP_O || id === B.TRAP_OL;
+/** Zusatzfeld auf den Teil verkürzen, der den Gegenstand bestimmt (für Beute und Block → Gegenstand) */
+export function auxKey9(id, aux) {
+  if (id === B.TERRA_C || id === B.GLAZED || id === B.POWDER || id === B.BANNER) return aux & 15;
+  if (id === B.CANDLE || id === B.CANDLE_LIT) return aux & 31;
+  if (id === B.WPLANKS || id === B.WSTAIRS || id === B.WSLAB || id === B.SIGN || id === B.HSIGN || id === B.SSTAIRS || id === B.SSLAB) return aux & 15;
+  if (COPPER_IDS.has(id)) return aux & 67;
+  if (isDoorM(id) || isTrap(id)) return aux & 127;
+  return 0;
+}
+/** "<Block>:<aux>" → Gegenstand, der beim Setzen dieses Blocks gebraucht und beim Abbauen fallen gelassen wird */
+export const ITEM_OF9 = new Map();
+const regItem9 = (block, aux, id) => { ITEM_OF9.set(block * 256 + aux, id); };
+/** Gegenstand, der zu einem gesetzten Block gehört (null, wenn der Block keinen Zusatz braucht) */
+export function itemOf9(id, aux) {
+  if (id === B.CANDLE_LIT) id = B.CANDLE; else if (id === B.BULB_ON) id = B.COPPER_BULB;
+  else if (id === B.DOORM_T || id === B.DOORM_BO || id === B.DOORM_TO) id = B.DOORM_B;
+  else if (id === B.TRAP_O || id === B.TRAP_OL) id = B.TRAP;
+  return ITEM_OF9.get(id * 256 + auxKey9(id, aux)) || null;
+}
+
+const solidDef = (key, o) => def(key, { solid: true, lcost: 3, ...o });
+const stoneDef = (key, drop, hard = 2.25) => solidDef(key, { hard, tool: "pick", tier: 1, drop });
+BLOCKS[B.GRANITE] = stoneDef("granite", "granite"); BLOCKS[B.DIORITE] = stoneDef("diorite", "diorite"); BLOCKS[B.ANDESITE] = stoneDef("andesite", "andesite");
+BLOCKS[B.P_GRANITE] = stoneDef("p_granite", "polished_granite"); BLOCKS[B.P_DIORITE] = stoneDef("p_diorite", "polished_diorite"); BLOCKS[B.P_ANDESITE] = stoneDef("p_andesite", "polished_andesite");
+BLOCKS[B.PRISM_BRICKS] = stoneDef("prism_bricks", "prismarine_bricks"); BLOCKS[B.DARK_PRISM] = stoneDef("dark_prism", "dark_prismarine");
+BLOCKS[B.TUFF_BRICKS] = stoneDef("tuff_bricks", "tuff_bricks"); BLOCKS[B.P_TUFF] = stoneDef("p_tuff", "polished_tuff"); BLOCKS[B.CH_TUFF] = stoneDef("ch_tuff", "chiseled_tuff");
+BLOCKS[B.SLIME] = solidDef("slime", { hard: 0.3, drop: "slime_block", bounce: true });
+BLOCKS[B.HONEY] = solidDef("honey", { hard: 0.9, drop: "honey_block", slow: 0.4 });
+BLOCKS[B.BONE_BLOCK] = stoneDef("bone_block", "bone_block", 3);
+BLOCKS[B.TERRACOTTA] = stoneDef("terracotta", "terracotta", 1.9);
+BLOCKS[B.TERRA_C] = solidDef("terra_c", { hard: 1.9, tool: "pick", tier: 1, colored: "terra_c" });
+BLOCKS[B.GLAZED] = solidDef("glazed", { hard: 2.1, tool: "pick", tier: 1, colored: "glazed" });
+BLOCKS[B.POWDER] = solidDef("powder", { hard: 0.75, tool: "shovel", colored: "powder", falls: true });
+BLOCKS[B.BANNER] = def("banner", { hard: 0.9, tool: "axe", colored: "banner" });
+BLOCKS[B.STONECUTTER] = solidDef("stonecutter", { hard: 5.25, tool: "pick", tier: 1, drop: "stonecutter", interact: true });
+BLOCKS[B.SMITHING] = solidDef("smithing", { hard: 3.75, tool: "axe", drop: "smithing_table", interact: true });
+BLOCKS[B.LOOM] = solidDef("loom", { hard: 3.75, tool: "axe", drop: "loom", interact: true });
+BLOCKS[B.GRINDSTONE] = solidDef("grindstone", { hard: 3.0, tool: "pick", tier: 1, drop: "grindstone", interact: true });
+BLOCKS[B.SMOKER] = solidDef("smoker", { hard: 5.25, tool: "pick", tier: 1, drop: "smoker", interact: true, entity: "smoker" });
+BLOCKS[B.BLAST] = solidDef("blast", { hard: 5.25, tool: "pick", tier: 1, drop: "blast_furnace", interact: true, entity: "blast" });
+BLOCKS[B.ARMOR_STAND] = def("armor_stand", { hard: 0.3, drop: "armor_stand", interact: true });
+BLOCKS[B.CANDLE] = def("candle", { hard: 0.15, interact: true, colored: "candle" });
+BLOCKS[B.CANDLE_LIT] = def("candle_lit", { hard: 0.15, interact: true, colored: "candle", emit: 4 });
+BLOCKS[B.TINTED_GLASS] = solidDef("tinted_glass", { hard: 0.45, drop: "tinted_glass" });
+for (const [id, key] of [[B.COPPER_BLOCK, "copper_block"], [B.CUT_COPPER, "cut_copper"], [B.CHISELED_COPPER, "chiseled_copper"], [B.COPPER_GRATE, "copper_grate"]]) BLOCKS[id] = solidDef(key, { hard: 4.5, tool: "pick", tier: 2, colored: "copper" });
+BLOCKS[B.COPPER_GRATE].lcost = 1;
+BLOCKS[B.COPPER_BULB] = solidDef("copper_bulb", { hard: 4.5, tool: "pick", tier: 2, colored: "copper", interact: true });
+BLOCKS[B.BULB_ON] = solidDef("bulb_on", { hard: 4.5, tool: "pick", tier: 2, colored: "copper", interact: true, emit: 15 });
+BLOCKS[B.WPLANKS] = solidDef("wplanks", { hard: 3, tool: "axe", colored: "wood" });
+BLOCKS[B.WSTAIRS] = solidDef("wstairs", { hard: 3, tool: "axe", lcost: 1, shape: "stairs", colored: "wood" });
+BLOCKS[B.WSLAB] = solidDef("wslab", { hard: 3, tool: "axe", lcost: 1, shape: "slab", colored: "wood", set: "wood" });
+BLOCKS[B.SSTAIRS] = solidDef("sstairs", { hard: 2.25, tool: "pick", tier: 1, lcost: 1, shape: "stairs", colored: "stone" });
+BLOCKS[B.SSLAB] = solidDef("sslab", { hard: 2.25, tool: "pick", tier: 1, lcost: 1, shape: "slab", colored: "stone", set: "stone" });
+for (const [id, open] of [[B.DOORM_B, false], [B.DOORM_T, false], [B.DOORM_BO, true], [B.DOORM_TO, true]]) BLOCKS[id] = def("doorm", { hard: 4.5, tool: "axe", interact: true, colored: "door", solid: !open, lcost: open ? 0 : 3 });
+BLOCKS[B.TRAP] = def("trap", { hard: 3, tool: "axe", interact: true, colored: "trap", solid: true, shape: "trap", lcost: 0 });
+BLOCKS[B.TRAP_O] = def("trap_o", { hard: 3, tool: "axe", interact: true, colored: "trap", solid: true, shape: "trap", lcost: 0 });
+BLOCKS[B.TRAP_OL] = def("trap_ol", { hard: 3, tool: "axe", interact: true, colored: "trap", solid: true, shape: "trap", lcost: 0 });
+BLOCKS[B.SIGN] = def("sign", { hard: 0.9, tool: "axe", interact: true, colored: "wood" });
+BLOCKS[B.HSIGN] = def("hsign", { hard: 0.9, tool: "axe", interact: true, colored: "wood" });
+BLOCKS[B.CBOOKSHELF] = solidDef("cbookshelf", { hard: 2.25, tool: "axe", drop: "chiseled_bookshelf", interact: true });
+export const FIRST9 = B.GRANITE, LAST9 = B.TRAP_OL;
+
+// Stufen und Halbblöcke (Treppe, Stufe): wie boxesOf, nur Falltüren sind dünn
+const TRAP_BOXES = [[[0, 0.8125, 1, 1]], [[0, 0, 1, 0.1875]], [[0, 0, 0.1875, 1]], [[0.8125, 0, 1, 1]]];   // zu unten, zu oben, offen links, offen rechts
+
+// ---------- Gegenstände ----------
+/** Name, Block, Zusatzwert beim Setzen (col = aux), m9 = Beschreibung für das Symbol (sandbox-art9.js) */
+const item9 = (id, name, block, aux, m9, o = {}) => {
+  item(id, name, { block, col: aux, m9, ...o });
+  regItem9(block, aux, id);
+};
+for (const [id, n, b] of [["granite", "Granit", B.GRANITE], ["diorite", "Diorit", B.DIORITE], ["andesite", "Andesit", B.ANDESITE], ["polished_granite", "Polierter Granit", B.P_GRANITE],
+  ["polished_diorite", "Polierter Diorit", B.P_DIORITE], ["polished_andesite", "Polierter Andesit", B.P_ANDESITE], ["prismarine_bricks", "Prismarinziegel", B.PRISM_BRICKS],
+  ["dark_prismarine", "Dunkler Prismarin", B.DARK_PRISM], ["slime_block", "Schleimblock", B.SLIME], ["honey_block", "Honigblock", B.HONEY], ["bone_block", "Knochenblock", B.BONE_BLOCK],
+  ["terracotta", "Terrakotta", B.TERRACOTTA], ["stonecutter", "Steinsäge", B.STONECUTTER], ["smithing_table", "Schmiedetisch", B.SMITHING], ["loom", "Webstuhl", B.LOOM],
+  ["grindstone", "Schleifstein", B.GRINDSTONE], ["smoker", "Räucherofen", B.SMOKER], ["blast_furnace", "Schmelzofen", B.BLAST], ["tinted_glass", "Getöntes Glas", B.TINTED_GLASS],
+  ["tuff_bricks", "Tuffziegel", B.TUFF_BRICKS], ["polished_tuff", "Polierter Tuff", B.P_TUFF], ["chiseled_tuff", "Gemeißelter Tuff", B.CH_TUFF]]) blockItem(id, n, b, id === "bone_block" ? {} : {});
+ITEMS.smoker.fuel = 15; ITEMS.stonecutter.fuel = 0;
+blockItem("armor_stand", "Rüstungsständer", B.ARMOR_STAND, { stack: 16, fuel: 5 });
+blockItem("chiseled_bookshelf", "Gemeißeltes Bücherregal", B.CBOOKSHELF, { fuel: 15 });
+item("honeycomb", "Honigwabe"); item("honey_bottle", "Honigflasche", { stack: 16, food: [6, 1.2], returns: "glass_bottle" });
+item("spyglass", "Fernglas", { stack: 1 });
+
+// Farben: Terrakotta, Glasierte Terrakotta, Betonpulver, Banner, Kerzen
+COLORS.forEach(([key, name], c) => {
+  item9(`terracotta_${key}`, `Terrakotta (${name})`, B.TERRA_C, c, ["terra", c]);
+  item9(`glazed_${key}`, `Glasierte Terrakotta (${name})`, B.GLAZED, c, ["glazed", c]);
+  item9(`powder_${key}`, `Betonpulver (${name})`, B.POWDER, c, ["powder", c]);
+  item9(`banner_${key}`, `Banner (${name})`, B.BANNER, c, ["banner", c], { stack: 16, fuel: 15, banner: c });
+  item9(`candle_${key}`, `Kerze (${name})`, B.CANDLE, c, ["candle", c]);
+});
+item9("candle", "Kerze", B.CANDLE, 16, ["candle", 16]);
+
+// Holzsätze
+WOODS.forEach(([key, name, log, rgb], w) => {
+  if (w) item9(`planks_${key}`, `${name}bretter`, B.WPLANKS, w, ["wood", w], { tags: ["planks"], fuel: 15 });
+  item9(`stairs_${key}`, `${name}treppe`, B.WSTAIRS, w, ["wstairs", w], { fuel: 15 });
+  item9(`slab_${key}`, `${name}stufe`, B.WSLAB, w, ["wslab", w], { fuel: 7, tags: ["wslab"] });
+  item9(`sign_${key}`, `${name}schild`, B.SIGN, w, ["sign", w], { stack: 16, fuel: 5 });
+  item9(`hanging_sign_${key}`, `${name}-Hängeschild`, B.HSIGN, w, ["hsign", w], { stack: 16, fuel: 5 });
+  if (w) item9(`door_${key}`, `${name}tür`, B.DOORM_B, w, ["door", w], { fuel: 10 });
+  item9(`trapdoor_${key}`, `${name}falltür`, B.TRAP, w, ["trap", w], { fuel: 10 });
+});
+ITEMS.sign_oak.name = "Eichenschild";
+// Stein-Treppen und -Stufen
+STONE_MATS.forEach(([key, name, , blk], m) => {
+  item9(`stairs_${key}`, `${name}treppe`, B.SSTAIRS, m, ["sstairs", m]);
+  item9(`slab_${key}`, `${name}stufe`, B.SSLAB, m, ["sslab", m]);
+});
+// Kupfer: Alterung (0–3) und Wachs; jede Zustandsform ist ein eigener Gegenstand (nocre = nicht im Kreativ-Fenster, außer der Grundform)
+const COPPER_FAMS = [["copper_block", "Kupferblock", B.COPPER_BLOCK], ["cut_copper", "Geschnittenes Kupfer", B.CUT_COPPER], ["chiseled_copper", "Gemeißeltes Kupfer", B.CHISELED_COPPER],
+  ["copper_grate", "Kupfergitter", B.COPPER_GRATE], ["copper_bulb", "Kupferlampe", B.COPPER_BULB]];
+export const copperItem = (fam, stage, wax) => (wax ? "waxed_" : "") + fam + (stage ? "_" + COPPER_STAGES[stage] : "");
+const cuSuffix = (st, wax) => (st || wax ? ` (${[["", "angelaufen", "verwittert", "oxidiert"][st], wax ? "gewachst" : ""].filter(Boolean).join(", ")})` : "");
+for (const [fam, name, blk] of COPPER_FAMS) for (let wax = 0; wax < 2; wax++) for (let st = 0; st < 4; st++) {
+  item9(copperItem(fam, st, wax), name + cuSuffix(st, wax), blk, st | (wax ? 64 : 0), ["copper", fam, st, wax], { nocre: !!(wax || st) });
+}
+// Kupfertür und -falltür (Stoff 9, Alterung in Bit 4–5)
+for (let wax = 0; wax < 2; wax++) for (let st = 0; st < 4; st++) {
+  item9(copperItem("copper_door", st, wax), "Kupfertür" + cuSuffix(st, wax), B.DOORM_B, 9 | (st << 4) | (wax ? 64 : 0), ["door", 9, st, wax], { nocre: !!(wax || st) });
+  item9(copperItem("copper_trapdoor", st, wax), "Kupferfalltür" + cuSuffix(st, wax), B.TRAP, 9 | (st << 4) | (wax ? 64 : 0), ["trap", 9, st, wax], { nocre: !!(wax || st) });
+}
+// Schmiedevorlagen und Material für Verzierungen
+export const TRIM_PATTERNS = [["coast", "Küste"], ["dune", "Düne"], ["wild", "Wildnis"], ["ward", "Wächter"], ["tide", "Gezeiten"], ["vex", "Plagegeist"], ["silence", "Stille"], ["rib", "Rippen"]];
+export const TRIM_MATS = { iron_ingot: ["Eisen", "#d8dae2"], copper_ingot: ["Kupfer", "#d4743c"], gold_ingot: ["Gold", "#f6cc40"], diamond: ["Diamant", "#58e8e0"], emerald: ["Smaragd", "#34d060"], lapis: ["Lapislazuli", "#3a58c8"], redstone: ["Redstone", "#d82020"], amethyst_shard: ["Amethyst", "#a070e0"], quartz: ["Quarz", "#f0eadc"] };
+export const TRIM_MAT_IDS = Object.keys(TRIM_MATS);
+TRIM_PATTERNS.forEach(([key, name], i) => item(`trim_${key}`, `Schmiedevorlage: ${name}`, { tags: ["trim"], trim: i }));
+/** Webstuhl: Muster für Banner [Schlüssel, Name] */
+export const LOOM_PATTERNS = [["bt", "Balken oben"], ["bb", "Balken unten"], ["ps", "Pfahl links"], ["pd", "Pfahl rechts"], ["pm", "Pfahl Mitte"], ["fe", "Querbalken"], ["cr", "Kreuz"], ["sa", "Schrägkreuz"], ["bo", "Rahmen"],
+  ["bl", "Schrägbalken links"], ["br", "Schrägbalken rechts"], ["ro", "Kreis"], ["lo", "Raute"], ["hl", "Hälfte links"], ["hr", "Hälfte rechts"], ["ho", "Hälfte oben"], ["hu", "Hälfte unten"]];
+export const MAX_LAYERS = 6;
+
+// ---------- Rezepte ----------
+// Holz: jeder Stamm gibt seine eigenen Bretter (Eiche: "planks")
+for (let w = 0; w < WOODS.length; w++) {
+  const [key, , log] = WOODS[w], pl = woodPlank(w);
+  if (key === "bamboo") shapeless(pl, 2, [log]); else shapeless(pl, 4, [log]);
+  const X = { X: pl };
+  shaped(`stairs_${key}`, 4, ["X  ", "XX ", "XXX"], X); shaped(`slab_${key}`, 6, ["XXX"], X);
+  shaped(`sign_${key}`, 3, ["XXX", "XXX", " S "], { X: pl, S: "stick" });
+  shaped(`hanging_sign_${key}`, 6, ["I I", "XXX", "XXX"], { I: "iron_ingot", X: pl });
+  if (w) shaped(`door_${key}`, 3, ["XX", "XX", "XX"], X);
+  shaped(`trapdoor_${key}`, 2, ["XXX", "XXX"], X);
+}
+RECIPES.splice(RECIPES.findIndex(r => r.id === "planks" && r.ingredients && r.ingredients[0] === "#logs"), 1);
+// Stein
+for (const [key, name, it] of STONE_MATS) { shaped(`stairs_${key}`, 4, ["X  ", "XX ", "XXX"], { X: it }); shaped(`slab_${key}`, 6, ["XXX"], { X: it }); }
+shaped("diorite", 2, ["CQ", "QC"], { C: "cobble", Q: "quartz" });
+shapeless("granite", 1, ["diorite", "quartz"]); shapeless("andesite", 2, ["diorite", "cobble"]);
+for (const k of ["granite", "diorite", "andesite"]) shaped(`polished_${k}`, 4, ["XX", "XX"], { X: k });
+shaped("prismarine_bricks", 4, ["PP", "PP"], { P: "prismarine" });
+shaped("dark_prismarine", 8, ["PPP", "PDP", "PPP"], { P: "prismarine", D: "dye_black" });
+shaped("polished_tuff", 4, ["XX", "XX"], { X: "tuff" }); shaped("tuff_bricks", 4, ["XX", "XX"], { X: "polished_tuff" });
+shaped("chiseled_tuff", 1, ["S", "S"], { S: "slab_tuff_bricks" });
+shaped("slime_block", 1, ["SSS", "SSS", "SSS"], { S: "slimeball" }); shapeless("slimeball_b", 9, ["slime_block"], { out: ["slimeball", 9] });
+shapeless("honey_block", 1, ["honey_bottle", "honey_bottle", "honey_bottle", "honey_bottle"], { out: ["honey_block", 1] });
+shapeless("honey_bottle_b", 4, ["honey_block", "glass_bottle", "glass_bottle", "glass_bottle", "glass_bottle"], { out: ["honey_bottle", 4] });
+shaped("bone_block", 1, ["BBB", "BBB", "BBB"], { B: "bone_meal" }); shapeless("bone_meal_b", 9, ["bone_block"], { out: ["bone_meal", 9] });
+// Farben
+COLORS.forEach(([key], c) => {
+  const d = `dye_${key}`;
+  shaped(`terracotta_${key}`, 8, ["TTT", "TDT", "TTT"], { T: "terracotta", D: d }, { hide: true });
+  shaped(`banner_${key}`, 1, ["WWW", "WWW", " S "], { W: colorItem("wool", c), S: "stick" }, { hide: true });
+  shapeless(`candle_${key}`, 1, ["candle", d], { hide: true });
+  SMELT[`terracotta_${key}`] = [`glazed_${key}`, 0.1];
+});
+for (let c = 0; c < 16; c++) { const r = RECIPES.find(x => x.id === `concrete_mix_${COLORS[c][0]}`); if (r) { r.out = [`powder_${COLORS[c][0]}`, 8]; r.id = `powder_mix_${COLORS[c][0]}`; } }
+// Werkblöcke
+shaped("stonecutter", 1, [" I ", "SSS"], { I: "iron_ingot", S: "stone" });
+shaped("smithing_table", 1, ["II", "PP", "PP"], { I: "iron_ingot", P: "#planks" });
+shaped("loom", 1, ["SS", "PP"], { S: "string", P: "#planks" });
+shaped("grindstone", 1, ["SXS", "P P"], { S: "stick", X: "slab_stone", P: "#planks" });
+shaped("smoker", 1, [" L ", "LFL", " L "], { L: "#logs", F: "furnace" });
+shaped("blast_furnace", 1, ["III", "IFI", "SSS"], { I: "iron_ingot", F: "furnace", S: "stone" });
+shaped("armor_stand", 1, ["SSS", " S ", "SXS"], { S: "stick", X: "slab_stone" });
+shaped("chiseled_bookshelf", 1, ["PPP", "SSS", "PPP"], { P: "#planks", S: "#wslab" });
+shaped("candle", 1, ["S", "H"], { S: "string", H: "honeycomb" });
+shaped("tinted_glass", 2, [" A ", "AGA", " A "], { A: "amethyst_shard", G: "glass" });
+shaped("spyglass", 1, ["A", "C", "C"], { A: "amethyst_shard", C: "copper_ingot" });
+// Kupfer
+shaped("copper_block", 1, ["CCC", "CCC", "CCC"], { C: "copper_ingot" }); shapeless("copper_ingot_b", 9, ["copper_block"], { out: ["copper_ingot", 9] });
+shaped("cut_copper", 4, ["XX", "XX"], { X: "copper_block" });
+shaped("chiseled_copper", 1, ["X", "X"], { X: "cut_copper" });
+shaped("copper_grate", 4, [" X ", "X X", " X "], { X: "copper_block" });
+shaped("copper_bulb", 4, [" X ", "XBX", " R "], { X: "copper_block", B: "blaze_rod", R: "redstone" });
+shaped("copper_door", 3, ["XX", "XX", "XX"], { X: "copper_ingot" }); shaped("copper_trapdoor", 2, ["XX", "XX"], { X: "copper_ingot" });
+// Verzierungen: Vorlage vervielfältigen (7 Diamanten + Vorlage + Bruchstein)
+for (const [key] of TRIM_PATTERNS) shaped(`trim_${key}`, 2, ["DTD", "DCD", "DDD"], { D: "diamond", T: `trim_${key}`, C: "cobble" }, { out: [`trim_${key}`, 2], hide: true });
+SMELT.clay = ["terracotta", 0.35];
+/** Gegenstände, die Rohstoff zum Räuchern (Essen) bzw. Schmelzen im Schmelzofen (Erze) sind: Zutat → Ergebnis kommt aus SMELT */
+export const isFoodSmelt = id => !!SMELT[id] && !!ITEMS[SMELT[id][0]] && !!ITEMS[SMELT[id][0]].food;
+export const isOreSmelt = id => id === "raw_iron" || id === "raw_gold" || id === "raw_copper" || id === "nether_gold_ore";
+/** Steinsäge: Eingabe → [[Ergebnis, Anzahl], …] */
+export const STONECUT = {};
+{
+  const add = (inp, out, n = 1) => { (STONECUT[inp] = STONECUT[inp] || []).push([out, n]); };
+  for (const [key, , it] of STONE_MATS) { add(it, `stairs_${key}`, 1); add(it, `slab_${key}`, 2); }
+  add("stone", "brick", 1); add("granite", "polished_granite", 1); add("diorite", "polished_diorite", 1); add("andesite", "polished_andesite", 1);
+  add("tuff", "polished_tuff", 1); add("tuff", "tuff_bricks", 1); add("tuff", "chiseled_tuff", 1); add("polished_tuff", "tuff_bricks", 1); add("polished_tuff", "chiseled_tuff", 1); add("tuff_bricks", "chiseled_tuff", 1);
+  add("tuff", "stairs_p_tuff", 1); add("tuff", "slab_p_tuff", 2); add("tuff", "stairs_tuff_bricks", 1); add("tuff", "slab_tuff_bricks", 2);
+  add("polished_tuff", "stairs_tuff_bricks", 1);
+  add("sandstone", "stairs_sandstone", 1); add("prismarine", "prismarine_bricks", 1); add("prismarine", "stairs_prism_bricks", 1); add("prismarine", "slab_prism_bricks", 2);
+  add("copper_block", "cut_copper", 4); add("copper_block", "chiseled_copper", 4); add("copper_block", "copper_grate", 4); add("cut_copper", "chiseled_copper", 1);
+  add("quartz_block", "stairs_quartz", 1);
+  for (let w = 0; w < WOODS.length; w++) { /* Holz gehört an die Werkbank, nicht an die Steinsäge */ }
+  // doppelte Einträge (gleiche Ausgabe) entfernen
+  for (const k of Object.keys(STONECUT)) { const seen = new Set(); STONECUT[k] = STONECUT[k].filter(([o]) => (seen.has(o) ? false : (seen.add(o), true))); }
+}

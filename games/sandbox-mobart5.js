@@ -2,7 +2,7 @@
 // Blockdorf – Nether- und Ende-Monster malen (Etappe 5). Wie in sandbox-mobart.js: nur Rechtecke, 1 Bildpunkt = S Bildschirmpixel.
 // =====================================================================
 
-import { drawMob6, MOB_COLORS6 } from "./sandbox-mobart6.js?v=8";
+import { drawMob6, MOB_COLORS6 } from "./sandbox-mobart6.js?v=9";
 
 export const MOB_COLORS5 = {
   piglin: [230, 150, 140], zombie_piglin: [120, 150, 90], ghast: [240, 240, 240], blaze: [250, 190, 40], wither_skeleton: [40, 40, 44],

@@ -6,8 +6,8 @@
 //   Effekte: Schnelligkeit, Langsamkeit, Stärke, Schwäche, Sprungkraft, Regeneration, Gift, Heilung, Schaden, Feuerschutz, Wasseratmung, Nachtsicht, Unsichtbarkeit, Federfall
 // Engine ohne Oberfläche; Anzeige in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag } from "./sandbox-data.js?v=8";
-import { mulberry32 } from "./sandbox-noise.js?v=8";
+import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag, COLORS, TRIM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, LOOM_PATTERNS } from "./sandbox-data.js?v=9";
+import { mulberry32 } from "./sandbox-noise.js?v=9";
 
 // ---------------------------------------------------------------------
 // Verzauberungen
@@ -85,6 +85,8 @@ export function stackName(st) {
 export function stackLines(st) {
   if (!st) return [];
   const out = enchLines(st);
+  if (st.tr && TRIM_PATTERNS[st.tr[0]] && TRIM_MAT_IDS[st.tr[1]]) out.push(`Verzierung: ${TRIM_PATTERNS[st.tr[0]][1]} (${TRIM_MATS[TRIM_MAT_IDS[st.tr[1]]][0]})`);
+  if (st.bp) for (const q of st.bp.p) if (LOOM_PATTERNS[q[0]]) out.push(`${LOOM_PATTERNS[q[0]][1]} (${COLORS[q[1] & 15][1]})`);
   if (st.id === "potion" || st.id === "splash_potion") {
     const k = potionKind(st.d), m = potionMod(st.d), f = POTION_FX[k];
     if (f) {

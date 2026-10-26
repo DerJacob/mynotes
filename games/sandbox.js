@@ -5,22 +5,24 @@
 //   A/D laufen · W/Leertaste springen (Leiter: W hoch, S runter) · linke Maustaste abbauen/kämpfen
 //   rechte Maustaste benutzen/bauen/essen · 1–9 oder Mausrad: Platz wählen · E Inventar · Q werfen · P/Esc Pause
 // =====================================================================
-import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV, MODES, WEATHER_NAMES, MOON_FULL } from "./sandbox-engine.js?v=8";
-import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=8";
-import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=8";
-import { drawBlock4 } from "./sandbox-art4.js?v=8";
-import { drawBlock8 } from "./sandbox-art8.js?v=8";
-import { mcY } from "./sandbox-const.js?v=8";
-import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=8";
-import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=8";
-import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=8";
-import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=8";
-import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=8";
-import { createAudio, stepMaterial, musicMood } from "./sandbox-audio.js?v=8";
-import { loadRecord, addWorld, switchWorld, renameWorld, deleteWorld, canAdd, nextId, cleanSettings } from "./sandbox-worlds.js?v=8";
-import { padStep, readPad, aimPoint, moveCursor } from "./sandbox-pad.js?v=8";
-import { Precip, drawMoon, drawBolt, drawDebug } from "./sandbox-fx7.js?v=8";
-import { settingsPanel, worldsPanel, newWorldPanel } from "./sandbox-menus.js?v=8";
+import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV, MODES, WEATHER_NAMES, MOON_FULL } from "./sandbox-engine.js?v=9";
+import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=9";
+import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=9";
+import { drawBlock4 } from "./sandbox-art4.js?v=9";
+import { drawBlock8 } from "./sandbox-art8.js?v=9";
+import { drawBlock9, bannerCloth } from "./sandbox-art9.js?v=9";
+import { LOOM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, FIRST9 } from "./sandbox-data.js?v=9";
+import { mcY } from "./sandbox-const.js?v=9";
+import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=9";
+import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=9";
+import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=9";
+import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=9";
+import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=9";
+import { createAudio, stepMaterial, musicMood } from "./sandbox-audio.js?v=9";
+import { loadRecord, addWorld, switchWorld, renameWorld, deleteWorld, canAdd, nextId, cleanSettings } from "./sandbox-worlds.js?v=9";
+import { padStep, readPad, aimPoint, moveCursor } from "./sandbox-pad.js?v=9";
+import { Precip, drawMoon, drawBolt, drawDebug } from "./sandbox-fx7.js?v=9";
+import { settingsPanel, worldsPanel, newWorldPanel } from "./sandbox-menus.js?v=9";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -122,7 +124,7 @@ export function mount(root, ctx) {
     h("div", { class: "sb-view" }, canvas,
       h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, chatBtn, soundBtn, pauseBtn)),
       toastEl, chatLog, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), chatIn, winWrap, cursorEl, padEl, overlay),
-    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 8 · Etappe 8 · Spielstand 9")));
+    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 9 · Etappe 9 · Spielstand 10")));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
   function applySettings() {
     audio.apply(settings);
@@ -199,7 +201,7 @@ export function mount(root, ctx) {
     const sg = JSON.stringify([w.kind, cre.tab, game.inv, game.armor, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "trade" && w.v ? [w.v.offers.map(o => o.uses), w.v.lvl, w.v.xp, game.hero()] : 0, w.kind === "map" ? Math.floor(game.player.x / 3) : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
     if (sg !== sig.win) { sig.win = sg; renderWindow(); renderBook(); updateCursor(); }
     if (w.kind === "brew" && e) { const f = winPanel.querySelector(".sb-bfuel i"), a = winPanel.querySelector(".sb-bprog i"); if (f) f.style.width = Math.round(clamp(e.fuel / 20, 0, 1) * 100) + "%"; if (a) a.style.height = Math.round(clamp(e.brewT / BREW_TIME, 0, 1) * 100) + "%"; }
-    if (w.kind === "furnace" && e) { const f = winPanel.querySelector(".sb-flame i"), a = winPanel.querySelector(".sb-arrow i"); if (f) f.style.height = e.burnMax ? Math.round((e.burn / e.burnMax) * 100) + "%" : "0%"; if (a) a.style.width = Math.round((e.cook / 10) * 100) + "%"; }
+    if (w.kind === "furnace" && e) { const f = winPanel.querySelector(".sb-flame i"), a = winPanel.querySelector(".sb-arrow i"); if (f) f.style.height = e.burnMax ? Math.round((e.burn / e.burnMax) * 100) + "%" : "0%"; if (a) a.style.width = Math.round((e.cook / (e.mode ? 5 : 10)) * 100) + "%"; }
   }
   const arrow = () => h("div", { class: "sb-arrow" }, h("i"));
   const BIOME_MAPCOL = ["#6eaa46", "#40783a", "#80aa5a", "#3c6e5c", "#ecf0f4", "#e2d08e", "#aaaa46", "#288c32", "#50643c", "#80808a", "#4070aa", "#c86428"];
@@ -227,7 +229,9 @@ export function mount(root, ctx) {
   }
   function renderWindow() {
     const w = game.win; winPanel.textContent = "";
-    const title = { creative: "Kreativ-Inventar", inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe", adv: "Fortschritte", ench: "Verzaubern", anvil: "Amboss", brew: "Braustand", disp: "Spender", beacon: "Leuchtfeuer", trade: "Handel", map: "Entdeckerkarte" }[w.kind];
+    let title = { creative: "Kreativ-Inventar", inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe", adv: "Fortschritte", ench: "Verzaubern", anvil: "Amboss", brew: "Braustand", disp: "Spender", beacon: "Leuchtfeuer", trade: "Handel", map: "Entdeckerkarte", stonecut: "Steinsäge", loom: "Webstuhl", grind: "Schleifstein", smith: "Schmiedetisch", sign: "Schild beschriften" }[w.kind];
+    const fe = w.kind === "furnace" ? game.winEnt() : null;
+    if (fe && fe.mode) title = fe.mode === "smoke" ? "Räucherofen" : "Schmelzofen";
     winPanel.appendChild(h("div", { class: "sb-wt" }, h("b", null, title), h("button", { class: "sb-x", type: "button", title: "Schließen (E)", onclick: () => { game.closeWindow(); blurFocus(); } }, "✕")));
     if (w.kind === "adv") {
       const ids = Object.keys(ADV), done = ids.filter(k => game.adv[k]).length;
@@ -304,6 +308,38 @@ export function mount(root, ctx) {
       });
       winPanel.appendChild(list);
       winPanel.appendChild(h("div", { class: "sb-hint" }, "Klicke auf ein Angebot, um zu tauschen. Am Morgen füllen die Händler ihre Vorräte wieder auf."));
+    } else if (w.kind === "stonecut") {
+      const opts = game.stoneOptions(), list = h("div", { class: "sb-cuts" });
+      if (!opts.length) list.appendChild(h("div", { class: "sb-hint" }, "Lege links einen Stein ein – hier erscheinen die Formen."));
+      else opts.forEach(([id, n], i) => list.appendChild(h("button", { class: "sb-cut", type: "button", title: ITEMS[id].name + (n > 1 ? " ×" + n : ""), onclick: () => { if (game.stoneTake(i)) { sfx("click"); dirty = true; } sig.win = ""; blurFocus(); } }, art.icon(id, 30), n > 1 ? h("i", null, "×" + n) : null)));
+      winPanel.appendChild(h("div", { class: "sb-top" }, h("div", { class: "sb-enchslots" }, slotEl("grid", 0, game.grid[0])), list));
+    } else if (w.kind === "loom") {
+      const bs = game.grid[0], dye = game.grid[1], list = h("div", { class: "sb-cuts sb-pats" });
+      const baseC = bs ? (bs.bp ? bs.bp.c : ITEMS[bs.id].banner) : 8, layers = bs && bs.bp ? bs.bp.p : [], dc = dye && ITEMS[dye.id].col != null ? ITEMS[dye.id].col : 0;
+      LOOM_PATTERNS.forEach(([, name], i) => {
+        const can = game.loomCan(i), cv = h("canvas", { width: 12, height: 15, class: "sb-pat" });
+        const src = bannerCloth(baseC == null ? 8 : baseC, [...layers, [i, dc]]); cv.getContext("2d").drawImage(src, 0, 0);
+        list.appendChild(h("button", { class: "sb-cut" + (can ? " can" : ""), type: "button", title: name, disabled: !can, onclick: () => { if (game.loomApply(i)) { sfx("click"); dirty = true; } sig.win = ""; blurFocus(); } }, cv));
+      });
+      winPanel.appendChild(h("div", { class: "sb-top" }, h("div", { class: "sb-enchslots" }, slotEl("grid", 0, game.grid[0]), slotEl("grid", 1, game.grid[1])), list));
+      winPanel.appendChild(h("div", { class: "sb-hint" }, !bs ? "Oben ein Banner, darunter ein Farbstoff – dann ein Muster wählen." : layers.length >= 6 ? "Mehr als 6 Muster passen nicht auf ein Banner." : "Das Muster erscheint in der Farbe des Farbstoffs."));
+    } else if (w.kind === "grind") {
+      const pv = game.grindPreview();
+      winPanel.appendChild(h("div", { class: "sb-top" }, h("div", { class: "sb-craftbox" }, slotEl("grid", 0, game.grid[0]), h("span", { class: "sb-plus" }, "+"), slotEl("grid", 1, game.grid[1]), arrow(), slotEl("out", 0, pv ? pv.out : null, "sb-out"))));
+      winPanel.appendChild(h("div", { class: "sb-hint" }, pv ? (pv.xp > 0 ? `Entfernt Verzauberungen und gibt ${pv.xp} Erfahrung.` : "Fügt beide Stücke zusammen und repariert sie.") : "Ein verzauberter Gegenstand verliert seine Verzauberung; zwei gleiche Werkzeuge werden zu einem repariert."));
+    } else if (w.kind === "smith") {
+      const pv = game.smithPreview();
+      winPanel.appendChild(h("div", { class: "sb-top" }, h("div", { class: "sb-craftbox" }, slotEl("grid", 0, game.grid[0]), h("span", { class: "sb-plus" }, "+"), slotEl("grid", 1, game.grid[1]), h("span", { class: "sb-plus" }, "+"), slotEl("grid", 2, game.grid[2]), arrow(), slotEl("out", 0, pv && pv.out ? pv.out : null, "sb-out"))));
+      winPanel.appendChild(h("div", { class: "sb-hint" }, "Vorlage, Rüstungsteil und ein Material (Barren oder Edelstein) ergeben eine Verzierung."));
+    } else if (w.kind === "sign") {
+      const lines = game.signLines(w.x, w.y) || ["", "", "", ""];
+      const box = h("div", { class: "sb-sign" });
+      lines.forEach((t, i) => box.appendChild(h("input", { class: "sb-signin", type: "text", maxlength: 15, value: t, "aria-label": `Zeile ${i + 1}`, autocomplete: "off", spellcheck: "false",
+        oninput: () => { game.signSet(w.x, w.y, [...box.querySelectorAll("input")].map(x => x.value)); dirty = true; },
+        onkeydown: ev => { ev.stopPropagation(); if (ev.key === "Escape" || (ev.key === "Enter" && i === 3)) { ev.preventDefault(); ev.target.blur(); game.closeWindow(); sig.win = ""; } else if (ev.key === "Enter") { ev.preventDefault(); box.querySelectorAll("input")[i + 1].focus(); } } })));
+      winPanel.appendChild(box);
+      winPanel.appendChild(h("div", { class: "sb-hint" }, "Bis zu vier Zeilen, je 15 Zeichen. Mit Esc oder Enter in der letzten Zeile fertig."));
+      setTimeout(() => { const f = box.querySelector("input"); if (f && game.win && game.win.kind === "sign") f.focus(); }, 0);
     } else if (w.kind === "map") {
       const mi = game.mapInfo();
       const cvm = h("canvas", { class: "sb-map", width: 480, height: 160 });
@@ -326,7 +362,7 @@ export function mount(root, ctx) {
       winPanel.appendChild(h("div", { class: "sb-hint" }, `Pyramide: Stufe ${lv} von 4 · ${game.beaconClear(w.x, w.y) ? "Der Strahl ist frei." : "Etwas verdeckt den Strahl!"} Bezahlung: Eisen-, Gold-Barren, Smaragd oder Diamant.`));
     }
     if (w.kind === "creative") winPanel.appendChild(h("div", { class: "sb-invbox" }, row("inv", 0, 9)));
-    else {
+    else if (w.kind !== "sign") {
       winPanel.appendChild(h("div", { class: "sb-wl" }, "Inventar"));
       winPanel.appendChild(h("div", { class: "sb-invbox" }, row("inv", 9, 9), row("inv", 18, 9), row("inv", 27, 9), h("div", { class: "sb-gap" }), row("inv", 0, 9)));
     }
@@ -692,12 +728,12 @@ export function mount(root, ctx) {
   document.addEventListener("visibilitychange", onVisibility);
 
   // ---------- Größe ----------
-  let S = 2;
+  let S = 2, spyOn = false;
   function resize() {
     const r = canvas.getBoundingClientRect();
     const cw = Math.max(240, Math.round((r.width || 800) * dpr)), ch = Math.max(200, Math.round((r.height || 520) * dpr));
     if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
-    S = clamp(Math.max(2, Math.round(ch / 330)) + settings.zoom, 1, 6);
+    S = clamp(Math.max(2, Math.round(ch / 330)) + settings.zoom + (spyOn ? 3 : 0), 1, spyOn ? 9 : 6);
   }
   let ro = null;
   if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(() => { resize(); if (state !== "playing") draw(0); }); ro.observe(canvas); }
@@ -724,6 +760,7 @@ export function mount(root, ctx) {
   }
   function step(dt) {
     const lock = !!game.win;
+    { const spy = !lock && mouse.down && mouse.btn === 2 && game.selItem() === "spyglass"; if (spy !== spyOn) { spyOn = spy; resize(); } }
     game.input.left = !lock && (keys.left || pad.left); game.input.right = !lock && (keys.right || pad.right); game.input.jump = !lock && (keys.jump || pad.jump); game.input.down = !lock && (keys.down || pad.down);
     // Maus: abbauen, kämpfen, bauen
     let mining = false;
@@ -813,6 +850,11 @@ export function mount(root, ctx) {
       else if (e.t === "nobed") say("Dein Bett fehlt oder wurde zerstört – du startest am Dorf.", 3600);
       else if (e.t === "adv") { say(`🏆 Fortschritt: ${e.name}`, 4200); sfx("adv"); dirty = true; sig.win = ""; }
       else if (e.t === "jump") sfx("jump");
+      else if (e.t === "bounce") { sfx("jump"); spark(e.x + 0.5, e.y, [110, 200, 90], 6); dirty = true; }
+      else if (e.t === "stonecut" || e.t === "loom" || e.t === "grind" || e.t === "smith" || e.t === "stand" || e.t === "book" || e.t === "camp") { sfx("click"); dirty = true; sig.win = ""; }
+      else if (e.t === "wax") { spark(e.x + 0.5, e.y + 0.5, [255, 214, 90], 8); sfx("click"); dirty = true; }
+      else if (e.t === "scrape") { spark(e.x + 0.5, e.y + 0.5, [110, 190, 160], 8); sfx("break"); dirty = true; }
+      else if (e.t === "candle") { sfx(e.on ? "hiss" : "click"); dirty = true; }
       else if (e.t === "dim") { fade = 1.4; cam.x = game.player.x + game.player.w / 2; cam.y = game.player.y; parts.length = 0; floats.length = 0; say(DIM_NAMES[e.dim] || "", 2400); sfx("portal"); dirty = true; sig.win = ""; }
       else if (e.t === "portal_lit") { spark(e.x + 0.5, e.y + 1.5, [176, 60, 232], 20); sfx("portal"); dirty = true; }
       else if (e.t === "portal_off") { spark(e.x + 0.5, e.y + 1, [176, 60, 232], 14); sfx("hiss"); dirty = true; }
@@ -997,7 +1039,7 @@ export function mount(root, ctx) {
         else if (id === B.FURNACE) { const fe = game.ents.get(tx + "," + ty); if (fe && fe.burn > 0) idx = IDX.FURNACE_LIT; }
         else if (id === B.GRASS || id === B.LEAVES || id === B.TALLGRASS) { idx = game.biomes[tx] * 3 + (id === B.GRASS ? 0 : id === B.LEAVES ? 1 : 2); row = 1; }
         else if (ty >= DEEP_Y && ORE_DEEP[id] != null) idx = ORE_DEEP[id];
-        if (id >= B.POWDER_SNOW && drawBlock8(g, atlas, id, 0, px, py, tile)) { /* Etappe 8 */ } else if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
+        if (id >= FIRST9 && drawBlock9(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 9 */ } else if (id >= B.POWDER_SNOW && drawBlock8(g, atlas, id, 0, px, py, tile)) { /* Etappe 8 */ } else if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
         if (id === B.TORCH) { const fl = 0.5 + 0.5 * Math.sin(game.time * 3000 + tx * 2.1); g.fillStyle = `rgba(255,${180 + fl * 60 | 0},80,${0.35 + fl * 0.3})`; g.fillRect(px + 6 * S, py + (2 + (fl > 0.6 ? 0 : 1)) * S, 4 * S, 3 * S); }
       }
     }

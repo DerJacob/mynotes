@@ -2,7 +2,7 @@
 // Blockdorf – Bäume und Pflanzen der Etappe 8 (Weltgenerator und Wachstum teilen sich diese Formen)
 //   env = { put(x, y, id), air(x, y), rnd() }   gy = Reihe der obersten festen Bodenzeile (der Baum beginnt eine Zeile darüber)
 // =====================================================================
-import { B } from "./sandbox-data.js?v=8";
+import { B } from "./sandbox-data.js?v=9";
 
 const blob = (env, cx, cy, rx, ry, id, cut = 0.2, alt = null, altP = 0) => {
   for (let dy = -Math.ceil(ry); dy <= Math.ceil(ry); dy++) for (let dx = -Math.ceil(rx); dx <= Math.ceil(rx); dx++) {

@@ -3,12 +3,13 @@
 // Alles wird beim Start per Code gemalt, es gibt keine Bilddateien. Die Texturen sind eigene Malereien im
 // kantigen Minecraft-Stil (nicht die Originale).
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=8";
-import { mulberry32 } from "./sandbox-noise.js?v=8";
-import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=8";
-import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=8";
-import { paintAtlas6, paintItem6, COL6 } from "./sandbox-art6.js?v=8";
-import { paintAtlas8, paintItem8, COL8, FIRST8, LAST8 } from "./sandbox-art8.js?v=8";
+import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=9";
+import { mulberry32 } from "./sandbox-noise.js?v=9";
+import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=9";
+import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=9";
+import { paintAtlas6, paintItem6, COL6 } from "./sandbox-art6.js?v=9";
+import { paintAtlas8, paintItem8, COL8, FIRST8, LAST8 } from "./sandbox-art8.js?v=9";
+import { paintAtlas9, paintItem9, paintTrim, paintShieldBanner, COL9, FIRST9, LAST9 } from "./sandbox-art9.js?v=9";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -19,7 +20,7 @@ export const IDX = { FLOWER2: 120, FLOWER3: 121, WALL_DIRT: 122, WALL_STONE: 123
 export const ORE_DEEP = { [B.COAL]: 140, [B.IRON]: 141, [B.GOLD]: 142, [B.DIAMOND]: 143, [B.COPPER]: 144, [B.REDSTONE]: 145, [B.LAPIS]: 146, [B.EMERALD]: 147 };
 // Farb-Faktoren (R, G, B) für Gras/Laub je Biom – Reihenfolge wie BIOMES in sandbox-world.js
 export const BIOME_TINT = [[1, 1, 1], [0.9, 0.96, 0.88], [1.04, 1.02, 0.88], [0.7, 0.92, 0.86], [0.82, 0.98, 0.94], [1.4, 0.96, 0.6], [1.38, 0.97, 0.62], [0.72, 1.14, 0.58], [0.74, 0.8, 0.56], [0.86, 1.0, 0.92], [1, 1, 1], [1.08, 1.0, 0.78], [0.95, 1.06, 0.9], [0.78, 0.95, 0.86], [0.82, 0.98, 0.94], [0.82, 0.98, 0.94], [0.9, 1, 0.9], [0.98, 1.08, 0.88], [0.7, 0.82, 0.5], [0.8, 1.12, 0.55]];
-const ATLAS_N = 256;
+const ATLAS_N = 320;
 
 export function makeAtlas() {
   const cv = document.createElement("canvas");
@@ -303,8 +304,10 @@ export function makeAtlas() {
   paintAtlas5(paint, noise, specks);
   paintAtlas6(paint, noise, specks);
   paintAtlas8(paint, noise, specks);
+  paintAtlas9(paint, noise, specks);
   for (let id = B.CONCRETE; id <= B.SEA_LANTERN; id++) avg[id] = avg[COL6(id)] || [200, 200, 200];
   for (let id = FIRST8; id <= LAST8; id++) avg[id] = avg[COL8(id)] || [200, 200, 200];
+  for (let id = FIRST9; id <= LAST9; id++) avg[id] = avg[COL9(id)] || [200, 200, 200];
   // ---------- gefärbte Varianten (Zeile 2): Gras, Laub, hohes Gras je Biom ----------
   {
     const grab = i => g.getImageData(i * T, 0, T, T);
@@ -338,6 +341,7 @@ function paintItem(g, atlas, id, st) {
   const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
   const P = (x, y, c) => R(x, y, 1, 1, c);
   const line = (x0, y0, x1, y1, c, w = 1) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) R(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), w, w, c); };
+  if (paintItem9(id, g, atlas, st)) return;
   if (paintItem8(id, g, atlas)) return;
   if (paintItem6(id, g, atlas, st)) return;
   if (it.block != null) {
@@ -443,10 +447,13 @@ export function makeArt() {
   /** st (optional): { d, e } – Farbe der Tränke und Schimmer verzauberter Gegenstände */
   const base = (id, st) => {
     const shiny = !!(st && ((st.e && Object.keys(st.e).length) || id === "enchanted_book"));
-    const key = (id === "potion" || id === "splash_potion") && st ? `${id}:${st.d | 0}${shiny ? ":g" : ""}` : shiny ? id + ":g" : id;
+    const sig = st && (st.tr || st.bp) ? `${st.tr ? "t" + st.tr.join(".") : ""}${st.bp ? "b" + st.bp.c + ":" + st.bp.p.map(q => q.join(".")).join(",") : ""}` : "";
+    const key = ((id === "potion" || id === "splash_potion") && st ? `${id}:${st.d | 0}${shiny ? ":g" : ""}` : shiny ? id + ":g" : id) + (sig ? "#" + sig : "");
     let c = cache.get(key);
     if (!c) {
       c = document.createElement("canvas"); c.width = c.height = T; const g = c.getContext("2d"); g.imageSmoothingEnabled = false; paintItem(g, atlas, id, st);
+      if (st && st.tr) paintTrim(g, id, st.tr);
+      if (st && st.bp && id === "shield") paintShieldBanner(g, st.bp);
       if (shiny) glint(g);
       cache.set(key, c);
     }

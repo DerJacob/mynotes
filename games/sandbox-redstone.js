@@ -8,7 +8,7 @@
 //   Staub = Stärke · Fackel = Befestigung (0 unten, 1 links, 2 rechts) · Hebel = an | Befestigung<<1 (0 unten, 1 links, 2 rechts, 3 oben)
 //   Knopf = Restzeit (Ticks) | Befestigung<<4 · Platte = gedrückt · Kolben/Spender = Richtung (0 rechts, 1 links, 2 oben, 3 unten) | 4 (ausgefahren / ausgelöst)
 // =====================================================================
-import { B, BLOCKS, ITEMS, RS_IDS, isFluid } from "./sandbox-data.js?v=8";
+import { B, BLOCKS, ITEMS, RS_IDS, isFluid } from "./sandbox-data.js?v=9";
 
 export const RS_TICK = 0.1;
 export const DIRS = [[1, 0], [-1, 0], [0, -1], [0, 1]];
