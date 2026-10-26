@@ -8,7 +8,7 @@
 import { B } from "./sandbox-data.js?v=10";
 import { mulberry32, hash2 } from "./sandbox-noise.js?v=10";
 import { BIOMES } from "./sandbox-world.js?v=10";
-import { W, H, SURF } from "./sandbox-const.js?v=10";
+import { W, H, SURF, WK } from "./sandbox-const.js?v=10";
 
 // Farbindizes (COLORS): 0 weiß, 1 orange, 4 gelb, 8 hellgrau, 12 braun, 14 rot
 const BAND = [1, 0, 14, 4, 1, 12, 8, 1, 14, 0];
@@ -23,7 +23,7 @@ export function addContent9(w, seed) {
   const put = (x, y, id, a = 0) => { if (x > 0 && x < W - 1 && y > 1 && y < H - 3) { const i = y * W + x; tiles[i] = id; lvl[i] = 0; aux[i] = a; } };
 
   // ---------- Granit, Diorit, Andesit: Blasen im Stein ----------
-  for (const [id, n] of [[B.GRANITE, 26], [B.DIORITE, 26], [B.ANDESITE, 26]]) {
+  for (const [id, n] of [[B.GRANITE, 26 * WK], [B.DIORITE, 26 * WK], [B.ANDESITE, 26 * WK]]) {
     for (let i = 0; i < n; i++) {
       const cx = Math.floor(rnd() * W), cy = SURF + 6 + Math.floor(rnd() * (BOT - SURF - 30)), rx = 3 + rnd() * 5, ry = 2 + rnd() * 3.2;
       for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {

@@ -11,6 +11,7 @@ import { B, BLOCKS, ITEMS, isFluid, LOOM_PATTERNS, TRIM_PATTERNS, TRIM_MAT_IDS }
 const LOOM_N = LOOM_PATTERNS.length, TRIM_N = TRIM_PATTERNS.length, TRIM_MAT_N = TRIM_MAT_IDS.length;
 import { generateNether, generateEnd, placeStronghold, END_CX, END_TOP, END_ARRIVE, END_PILLARS } from "./sandbox-nether.js?v=10";
 import { BIOME_NAMES } from "./sandbox-world.js?v=10";
+import { WK } from "./sandbox-const.js?v=10";
 
 Object.assign(BIOME_NAMES, { nether: "Nether", soul_valley: "Seelensandtal", end: "Das Ende" });
 
@@ -104,11 +105,13 @@ export function installDims(Sandbox, K) {
     try { lvl = decodeTiles(dd.lvl); } catch (e) { /* Flüssigkeiten beginnen neu */ }
     try { aux = decodeTiles(dd.aux); } catch (e) { /* Zusatzdaten beschädigt */ }
     try { biomes = decodeTiles(dd.biomes, W); } catch (e) { /* ok */ }
-    for (let i = 0; i < W * H; i++) if (tiles[i] === B.WATER || tiles[i] === B.LAVA) { if (!lvl[i]) lvl[i] = 9; } else lvl[i] = 0;
-    return {
+    const s = {
       tiles, lvl, aux, biomes, ground: Int16Array.from(dd.ground && dd.ground.length === W ? dd.ground : new Array(W).fill(0)), villages: [],
       ents: this._entsFromData(dd.ents), drops: this._dropsFromData(dd.drops), decay: [], proj: [], villagers: [], mobsData: Array.isArray(dd.mobs) ? dd.mobs : []
     };
+    if (dd.pad > 0 && dd.pad < W && this.dims) this._padDim(dd.n || 1, s, dd.pad | 0);          // Etappe 13: neue Spalten rechts erzeugen
+    for (let i = 0; i < W * H; i++) if (tiles[i] === B.WATER || tiles[i] === B.LAVA) { if (!lvl[i]) lvl[i] = 9; } else lvl[i] = 0;
+    return s;
   };
   P._saveDims = function (data) {
     data.dim = this.dim; data.strongholds = this.strongholds.map(s => ({ x: s.x, y: s.y })); data.flags = { ...this.flags };
@@ -120,7 +123,7 @@ export function installDims(Sandbox, K) {
   P._restoreDim = function (d) {
     const p = this.player;
     if (!d.dimData) { if (d.dim) { p.x = this.spawn.x; p.y = this.spawn.y; } return; }
-    for (const n of [1, 2]) { try { if (d.dimData[n]) this.dims[n] = this._unpackDim(d.dimData[n]); } catch (e) { delete this.dims[n]; } }
+    for (const n of [1, 2]) { try { if (d.dimData[n]) this.dims[n] = this._unpackDim({ ...d.dimData[n], n }); } catch (e) { delete this.dims[n]; } }
     const want = d.dim | 0;
     if ((want === 1 || want === 2) && this.dims[want]) {
       this._enterDim(want, { keep: true });
@@ -334,19 +337,19 @@ export function installDims(Sandbox, K) {
   P._dimPopulate = function (n) {
     const rnd = this.mrng;
     if (n === 1) {
-      for (let i = 0, made = 0; i < 160 && made < 34; i++) {
+      for (let i = 0, made = 0; i < 160 * WK && made < 34 * WK; i++) {
         const x = 8 + Math.floor(rnd() * (W - 16)), fy = this._findSpawnY(x, 12, 150, 2);
         if (fy < 0) continue;
         const r = rnd(), type = r < 0.55 ? "zombie_piglin" : r < 0.8 ? "piglin" : "magma_cube";
         const m = this.spawnMob(type, x + 0.5 - 0.35, fy); if (this._hit(m)) this.mobs.pop(); else made++;
       }
-      for (let i = 0, made = 0; i < 120 && made < 6; i++) {            // Ghasts schweben frei in der Höhle
+      for (let i = 0, made = 0; i < 120 * WK && made < 6 * WK; i++) {            // Ghasts schweben frei in der Höhle
         const x = 20 + Math.floor(rnd() * (W - 40)), y = 36 + Math.floor(rnd() * 56);
         if (!this._roomFor(x, y, 4, 4)) continue;
         const m = this.spawnMob("ghast", x - 1.7 + 0.5, y + 3.6); if (this._hit(m)) this.mobs.pop(); else made++;
       }
       let made = 0;                                                    // Wither-Skelette auf Netherziegeln
-      for (let i = 0; i < 400 && made < 10; i++) {
+      for (let i = 0; i < 400 * WK && made < 10 * WK; i++) {
         const x = 4 + Math.floor(rnd() * (W - 8)), y = 30 + Math.floor(rnd() * 120);
         if (this.tile(x, y) !== B.NETHER_BRICK || this.tile(x, y - 1) !== B.AIR || this.tile(x, y - 2) !== B.AIR || this.tile(x, y - 3) !== B.AIR) continue;
         const m = this.spawnMob("wither_skeleton", x + 0.5 - 0.35, y); if (this._hit(m)) this.mobs.pop(); else made++;

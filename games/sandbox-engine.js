@@ -20,7 +20,11 @@ import { addContent8 } from "./sandbox-world8.js?v=10";
 import { addContent9 } from "./sandbox-world9.js?v=10";
 import { addContent11 } from "./sandbox-world11.js?v=10";
 import { addContent12 } from "./sandbox-world12.js?v=10";
+import { addContent13 } from "./sandbox-world13.js?v=10";
+import { installVillagers13 } from "./sandbox-vill13.js?v=10";
+import { installIllagers13 } from "./sandbox-illager13.js?v=10";
 import { migrateData } from "./sandbox-migrate.js?v=10";
+import { installWiden } from "./sandbox-widen.js?v=10";
 import { installDims } from "./sandbox-dims.js?v=10";
 import { installBoss } from "./sandbox-boss.js?v=10";
 import { installVillagers } from "./sandbox-vill.js?v=10";
@@ -41,7 +45,7 @@ export { W, H, SURF, SPAWN_X };
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=10";
 export { mulberry32 };
@@ -113,19 +117,27 @@ export class Sandbox {
   // ---------- Zugriff ----------
   tile(x, y) { return x < 0 || x >= W || y < 0 || y >= H ? (y < 0 ? B.AIR : B.BEDROCK) : this.tiles[y * W + x]; }
   solidAt(x, y) { return BLOCKS[this.tile(Math.floor(x), Math.floor(y))].solid; }
+  /** Licht muss neu berechnet werden: sonst überall (lightDirty = true), mit lightAt(x) nur rund um die Spalte x (Etappe 13: die Welt ist groß) */
+  get lightDirty() { return this._ld; }
+  set lightDirty(v) { this._ld = v; if (v) this._lfull = true; }
+  lightAt2(x) {
+    if (!this._ld) { this._ld = true; this._lfull = false; this._lx0 = this._lx1 = x; }
+    else if (!this._lfull) { if (x < this._lx0) this._lx0 = x; if (x > this._lx1) this._lx1 = x; }
+  }
   setTile(x, y, id) {
     if (x < 0 || x >= W || y < 0 || y >= H) return;
     const i = y * W + x;
-    if (this.tiles[i] === B.LAVA) this.lightDirty = true;
     const old = this.tiles[i];
-    this.tiles[i] = id; this.lvl[i] = 0; this.aux[i] = 0; this.lightDirty = true;
+    this.tiles[i] = id; this.lvl[i] = 0; this.aux[i] = 0; this.lightAt2(x);
     if (this.rs) this._rsTouch(x, y, old, id);
     this._fluidWake(x, y);
   }
 
   // ---------- Welt erzeugen ----------
+  /** Die ganze Welt dieser Zahl (seed), noch ohne Festung */
+  _genFull() { return addContent13(addContent12(addContent11(addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed), this.seed), this.seed), this.seed); }
   _generate() {
-    const w = addContent12(addContent11(addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed), this.seed), this.seed);
+    const w = this._genFull();
     this.tiles = w.tiles; this.lvl = w.lvl; this.aux = w.aux; this.structs = w.structs; this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
     this._worldChests = w.chests;
     const sh = placeStronghold(this.seed, this.tiles, this.lvl, this.aux, SPAWN_X, SURF);   // Festung mit Endportal tief unter der Erde
@@ -168,7 +180,7 @@ export class Sandbox {
   toData() {
     const p = this.player, pk = st => this._packStack(st), ow = this._dimGet(0);          // oben steht immer die Oberwelt
     const data = {
-      v: SAVE_VERSION, h: H, seed: this.seed, tiles: encodeTiles(ow.tiles), lvl: encodeTiles(ow.lvl), biomes: encodeTiles(ow.biomes), villages: ow.villages, ground: Array.from(ow.ground),
+      v: SAVE_VERSION, h: H, w: W, seed: this.seed, tiles: encodeTiles(ow.tiles), lvl: encodeTiles(ow.lvl), biomes: encodeTiles(ow.biomes), villages: ow.villages, ground: Array.from(ow.ground),
       p: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), hp: p.hp, food: this.food, sat: +this.sat.toFixed(1), exh: +this.exh.toFixed(2) },
       inv: this.inv.map(pk), armor: this.armor.map(pk), sel: this.sel, xp: this.xp,
       ents: this._entsToData(ow.ents),
@@ -193,8 +205,9 @@ export class Sandbox {
     if (d.v >= 3) {
       try { this.lvl = decodeTiles(d.lvl); this.biomes = decodeTiles(d.biomes, W); } catch (e) { /* Zusatzdaten beschädigt: Welt bleibt spielbar */ }
       this.villages = Array.isArray(d.villages) ? d.villages.filter(v => v && Number.isFinite(v.x)) : [];
-      for (let i = 0; i < W * H; i++) if (this.tiles[i] === B.WATER || this.tiles[i] === B.LAVA) { if (!this.lvl[i]) this.lvl[i] = SRC; } else this.lvl[i] = 0;
     } else this.villages = [{ x: SPAWN_X, y: SURF, style: "oak" }];
+    if (d.pad > 0 && d.pad < W) this._padFill(d.pad | 0);                // alte Welt: rechts neues Gelände (Etappe 13)
+    if (d.v >= 3) for (let i = 0; i < W * H; i++) if (this.tiles[i] === B.WATER || this.tiles[i] === B.LAVA) { if (!this.lvl[i]) this.lvl[i] = SRC; } else this.lvl[i] = 0;
     this._fresh();
     const p = this.player, legacy = d.v === 1;
     if (d.p && Number.isFinite(d.p.x) && Number.isFinite(d.p.y)) {
@@ -229,6 +242,7 @@ export class Sandbox {
     if (Array.isArray(d.strongholds)) this.strongholds = d.strongholds.filter(s => s && Number.isFinite(s.x) && Number.isFinite(s.y)).map(s => ({ x: s.x | 0, y: s.y | 0 }));
     if (d.flags && typeof d.flags === "object") this.flags.dragonDead = !!d.flags.dragonDead;
     this._villLoad(d);
+    this._padAfter();
     this._polishLoad(d);
     this._c10Load(d);
     this._oceanLoad(d);
@@ -245,21 +259,31 @@ export class Sandbox {
     const i = y * W + x;
     return Math.max(this.sky[i] * this.dayFactor(), this.blk[i], this.ambient);
   }
-  relight() {
-    this.lightDirty = false;
+  /** Licht neu berechnen. Ohne Angabe überall; mit lo…hi nur die Spalten, deren Licht sich geändert haben kann (Licht reicht höchstens 15 Spalten weit) */
+  relight(lo = 0, hi = W - 1) {
+    this._ld = false; this._lfull = true;
+    const full = lo <= 0 && hi >= W - 1;
+    if (!full) { lo = Math.max(0, lo - 15); hi = Math.min(W - 1, hi + 15); }                    // so weit kann sich das Licht ändern
+    const a = full ? 0 : Math.max(0, lo - 16), b = full ? W - 1 : Math.min(W - 1, hi + 16);     // so weit wird gerechnet (Licht von außerhalb reicht nicht mehr hinein)
     const tiles = this.tiles, sky = this.sky, blk = this.blk;
-    sky.fill(0); blk.fill(0);
+    // Ränder (Spalten a … lo−1 und hi+1 … b) behalten ihr altes Licht: dort fehlen die Lichtquellen von außerhalb
+    let keep = null;
+    if (!full) {
+      keep = [];
+      for (const [c0, c1] of [[a, lo - 1], [hi + 1, b]]) for (let x = c0; x <= c1; x++) { const col = new Uint8Array(2 * H); for (let y = 0; y < H; y++) { col[y] = sky[y * W + x]; col[H + y] = blk[y * W + x]; } keep.push([x, col]); }
+      for (let y = 0; y < H; y++) { sky.fill(0, y * W + a, y * W + b + 1); blk.fill(0, y * W + a, y * W + b + 1); }
+    } else { sky.fill(0); blk.fill(0); }
     const bs = Array.from({ length: 16 }, () => []);
     // Himmelslicht: in jeder Spalte von oben bis zum ersten Block, der Licht schluckt
-    if (!this.noSky) for (let x = 0; x < W; x++) for (let y = 0; y < H && BLOCKS[tiles[y * W + x]].lcost === 0; y++) sky[y * W + x] = 15;
-    for (let i = 0; i < W * H; i++) if (sky[i] === 15) bs[15].push(i);
-    this._spread(sky, bs);
+    if (!this.noSky) for (let x = a; x <= b; x++) for (let y = 0; y < H && BLOCKS[tiles[y * W + x]].lcost === 0; y++) { sky[y * W + x] = 15; bs[15].push(y * W + x); }
+    this._spread(sky, bs, a, b);
     const bb = Array.from({ length: 16 }, () => []);
     const aux = this.aux;
-    for (let i = 0; i < W * H; i++) { const t = tiles[i]; let e = BLOCKS[t].emit; if (!e && t === B.WATER && aux[i] >= 4 && aux[i] < 8) e = 3 * (aux[i] - 2); if (e) { blk[i] = e; bb[e].push(i); } }
-    this._spread(blk, bb);
+    for (let y = 0; y < H; y++) for (let x = a; x <= b; x++) { const i = y * W + x, t = tiles[i]; let e = BLOCKS[t].emit; if (!e && t === B.WATER && aux[i] >= 4 && aux[i] < 8) e = 3 * (aux[i] - 2); if (e) { blk[i] = e; bb[e].push(i); } }
+    this._spread(blk, bb, a, b);
+    if (keep) for (const [x, col] of keep) for (let y = 0; y < H; y++) { sky[y * W + x] = col[y]; blk[y * W + x] = col[H + y]; }
   }
-  _spread(light, buckets) {
+  _spread(light, buckets, a = 0, b = W - 1) {
     const tiles = this.tiles;
     for (let L = 15; L >= 2; L--) {
       const list = buckets[L];
@@ -269,8 +293,8 @@ export class Sandbox {
         const nl = L - 1 - BLOCKS[tiles[i]].lcost;
         if (nl <= 0) continue;
         const x = i % W, y = (i / W) | 0;
-        if (x > 0 && light[i - 1] < nl) { light[i - 1] = nl; buckets[nl].push(i - 1); }
-        if (x < W - 1 && light[i + 1] < nl) { light[i + 1] = nl; buckets[nl].push(i + 1); }
+        if (x > a && light[i - 1] < nl) { light[i - 1] = nl; buckets[nl].push(i - 1); }
+        if (x < b && light[i + 1] < nl) { light[i + 1] = nl; buckets[nl].push(i + 1); }
         if (y > 0 && light[i - W] < nl) { light[i - W] = nl; buckets[nl].push(i - W); }
         if (y < H - 1 && light[i + W] < nl) { light[i + W] = nl; buckets[nl].push(i + W); }
       }
@@ -342,7 +366,7 @@ export class Sandbox {
   update(dtIn) {
     let dt = Math.min(dtIn, 0.1);
     while (dt > 1e-6) { const s = Math.min(dt, 1 / 60); this._step(s); dt -= s; }
-    if (this.lightDirty) this.relight();
+    if (this._ld) { if (this._lfull || this._lx1 - this._lx0 > 400) this.relight(); else this.relight(this._lx0, this._lx1); }
   }
   _step(dt) {
     this.time += dt / DAY_LEN;
@@ -472,3 +496,6 @@ installCombat10(Sandbox, { clamp, W, H, REACH });
 installOcean(Sandbox, { clamp, W, H });
 installSeaMobs(Sandbox, { clamp, W, H, SURF });
 installFauna(Sandbox, { clamp, W, H, SURF });
+installVillagers13(Sandbox, { clamp, W, H });
+installIllagers13(Sandbox, { clamp, W, H });
+installWiden(Sandbox, { clamp, W, H, SURF });

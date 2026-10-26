@@ -68,7 +68,7 @@ export function installOcean(Sandbox, K) {
       this.aux[i] = k;
     }
     this.lvl[i] = SRC;                                           // Wirtszelle wird zur festen Quelle (sonst löscht fließendes Wasser die Pflanze)
-    this._consumeSel(); this.stats.built++; this.lightDirty = true;
+    this._consumeSel(); this.stats.built++; this.lightAt2(tx);
     this.events.push({ t: "place", x: tx, y: ty, id: B.WATER });
     return true;
   };
@@ -112,7 +112,7 @@ export function installOcean(Sandbox, K) {
     const i = y * W + x, a = this.aux[i];
     if (this.tile(x, y) !== B.WATER || !isWaterPlant(a)) return false;
     const tool = this.heldTool(), en = byPlayer ? tool.ench || {} : {}, silk = !!en.silk_touch, shears = byPlayer && tool.type === "shears";
-    this.aux[i] = 0; this.lightDirty = true;
+    this.aux[i] = 0; this.lightAt2(x);
     let drop = null, n = 1;
     if (isKelp(a)) drop = "kelp";
     else if (a === WP.SEAGRASS) drop = silk || shears ? "seagrass" : null;

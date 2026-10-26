@@ -128,7 +128,7 @@ export function mount(root, ctx) {
     h("div", { class: "sb-view" }, canvas,
       h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, chatBtn, soundBtn, pauseBtn)),
       toastEl, chatLog, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), chatIn, winWrap, cursorEl, padEl, overlay),
-    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 12 · Etappe 12 · Spielstand 13")));
+    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 13 · Etappe 13 · Spielstand 14")));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
   function applySettings() {
     audio.apply(settings);
@@ -302,7 +302,7 @@ export function mount(root, ctx) {
     } else if (w.kind === "trade") {
       const v = w.v, pf = PROFS[v.prof] || { name: "Dorfbewohner" };
       const need = [10, 70, 150, 250][v.lvl - 1];
-      winPanel.appendChild(h("div", { class: "sb-hint" }, `${pf.name} · ${LEVEL_NAMES[v.lvl - 1]}${need ? ` (${v.xp}/${need} Erfahrung)` : " (Meister)"}${game.hero() ? " · Held des Dorfes: Smaragde −30 %" : ""}`));
+      winPanel.appendChild(h("div", { class: "sb-hint" }, pf.nolevel ? `${pf.name} · seltene Waren, nur kurz zu Besuch` : `${pf.name} · ${LEVEL_NAMES[v.lvl - 1]}${need ? ` (${v.xp}/${need} Erfahrung)` : " (Meister)"}${game.hero() ? " · Held des Dorfes: Smaragde −30 %" : ""}${v.cured ? " · Geheilt: Smaragde −20 %" : ""}`));
       const list = h("div", { class: "sb-offers sb-trades" });
       v.offers.forEach((o, i) => {
         const a = game.offerCost(o.a), b = game.offerCost(o.b), ok = game.offerCan(o), sold = o.uses >= o.max;
@@ -889,11 +889,25 @@ export function mount(root, ctx) {
       else if (e.t === "sit") sfx("place");
       else if (e.t === "omen") say("Du spürst ein Unheilvolles Omen … betritt ein Dorf!", 4200);
       else if (e.t === "raid") {
-        if (e.s === "start") { say("⚔ Überfall! Verteidige das Dorf!", 4200); sfx("roar"); }
+        if (e.s === "start") { say(`⚔ Überfall${e.lvl > 1 ? " der Stufe " + ["I", "II", "III", "IV", "V"][e.lvl - 1] : ""}! Verteidige das Dorf!`, 4200); sfx("roar"); }
         else if (e.s === "wave") { say(`Welle ${e.wave} greift an!`, 2600); sfx("roar"); }
         else if (e.s === "win") { say("🏆 Der Überfall ist abgewehrt – du bist Held des Dorfes!", 4600); sfx("adv"); dirty = true; }
         else if (e.s === "lose") say("Der Überfall ist gescheitert …", 3400);
       }
+      else if (e.t === "omen_up") say(`Das Omen wird stärker: Stufe ${["I", "II", "III", "IV", "V"][e.lvl - 1]}`, 3200);
+      else if (e.t === "bell") { spark(e.x, e.y, [244, 201, 58], 10); sfx("bell"); }
+      else if (e.t === "totem") { say("Das Totem der Unsterblichkeit rettet dich!", 3400); sfx("totem"); whiteout = 0.25; spark(e.x, e.y, [244, 201, 58], 40); spark(e.x, e.y, [60, 220, 120], 24); dirty = true; }
+      else if (e.t === "golem") { spark(e.x, e.y, [210, 210, 206], 18); sfx("golem"); dirty = true; }
+      else if (e.t === "golem_hit") sfx("golem");
+      else if (e.t === "cure_start") { say("Der Zombie-Dörfler beginnt zu zittern …", 2600); spark(e.x, e.y, [255, 224, 112], 10); sfx("tame"); dirty = true; }
+      else if (e.t === "cure") { say("Der Zombie-Dörfler ist geheilt – sie bekommen jetzt 20 % Rabatt!", 3400); spark(e.x, e.y, [255, 224, 112], 24); sfx("adv"); dirty = true; }
+      else if (e.t === "zombified") { say("Ein Dorfbewohner wurde zum Zombie!", 2600); sfx("roar"); }
+      else if (e.t === "villager_died") spark(e.x, e.y + 0.8, [200, 60, 60], 10);
+      else if (e.t === "siege") { say("🧟 Zombie-Belagerung! Verteidige das Dorf!", 4200); sfx("roar"); }
+      else if (e.t === "trader") { say("Ein Fahrender Händler ist in der Nähe!", 3200); sfx("tame"); }
+      else if (e.t === "cast") { spark(e.x, e.y + 0.3, e.kind ? [120, 200, 255] : [244, 201, 58], 10); sfx("hiss"); }
+      else if (e.t === "fangs") sfx("fang");
+      else if (e.t === "roar" || e.t === "ravager_hit") sfx("roar");
       else if (e.t === "barter_start") sfx("click");
       else if (e.t === "barter") { spark(e.x, e.y + 0.5, [244, 201, 58], 8); sfx("xp"); }
       else if (e.t === "ghast_charge") sfx("gcharge");
@@ -1270,7 +1284,8 @@ export function mount(root, ctx) {
   function drawRaidBar(cw, ri) {
     const w = Math.min(cw * 0.6, 180 * S), x = Math.round((cw - w) / 2), y = Math.round(22 * S), hh = Math.round(3.4 * S);
     const f = ri.state === "wait" && ri.left === 0 ? 0 : clamp(1 - ri.left / Math.max(1, ri.total), 0, 1);
-    const nm = ri.state === "wait" ? `Überfall – Welle ${Math.min(ri.wave + 1, ri.waves)} von ${ri.waves} naht …` : `Überfall – Welle ${ri.wave} von ${ri.waves}`;
+    const lv = ri.lvl > 1 ? ` (Stufe ${["I", "II", "III", "IV", "V"][ri.lvl - 1]})` : "";
+    const nm = ri.state === "wait" ? `Überfall${lv} – Welle ${Math.min(ri.wave + 1, ri.waves)} von ${ri.waves} naht …` : `Überfall${lv} – Welle ${ri.wave} von ${ri.waves}`;
     g.font = `bold ${Math.round(4.8 * S)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "alphabetic"; g.lineWidth = S; g.strokeStyle = "rgba(0,0,0,.8)";
     g.strokeText(nm, cw / 2, y - 2 * S); g.fillStyle = "#fff"; g.fillText(nm, cw / 2, y - 2 * S);
     g.fillStyle = "rgba(0,0,0,.7)"; g.fillRect(x - S, y - S, w + 2 * S, hh + 2 * S);

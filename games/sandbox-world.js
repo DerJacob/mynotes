@@ -11,7 +11,7 @@ import { B, BLOCKS } from "./sandbox-data.js?v=10";
 import { cherryTree, mangroveTree, bambooStalk } from "./sandbox-trees8.js?v=10";
 import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=10";
 
-import { W, H, SURF, SPAWN_X, SEA, DEEP } from "./sandbox-const.js?v=10";
+import { W, H, SURF, SPAWN_X, SEA, DEEP, WK, BIOME_SCALE as BS } from "./sandbox-const.js?v=10";
 export const BIOMES = ["plains", "forest", "birch", "taiga", "snow", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "dappled", "meadow", "grove", "snowy_slopes", "jagged_peaks", "stony_peaks", "cherry", "mangrove", "bamboo", "warm_ocean"];
 export const BIOME_NAMES = { plains: "Ebene", forest: "Wald", birch: "Birkenwald", taiga: "Taiga", snow: "Schneeebene", desert: "Wüste", savanna: "Savanne", jungle: "Dschungel", swamp: "Sumpf", mountains: "Berge", ocean: "Ozean", dappled: "Gesprenkelter Wald", meadow: "Wiese", grove: "Schneehain", snowy_slopes: "Verschneite Hänge", jagged_peaks: "Zackengipfel", stony_peaks: "Steingipfel", cherry: "Kirschhain", mangrove: "Mangrovensumpf", bamboo: "Bambuswald", warm_ocean: "Warmer Ozean" };
 export const OCEANS = new Set(["ocean", "warm_ocean"]);
@@ -55,14 +55,14 @@ export function generateWorld(seed) {
   // ---------- Klima und Höhe ----------
   const temp = new Float32Array(W), humid = new Float32Array(W), mnt = new Float32Array(W), oce = new Float32Array(W), hgt = new Float32Array(W);
   for (let x = 0; x < W; x++) {
-    temp[x] = fbm(x * 0.0065, 11.3, seed + 1, 3);
-    humid[x] = fbm(x * 0.0075 + 50, 21.7, seed + 2, 3);
-    mnt[x] = smooth(0.56, 0.72, fbm(x * 0.0042 + 90, 3.3, seed + 3, 3));
-    oce[x] = smooth(0.62, 0.74, fbm(x * 0.0048 + 130, 7.3, seed + 4, 3));
+    temp[x] = fbm(x * (0.0065 / BS), 11.3, seed + 1, 3);
+    humid[x] = fbm(x * (0.0075 / BS) + 50, 21.7, seed + 2, 3);
+    mnt[x] = smooth(0.56, 0.72, fbm(x * (0.0042 / BS) + 90, 3.3, seed + 3, 3));
+    oce[x] = smooth(0.62, 0.74, fbm(x * (0.0048 / BS) + 130, 7.3, seed + 4, 3));
   }
   // Teilgebiete der Etappe 8: Kirschhain (mild und feucht), Bambuswald (im Dschungel), Mangrovensumpf (warmer Sumpf)
   const cherryN = new Float32Array(W), bambooN = new Float32Array(W);
-  for (let x = 0; x < W; x++) { cherryN[x] = fbm(x * 0.011 + 500, 8.8, seed + 12, 3); bambooN[x] = fbm(x * 0.013 + 640, 2.2, seed + 13, 3); }
+  for (let x = 0; x < W; x++) { cherryN[x] = fbm(x * (0.011 / BS) + 500, 8.8, seed + 12, 3); bambooN[x] = fbm(x * (0.013 / BS) + 640, 2.2, seed + 13, 3); }
   const climate = x => {
     const t = temp[x], h = humid[x];
     if (t < 0.42) return h > 0.48 ? "taiga" : "snow";
@@ -74,12 +74,31 @@ export function generateWorld(seed) {
   };
   // Jede Welt bekommt mindestens eine Bergkette (sonst würde die höhere Welt ungenutzt bleiben) und jedes neue Biom wenigstens einmal:
   // fehlt es, wird der breiteste passende Streifen umgewidmet.
-  if (mnt.filter(m => m > 0.7).length < 40) {
-    const cx = (hash2(7, 7, seed) < 0.5 ? 70 : 340) + Math.floor(hash2(8, 8, seed) * 100), wd = 80;
+  if (mnt.filter(m => m > 0.7).length < 40 * WK) {
+    const cx = (hash2(7, 7, seed) < 0.5 ? 70 : 340) * WK + Math.floor(hash2(8, 8, seed) * 100 * WK), wd = 80 * BS;
     for (let x = 0; x < W; x++) { const k = 1 - Math.pow(Math.abs(x - cx) / wd, 2); if (k > 0) mnt[x] = Math.max(mnt[x], smooth(0, 0.5, k)); }
   }
   const clim = new Array(W);
   for (let x = 0; x < W; x++) clim[x] = climate(x);
+  // Kleine Splitter glätten: ein Streifen, der kürzer als MINRUN ist, geht an den längeren Nachbarn (die Zonen sollen zusammenhängen)
+  {
+    const MINRUN = 54;
+    for (let pass = 0; pass < 6; pass++) {
+      const runs = []; let st = 0;
+      for (let x = 1; x <= W; x++) if (x === W || clim[x] !== clim[st]) { runs.push({ a: st, b: x, c: clim[st] }); st = x; }
+      let changed = false;
+      for (let i = 0; i < runs.length; i++) {
+        const r = runs[i];
+        if (r.b - r.a >= MINRUN || Math.abs((r.a + r.b) / 2 - SPAWN_X) < 60) continue;
+        const L = runs[i - 1], R = runs[i + 1];
+        const to = !L ? R : !R ? L : (L.b - L.a >= R.b - R.a ? L : R);
+        if (!to) continue;
+        for (let x = r.a; x < r.b; x++) clim[x] = to.c;
+        changed = true;
+      }
+      if (!changed) break;
+    }
+  }
   {
     const LAND = ["plains", "forest", "birch", "taiga", "savanna", "swamp", "jungle", "cherry", "mangrove", "bamboo"];
     for (const nb of ["desert", "cherry", "mangrove", "bamboo"]) {
@@ -113,7 +132,7 @@ export function generateWorld(seed) {
   }
   // Hat die Welt noch keinen richtigen Berg (Rauschen ohne Grat), wird ein Gebirgsstock aufgesetzt
   if (Math.min(...hgt) > SURF - 64) {
-    const cx = (hash2(9, 9, seed) < 0.5 ? 70 : 340) + Math.floor(hash2(10, 10, seed) * 100), wd = 70;
+    const cx = (hash2(9, 9, seed) < 0.5 ? 70 : 340) * WK + Math.floor(hash2(10, 10, seed) * 100 * WK), wd = 70 * BS;
     for (let x = 0; x < W; x++) {
       const k = 1 - Math.pow(Math.abs(x - cx) / wd, 2);
       if (k <= 0 || Math.abs(x - SPAWN_X) < 60) continue;
@@ -127,8 +146,8 @@ export function generateWorld(seed) {
   {
     let n = 0;
     for (let x = 0; x < W; x++) if (Math.abs(x - SPAWN_X) > 44 && mnt[x] <= 0.3 && oce[x] > 0.45 && Math.round(hgt[x]) >= SEA + 3) n++;
-    if (n < 40) {
-      const cx = (hash2(11, 11, seed) < 0.5 ? 60 : 350) + Math.floor(hash2(12, 12, seed) * 90), wd = 70;
+    if (n < 40 * WK) {
+      const cx = (hash2(11, 11, seed) < 0.5 ? 60 : 350) * WK + Math.floor(hash2(12, 12, seed) * 90 * WK), wd = 70 * BS;
       for (let x = 0; x < W; x++) {
         const k = 1 - Math.pow(Math.abs(x - cx) / wd, 2);
         if (k <= 0 || Math.abs(x - SPAWN_X) < 60) continue;
@@ -217,7 +236,7 @@ export function generateWorld(seed) {
     }
   };
   // Schluchten: senkrechte Risse von der Oberfläche in die Tiefe
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 7 * WK; i++) {
     const sx = 20 + Math.floor(rnd() * (W - 40));
     if (nearVillage(sx) || OCEANS.has(bname[sx])) continue;
     const depth = 22 + Math.floor(rnd() * 45), ph = rnd() * 6;
@@ -227,7 +246,7 @@ export function generateWorld(seed) {
     }
   }
   // Höhleneingänge: schräge Gänge von der Oberfläche
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 12 * WK; i++) {
     let x = 15 + rnd() * (W - 30);
     if (nearVillage(x) || OCEANS.has(bname[Math.round(x)])) continue;
     let y = ground[Math.round(x)] - 1;
@@ -245,7 +264,7 @@ export function generateWorld(seed) {
   }
 
   // Unterirdische Seen (1.18): Wasser füllt eine Kammer bis zu einem festen Spiegel
-  for (let k = 0, made = 0; k < 160 && made < 12; k++) {
+  for (let k = 0, made = 0; k < 160 * WK && made < 12 * WK; k++) {
     const sx = 10 + Math.floor(rnd() * (W - 20));
     if (nearVillage(sx) || OCEANS.has(bname[sx])) continue;
     const sy = ground[sx] + 22 + Math.floor(rnd() * Math.min(80, H - 40 - ground[sx] - 22));
@@ -295,28 +314,28 @@ export function generateWorld(seed) {
       }
     }
   };
-  veinT(B.COAL, 520, 6, 130, 34, [4, 9]);
-  veinT(B.COPPER, 320, 10, 100, 46, [3, 8]);
-  veinT(B.IRON, 340, 30, 124, 72, [3, 7]);
-  veinT(B.LAPIS, 100, 34, 124, 84, [2, 5]);
-  veinT(B.GOLD, 170, 56, 124, 100, [2, 5]);
-  veinT(B.REDSTONE, 190, 72, 124, 112, [3, 6]);
-  veinT(B.DIAMOND, 90, 86, 124, 116, [1, 4]);
+  veinT(B.COAL, 520 * WK, 6, 130, 34, [4, 9]);
+  veinT(B.COPPER, 320 * WK, 10, 100, 46, [3, 8]);
+  veinT(B.IRON, 340 * WK, 30, 124, 72, [3, 7]);
+  veinT(B.LAPIS, 100 * WK, 34, 124, 84, [2, 5]);
+  veinT(B.GOLD, 170 * WK, 56, 124, 100, [2, 5]);
+  veinT(B.REDSTONE, 190 * WK, 72, 124, 112, [3, 6]);
+  veinT(B.DIAMOND, 90 * WK, 86, 124, 116, [1, 4]);
   // Berge (1.18): Kohle, Eisen und Kupfer auch im Berginneren, Smaragde nur dort
   const mountCols = []; for (let x = 0; x < W; x++) if (MOUNTAIN_BIOMES.has(bname[x]) && ground[x] < SURF - 20) mountCols.push(x);
   if (mountCols.length) {
-    for (const [type, n, size] of [[B.COAL, 90, [4, 9]], [B.IRON, 70, [3, 7]], [B.COPPER, 50, [4, 9]]]) {
+    for (const [type, n, size] of [[B.COAL, 90 * WK, [4, 9]], [B.IRON, 70 * WK, [3, 7]], [B.COPPER, 50 * WK, [4, 9]]]) {
       for (let i = 0; i < n; i++) {
         let cx = mountCols[Math.floor(rnd() * mountCols.length)], cy = ground[cx] + 4 + Math.floor(rnd() * 40);
         const cnt = size[0] + Math.floor(rnd() * (size[1] - size[0] + 1));
         for (let k = 0; k < cnt; k++) {
-          if (cx > 0 && cx < W - 1 && cy > 0 && cy < H - 3 && isStoneish(tiles[cy * W + cx])) tiles[cy * W + cx] = type;
+          if (cx > 0 && cx < W - 1 && cy > 0 && cy < H - 3 && cy >= ground[cx] + 3 && isStoneish(tiles[cy * W + cx])) tiles[cy * W + cx] = type;
           const dd = Math.floor(rnd() * 4); cx += dd === 0 ? 1 : dd === 1 ? -1 : 0; cy += dd === 2 ? 1 : dd === 3 ? -1 : 0;
         }
       }
     }
   }
-  for (let i = 0, n = 0; i < 600 && n < 24; i++) {                  // Smaragde nur in Bergen
+  for (let i = 0, n = 0; i < 600 * WK && n < 24 * WK; i++) {                  // Smaragde nur in Bergen
     const x = Math.floor(rnd() * W);
     if (!MOUNTAIN_BIOMES.has(bname[x]) || bname[x] === "meadow") continue;
     const y = ground[x] + 3 + Math.floor(rnd() * 30);
@@ -433,10 +452,10 @@ export function generateWorld(seed) {
     villages.push({ x: cx, y: S, style });
   };
   village(SPAWN_X, SURF, "oak", true);
-  const styleOf = b => (b === "desert" ? "sand" : b === "snow" || b === "taiga" ? "stone" : "oak");
-  for (let tries = 0; tries < 80 && villages.length < 4; tries++) {
+  const styleOf = b => (b === "desert" ? "sand" : b === "snow" ? "snow" : b === "taiga" ? "spruce" : b === "savanna" ? "acacia" : "oak");       // Etappe 13: Dorfarten je Biom
+  for (let tries = 0; tries < 80 * WK && villages.length < 3 * WK; tries++) {
     const x = 40 + Math.floor(rnd() * (W - 80)), b = bname[x];
-    if (Math.abs(x - SPAWN_X) < 110 || villages.some(v => Math.abs(v.x - x) < 100)) continue;
+    if (Math.abs(x - SPAWN_X) < 150 || villages.some(v => Math.abs(v.x - x) < 150)) continue;
     if (MOUNTAIN_BIOMES.has(b) || OCEANS.has(b) || b === "swamp" || b === "jungle" || b === "mangrove" || b === "bamboo") continue;
     const g = ground[x];
     if (g > SEA - 1 || g < SURF - 14) continue;
@@ -447,7 +466,7 @@ export function generateWorld(seed) {
   // Verlies: versiegelter Raum mit Truhe
   const placed = [];
   const far = (x, y, d) => placed.every(p => Math.hypot(p.x - x, p.y - y) > d);
-  for (let i = 0, n = 0; i < 200 && n < 10; i++) {
+  for (let i = 0, n = 0; i < 200 * WK && n < 10 * WK; i++) {
     const w = 5 + Math.floor(rnd() * 5), hh = 4, x = 12 + Math.floor(rnd() * (W - 24 - w)), y = SURF + 16 + Math.floor(rnd() * 88);
     if (nearVillage(x) || !far(x, y, 30) || y + hh + 2 >= H - 8) continue;
     if (!isStoneish(at(x + (w >> 1), y)) || OCEANS.has(bname[x])) continue;
@@ -457,7 +476,7 @@ export function generateWorld(seed) {
     placed.push({ x, y }); n++;
   }
   // Minenschacht: Gang mit Holzbalken, Fackeln und Truhe am Ende
-  for (let i = 0, n = 0; i < 120 && n < 7; i++) {
+  for (let i = 0, n = 0; i < 120 * WK && n < 7 * WK; i++) {
     const len = 36 + Math.floor(rnd() * 40), x = 10 + Math.floor(rnd() * (W - 20 - len)), y = SURF + 24 + Math.floor(rnd() * 66);
     if (nearVillage(x) || nearVillage(x + len) || !far(x, y, 40) || y + 2 >= H - 8) continue;
     for (let xx = x; xx < x + len; xx++) {

@@ -149,7 +149,7 @@ export function installRedstone(Sandbox, K) {
       if (t !== B.RS_TORCH && t !== B.RS_TORCH_OFF) continue;
       const x = i % W, y = (i / W) | 0, a = attachOf(this, x, y);
       const lit = !this._rsWeak(a[0], a[1]);
-      if (lit !== (t === B.RS_TORCH)) { this.tiles[i] = lit ? B.RS_TORCH : B.RS_TORCH_OFF; this.lightDirty = true; }
+      if (lit !== (t === B.RS_TORCH)) { this.tiles[i] = lit ? B.RS_TORCH : B.RS_TORCH_OFF; this.lightAt2(x); }
     }
     // 3) Staub
     this._rsWires();
@@ -166,10 +166,10 @@ export function installRedstone(Sandbox, K) {
         const latched = !!(this.aux[i] & 4);
         if (pw && !latched) { this.aux[i] |= 4; this._dispense(x, y); }
         else if (!pw && latched) this.aux[i] &= 3;
-      } else if (t === B.LAMP && pw) { this.tiles[i] = B.LAMP_ON; this.aux[i] = 0; this.lightDirty = true; this.events.push({ t: "rs", k: "lamp", on: true, x, y }); }
+      } else if (t === B.LAMP && pw) { this.tiles[i] = B.LAMP_ON; this.aux[i] = 0; this.lightAt2(x); this.events.push({ t: "rs", k: "lamp", on: true, x, y }); }
       else if (t === B.LAMP_ON) {
         if (pw) this.aux[i] = 0;
-        else if (++this.aux[i] >= 3) { this.tiles[i] = B.LAMP; this.aux[i] = 0; this.lightDirty = true; this.events.push({ t: "rs", k: "lamp", on: false, x, y }); }
+        else if (++this.aux[i] >= 3) { this.tiles[i] = B.LAMP; this.aux[i] = 0; this.lightAt2(x); this.events.push({ t: "rs", k: "lamp", on: false, x, y }); }
       }
     }
   };

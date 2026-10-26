@@ -12,6 +12,7 @@ import { paintAtlas8, paintItem8, COL8, FIRST8, LAST8 } from "./sandbox-art8.js?
 import { paintItem10 } from "./sandbox-art10.js?v=10";
 import { paintAtlas11, paintItem11, COL11, FIRST11, LAST11 } from "./sandbox-art11.js?v=10";
 import { paintAtlas12, paintItem12, COL12, FIRST12, LAST12 } from "./sandbox-art12.js?v=10";
+import { paintAtlas13, paintItem13 } from "./sandbox-art13.js?v=10";
 import { paintAtlas9, paintItem9, paintTrim, paintShieldBanner, COL9, FIRST9, LAST9 } from "./sandbox-art9.js?v=10";
 
 export const T = 16;
@@ -310,11 +311,12 @@ export function makeAtlas() {
   paintAtlas9(paint, noise, specks);
   paintAtlas11(paint, noise);
   paintAtlas12(paint, noise);
+  paintAtlas13(paint, noise);
   for (let id = B.CONCRETE; id <= B.SEA_LANTERN; id++) avg[id] = avg[COL6(id)] || [200, 200, 200];
   for (let id = FIRST8; id <= LAST8; id++) avg[id] = avg[COL8(id)] || [200, 200, 200];
   for (let id = FIRST9; id <= LAST9; id++) avg[id] = avg[COL9(id)] || [200, 200, 200];
   for (let id = FIRST11; id <= LAST11; id++) avg[id] = avg[COL11(id)] || [200, 200, 200];
-  for (let id = FIRST12; id <= LAST12; id++) avg[id] = avg[COL12(id)] || [200, 200, 200];
+  for (let id = FIRST12; id <= LAST12 + 3; id++) avg[id] = avg[COL12(id)] || [200, 200, 200];          // Etappe 13 setzt die Spalten der Etappe 12 fort
   // ---------- gefärbte Varianten (Zeile 2): Gras, Laub, hohes Gras je Biom ----------
   {
     const grab = i => g.getImageData(i * T, 0, T, T);
@@ -348,6 +350,7 @@ function paintItem(g, atlas, id, st) {
   const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
   const P = (x, y, c) => R(x, y, 1, 1, c);
   const line = (x0, y0, x1, y1, c, w = 1) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) R(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), w, w, c); };
+  if (paintItem13(id, g, atlas)) return;
   if (paintItem12(id, g, atlas)) return;
   if (paintItem11(id, g, atlas)) return;
   if (paintItem10(id, g, atlas, st)) return;
