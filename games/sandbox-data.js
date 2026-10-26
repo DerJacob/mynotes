@@ -22,15 +22,19 @@ export const B = {
   ENCHANT: 75, BOOKSHELF: 76, ANVIL: 77, BREWING: 78, IRON_BLOCK: 79,
   // Etappe 5: Nether, Ende, Wither, Leuchtfeuer
   NETHERRACK: 81, SOUL_SAND: 82, GLOWSTONE: 83, QUARTZ_ORE: 84, NETHER_GOLD: 85, MAGMA: 86, NETHER_BRICK: 87, SPAWNER: 88, PORTAL: 89, QUARTZ_BLOCK: 90,
-  END_STONE: 91, FRAME: 92, END_PORTAL: 93, PURPUR: 94, DRAGON_EGG: 95, SKULL: 96, BEACON: 97, GOLD_BLOCK: 98, DIAMOND_BLOCK: 99, EMERALD_BLOCK: 100, GATEWAY: 101
+  END_STONE: 91, FRAME: 92, END_PORTAL: 93, PURPUR: 94, DRAGON_EGG: 95, SKULL: 96, BEACON: 97, GOLD_BLOCK: 98, DIAMOND_BLOCK: 99, EMERALD_BLOCK: 100, GATEWAY: 101,
+  // Etappe 6: Farben (Zusatzfeld aux: Farbe 0–15 | 16 = oben/kopfüber | 32 = Stufe steigt nach links), Dappled Forest, Camps, Dorfbewohner-Arbeitsblöcke
+  CONCRETE: 102, WOOL_STAIRS: 103, WOOL_SLAB: 104, CONC_STAIRS: 105, CONC_SLAB: 106, CUSHION: 107, STRAW_BED: 108,
+  POPLAR_LOG: 109, PLEAVES_R: 110, PLEAVES_O: 111, PLEAVES_Y: 112, LITTER_R: 113, LITTER_O: 114, LITTER_Y: 115, RED_BUSH: 116, PARASOL: 117,
+  CAMPFIRE: 118, BARREL: 119, HAY: 120, COMPOSTER: 121, LECTERN: 122, CARTO: 123, PRISMARINE: 124, SEA_LANTERN: 125
 };
-export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG];
-export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES];
-export const isLog = id => id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG || id === B.JUNGLE_LOG || id === B.ACACIA_LOG;
-export const isLeaves = id => id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.SPRUCE_LEAVES || id === B.JUNGLE_LEAVES || id === B.ACACIA_LEAVES;
+export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG, B.POPLAR_LOG];
+export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES, B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y];
+export const isLog = id => id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG || id === B.JUNGLE_LOG || id === B.ACACIA_LOG || id === B.POPLAR_LOG;
+export const isLeaves = id => id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.SPRUCE_LEAVES || id === B.JUNGLE_LEAVES || id === B.ACACIA_LEAVES || (id >= B.PLEAVES_R && id <= B.PLEAVES_Y);
 export const isFluid = id => id === B.WATER || id === B.LAVA;
 /** Pflanzen, die einen festen Boden brauchen */
-export const isPlant = id => id === B.FLOWER || id === B.TALLGRASS || id === B.DEADBUSH;
+export const isPlant = id => id === B.FLOWER || id === B.TALLGRASS || id === B.DEADBUSH || (id >= B.LITTER_R && id <= B.PARASOL);
 /** Nutzpflanzen: brauchen Ackerland (Zuckerrohr: Sand/Erde am Wasser), lassen sich nicht einfach überbauen */
 export const isCrop = id => id === B.WHEAT || id === B.CARROT || id === B.POTATO || id === B.PUMPKIN_STEM || id === B.MELON_STEM || id === B.WART || id === B.CANE;
 /** Redstone-Bauteile (halten die Liste im Spiel kurz: nur diese Blöcke werden beobachtet) */
@@ -147,6 +151,58 @@ BLOCKS[B.DIAMOND_BLOCK] = def("diamond_block", { solid: true, lcost: 3, hard: 7.
 BLOCKS[B.EMERALD_BLOCK] = def("emerald_block", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 3, drop: "emerald_block" });
 BLOCKS[B.GATEWAY] = def("gateway", { hard: Infinity, emit: 7 });
 // Lücke 80 (Redstone-Fackel aus) bleibt wie sie war; Block 81+ liegen dahinter
+
+// ---------------------------------------------------------------------
+// Etappe 6: Farben, Stufen und Halbblöcke, Kissen, Dappled Forest, Camps, Arbeitsblöcke
+// ---------------------------------------------------------------------
+/** 16 Farben wie in Minecraft: [Schlüssel, deutscher Name, Farbwert] */
+export const COLORS = [
+  ["white", "Weiß", "#e9ecec"], ["orange", "Orange", "#f07613"], ["magenta", "Magenta", "#bd44b3"], ["light_blue", "Hellblau", "#3aafd9"],
+  ["yellow", "Gelb", "#f8c627"], ["lime", "Hellgrün", "#70b919"], ["pink", "Rosa", "#ed8dac"], ["gray", "Grau", "#3e4447"],
+  ["light_gray", "Hellgrau", "#8e8e86"], ["cyan", "Türkis", "#158991"], ["purple", "Violett", "#792aac"], ["blue", "Blau", "#35399d"],
+  ["brown", "Braun", "#724728"], ["green", "Grün", "#546d1b"], ["red", "Rot", "#a12722"], ["black", "Schwarz", "#141519"]
+];
+/** Gegenstands-Name zu Art und Farbe (weiße Wolle heißt wie früher "wool", damit alte Spielstände passen) */
+export const colorItem = (kind, c) => (kind === "wool" && !c ? "wool" : `${kind}_${COLORS[c & 15][0]}`);
+/** Teilblöcke: Kollisionskästen in Bruchteilen des Blocks [x0, y0, x1, y1] (y wächst nach unten) */
+export const boxesOf = (id, aux) => {
+  const bd = BLOCKS[id];
+  if (!bd || !bd.shape) return FULL_BOX;
+  const top = (aux & 16) !== 0;
+  if (bd.shape === "slab") return top ? SLAB_TOP : SLAB_BOT;
+  if (bd.shape === "cushion") return CUSHION_BOX;
+  const right = (aux & 32) === 0;                                      // Stufe steigt nach rechts
+  return STAIRS[(top ? 2 : 0) + (right ? 0 : 1)];
+};
+const FULL_BOX = [[0, 0, 1, 1]], SLAB_BOT = [[0, 0.5, 1, 1]], SLAB_TOP = [[0, 0, 1, 0.5]], CUSHION_BOX = [[0.05, 0.6, 0.95, 1]];
+const STAIRS = [
+  [[0, 0.5, 1, 1], [0.5, 0, 1, 0.5]], [[0, 0.5, 1, 1], [0, 0, 0.5, 0.5]],
+  [[0, 0, 1, 0.5], [0.5, 0.5, 1, 1]], [[0, 0, 1, 0.5], [0, 0.5, 0.5, 1]]
+];
+BLOCKS[B.WOOL] = def("wool", { solid: true, lcost: 3, hard: 1.2, tool: "shears", colored: "wool" });
+BLOCKS[B.CONCRETE] = def("concrete", { solid: true, lcost: 3, hard: 2.7, tool: "pick", tier: 1, colored: "concrete" });
+BLOCKS[B.WOOL_STAIRS] = def("wool_stairs", { solid: true, lcost: 1, hard: 1.2, tool: "shears", colored: "wool_stairs", shape: "stairs", parent: B.WOOL });
+BLOCKS[B.WOOL_SLAB] = def("wool_slab", { solid: true, lcost: 1, hard: 1.2, tool: "shears", colored: "wool_slab", shape: "slab", parent: B.WOOL });
+BLOCKS[B.CONC_STAIRS] = def("conc_stairs", { solid: true, lcost: 1, hard: 2.7, tool: "pick", tier: 1, colored: "concrete_stairs", shape: "stairs", parent: B.CONCRETE });
+BLOCKS[B.CONC_SLAB] = def("conc_slab", { solid: true, lcost: 1, hard: 2.7, tool: "pick", tier: 1, colored: "concrete_slab", shape: "slab", parent: B.CONCRETE });
+BLOCKS[B.CUSHION] = def("cushion", { solid: true, lcost: 1, hard: 0.6, tool: "shears", colored: "cushion", shape: "cushion", interact: true });
+BLOCKS[B.STRAW_BED] = def("straw_bed", { hard: 0.3, drop: "straw_bed", interact: true });
+BLOCKS[B.POPLAR_LOG] = def("poplar_log", { solid: true, lcost: 3, hard: 3, tool: "axe", drop: "poplar_log" });
+for (const id of [B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y]) BLOCKS[id] = def("poplar_leaves", { lcost: 1, hard: 0.3, drop: null });
+BLOCKS[B.LITTER_R] = def("leaf_litter", { hard: 0.05, drop: "leaf_litter_r" }); BLOCKS[B.LITTER_O] = def("leaf_litter", { hard: 0.05, drop: "leaf_litter_o" });
+BLOCKS[B.LITTER_Y] = def("leaf_litter", { hard: 0.05, drop: "leaf_litter_y" });
+BLOCKS[B.RED_BUSH] = def("red_bush", { hard: 0.05, drop: "red_bush" });
+BLOCKS[B.PARASOL] = def("parasol", { hard: 0.05, drop: "parasol_mushroom" });
+BLOCKS[B.CAMPFIRE] = def("campfire", { hard: 0.6, tool: "axe", drop: "campfire", emit: 15, hurts: true });
+BLOCKS[B.BARREL] = def("barrel", { solid: true, lcost: 3, hard: 3.75, tool: "axe", drop: "barrel", interact: true, entity: "chest" });
+BLOCKS[B.HAY] = def("hay", { solid: true, lcost: 3, hard: 0.75, drop: "hay_block" });
+BLOCKS[B.COMPOSTER] = def("composter", { solid: true, lcost: 3, hard: 0.9, tool: "axe", drop: "composter" });
+BLOCKS[B.LECTERN] = def("lectern", { solid: true, lcost: 3, hard: 3.75, tool: "axe", drop: "lectern" });
+BLOCKS[B.CARTO] = def("carto", { solid: true, lcost: 3, hard: 3.75, tool: "axe", drop: "cartography_table" });
+BLOCKS[B.PRISMARINE] = def("prismarine", { solid: true, lcost: 3, hard: 2.25, tool: "pick", tier: 1, drop: "prismarine" });
+BLOCKS[B.SEA_LANTERN] = def("sea_lantern", { solid: true, lcost: 3, hard: 0.45, drop: "sea_lantern", emit: 15 });
+/** Arbeitsblock → Beruf des Dorfbewohners (siehe sandbox-vill.js) */
+export const WORKSTATIONS = { [B.COMPOSTER]: "farmer", [B.LECTERN]: "librarian", [B.CARTO]: "cartographer", [B.ANVIL]: "smith", [B.BREWING]: "cleric" };
 
 /** Behutsamkeit (Silk Touch): welcher Gegenstand fällt statt der üblichen Beute */
 export const SILK = {
@@ -293,7 +349,7 @@ shaped("bow", 1, [" SX", "S X", " SX"], { S: "stick", X: "string" });
 shaped("arrow", 4, ["F", "S", "W"], { F: "flint", S: "stick", W: "feather" });
 shaped("shield", 1, ["PIP", "PPP", " P "], { P: "#planks", I: "iron_ingot" });
 shaped("shears", 1, [" I", "I "], { I: "iron_ingot" });
-shaped("bed", 1, ["WWW", "PPP"], { W: "wool", P: "#planks" });
+shaped("bed", 1, ["WWW", "PPP"], { W: "#wool", P: "#planks" });
 shaped("wool", 1, ["SS", "SS"], { S: "string" });
 shapeless("bone_meal", 3, ["bone"]);
 // Etappe 4
@@ -364,3 +420,53 @@ export const SMELT = {
   log: ["charcoal", 0.15], birch_log: ["charcoal", 0.15], spruce_log: ["charcoal", 0.15], jungle_log: ["charcoal", 0.15], acacia_log: ["charcoal", 0.15]
 };
 export const SMELT_TIME = 10;
+
+// ---------------------------------------------------------------------
+// Etappe 6: Gegenstände und Rezepte
+// ---------------------------------------------------------------------
+const KIND_BLOCK = { wool: B.WOOL, concrete: B.CONCRETE, wool_stairs: B.WOOL_STAIRS, wool_slab: B.WOOL_SLAB, concrete_stairs: B.CONC_STAIRS, concrete_slab: B.CONC_SLAB, cushion: B.CUSHION };
+const KIND_NAME = { wool: "Wolle", concrete: "Beton", wool_stairs: "Wolltreppe", wool_slab: "Wollstufe", concrete_stairs: "Betontreppe", concrete_slab: "Betonstufe", cushion: "Kissen" };
+for (const kind of Object.keys(KIND_BLOCK)) {
+  COLORS.forEach(([key, name], c) => {
+    const id = colorItem(kind, c);
+    item(id, `${KIND_NAME[kind]} (${name})`, { block: KIND_BLOCK[kind], aux: c, col: c, kind, fuel: kind.startsWith("wool") || kind === "cushion" ? 5 : 0, tags: kind === "wool" ? ["wool"] : kind === "wool_slab" ? ["wool_slab"] : [] });
+  });
+}
+ITEMS.wool.aux = 0; ITEMS.wool.col = 0; ITEMS.wool.kind = "wool"; ITEMS.wool.tags = ["wool"];
+COLORS.forEach(([key, name], c) => item(`dye_${key}`, `Farbstoff (${name})`, { col: c, tags: ["dye"] }));
+blockItem("straw_bed", "Strohbett", B.STRAW_BED, { stack: 1, fuel: 5 });
+blockItem("poplar_log", "Pappelholz", B.POPLAR_LOG, { fuel: 15, tags: ["logs"] });
+blockItem("leaf_litter_r", "Laubstreu (rot)", B.LITTER_R); blockItem("leaf_litter_o", "Laubstreu (orange)", B.LITTER_O); blockItem("leaf_litter_y", "Laubstreu (gelb)", B.LITTER_Y);
+blockItem("red_bush", "Roter Busch", B.RED_BUSH, { fuel: 5 });
+blockItem("parasol_mushroom", "Schirmpilz", B.PARASOL, { food: [2, 1.2] });
+blockItem("campfire", "Lagerfeuer", B.CAMPFIRE, { fuel: 15 }); blockItem("barrel", "Fass", B.BARREL, { fuel: 15 });
+blockItem("hay_block", "Heuballen", B.HAY); blockItem("composter", "Komposter", B.COMPOSTER, { fuel: 15 });
+blockItem("lectern", "Lesepult", B.LECTERN, { fuel: 15 }); blockItem("cartography_table", "Kartentisch", B.CARTO, { fuel: 15 });
+blockItem("prismarine", "Prismarin", B.PRISMARINE); blockItem("sea_lantern", "Seelaterne", B.SEA_LANTERN);
+item("map_mansion", "Entdeckerkarte (Waldanwesen)", { stack: 1, map: "mansion" }); item("map_monument", "Entdeckerkarte (Ozeanmonument)", { stack: 1, map: "monument" });
+
+shaped("straw_bed", 1, ["WWW", "PPP"], { W: "wheat", P: "#planks" });
+shaped("campfire", 1, [" S ", "SCS", "LLL"], { S: "stick", C: "#coals", L: "#logs" });
+shaped("barrel", 1, ["PSP", "P P", "PSP"], { P: "#planks", S: "stick" });
+shaped("hay_block", 1, ["WWW", "WWW", "WWW"], { W: "wheat" }); shapeless("wheat_h", 9, ["hay_block"], { out: ["wheat", 9] });
+shaped("composter", 1, ["P P", "P P", "PPP"], { P: "#planks" });
+shaped("lectern", 1, ["PPP", " B ", " P "], { P: "#planks", B: "bookshelf" });
+shaped("cartography_table", 1, ["CC", "PP", "PP"], { C: "paper", P: "#planks" });
+shaped("leaf_litter_mix", 1, ["L"], { L: "leaf_litter_r" }, { out: ["leaf_litter_o", 1], hide: true });
+// Farbstoffe: Grundfarben aus Fundstücken, Mischfarben aus zwei Grundfarben
+shapeless("dye_red", 1, ["flower"]); shapeless("dye_yellow", 1, ["flower", "glowstone_dust"]); shapeless("dye_blue", 1, ["lapis"]);
+shapeless("dye_black", 1, ["charcoal"]); shapeless("dye_white", 1, ["bone_meal"]);
+SMELT.cactus = ["dye_green", 1];
+const MIX = { orange: ["red", "yellow"], pink: ["red", "white"], purple: ["red", "blue"], magenta: ["purple", "pink"], cyan: ["blue", "green"], light_blue: ["blue", "white"], lime: ["green", "white"], gray: ["black", "white"], light_gray: ["gray", "white"], brown: ["red", "green"] };
+for (const [k, [a, b]] of Object.entries(MIX)) shapeless(`dye_${k}`, 2, [`dye_${a}`, `dye_${b}`]);
+COLORS.forEach(([key], c) => {
+  const w = colorItem("wool", c), cn = colorItem("concrete", c), ws = colorItem("wool_stairs", c), wl = colorItem("wool_slab", c);
+  const cs = colorItem("concrete_stairs", c), cl = colorItem("concrete_slab", c), d = `dye_${key}`;
+  shapeless(`wool_dye_${key}`, 1, ["#wool", d], { out: [w, 1], hide: true });
+  shapeless(`concrete_mix_${key}`, 8, ["sand", "sand", "sand", "sand", "gravel", "gravel", "gravel", "gravel", d], { out: [cn, 8], hide: true });
+  shaped(`stairs_${w}`, 4, ["X  ", "XX ", "XXX"], { X: w }, { out: [ws, 4], hide: true });
+  shaped(`slab_${w}`, 6, ["XXX"], { X: w }, { out: [wl, 6], hide: true });
+  shaped(`stairs_${cn}`, 4, ["X  ", "XX ", "XXX"], { X: cn }, { out: [cs, 4], hide: true });
+  shaped(`slab_${cn}`, 6, ["XXX"], { X: cn }, { out: [cl, 6], hide: true });
+  shaped(`cushion_${key}`, 1, ["XXX"], { X: wl }, { out: [colorItem("cushion", c), 1], hide: true });
+});

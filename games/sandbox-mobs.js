@@ -31,7 +31,7 @@ export const MOBS = {
 const HERD = { // Biom → Gewichte der Tiere beim Erzeugen der Welt
   plains: { cow: 3, pig: 2, sheep: 3, chicken: 2 }, forest: { pig: 2, sheep: 2, cow: 2, chicken: 1, wolf: 2 }, birch: { pig: 2, sheep: 2, cow: 2, chicken: 1 },
   taiga: { wolf: 3, rabbit: 2, sheep: 1, pig: 1, cow: 1 }, snow: { rabbit: 3, sheep: 1 }, desert: { rabbit: 2 }, savanna: { cow: 2, sheep: 2, pig: 1, chicken: 1 },
-  jungle: { chicken: 3, pig: 1 }, swamp: { cow: 1, chicken: 1 }, mountains: { sheep: 3 }, ocean: {}
+  jungle: { chicken: 3, pig: 1 }, swamp: { cow: 1, chicken: 1 }, mountains: { sheep: 3 }, ocean: {}, dappled: { pig: 2, sheep: 2, cow: 2, wolf: 1, chicken: 1 }
 };
 
 /** Fortschritte (wie bei Minecraft): id → [Name, Beschreibung] */
@@ -358,13 +358,12 @@ export function installMobs(Sandbox, K) {
     }
     return { x, y };
   };
-  P.sleep = function (tx, ty) {
+  P.sleep = function (tx, ty, straw = false) {
     if (this.dim) { this._break(tx, ty, false); this.explode(tx + 0.5, ty + 0.5, 4); return true; }
     const t = this.time;
     if (!(t >= 0.78 || t < 0.2)) { this.events.push({ t: "nosleep", why: "day" }); return false; }
     if (this.hostilesNear(this.player.x, 16) > 0) { this.events.push({ t: "nosleep", why: "mobs" }); return false; }
-    this.bed = { x: tx, y: ty };
-    this.spawn = this._safeSpot(tx + 0.1, ty + 1 - 1.8 - 0.001);
+    if (!straw) { this.bed = { x: tx, y: ty }; this.spawn = this._safeSpot(tx + 0.1, ty + 1 - 1.8 - 0.001); }
     if (t >= 0.78) { this.day++; this.events.push({ t: "day", day: this.day }); }
     this.time = 0.27;
     this.grant("bed");
