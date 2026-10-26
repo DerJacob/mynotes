@@ -7,9 +7,10 @@
 //   Speichern (Version 6): Oberwelt wie bisher, dazu dim, dimData (Nether/Ende), strongholds, flags.
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS, isFluid } from "./sandbox-data.js?v=8";
-import { generateNether, generateEnd, placeStronghold, END_CX, END_TOP, END_ARRIVE, END_PILLARS } from "./sandbox-nether.js?v=8";
-import { BIOME_NAMES } from "./sandbox-world.js?v=8";
+import { B, BLOCKS, ITEMS, isFluid, LOOM_PATTERNS, TRIM_PATTERNS, TRIM_MAT_IDS } from "./sandbox-data.js?v=9";
+const LOOM_N = LOOM_PATTERNS.length, TRIM_N = TRIM_PATTERNS.length, TRIM_MAT_N = TRIM_MAT_IDS.length;
+import { generateNether, generateEnd, placeStronghold, END_CX, END_TOP, END_ARRIVE, END_PILLARS } from "./sandbox-nether.js?v=9";
+import { BIOME_NAMES } from "./sandbox-world.js?v=9";
 
 Object.assign(BIOME_NAMES, { nether: "Nether", soul_valley: "Seelensandtal", end: "Das Ende" });
 
@@ -43,27 +44,40 @@ export function installDims(Sandbox, K) {
   P._dimGet = function (n) { return this.dim === n ? this._dimSnap() : (this.dims[n] || null); };
 
   // ---------- Speichern / Laden von Kisten und Gegenständen ----------
-  P._packStack = function (st) { return st ? (st.e || st.r ? [st.id, st.n, st.d || 0, st.e || 0, st.r || 0] : [st.id, st.n, st.d || 0]) : 0; };
+  P._packStack = function (st) {
+    if (!st) return 0;
+    if (st.bp || st.tr) return [st.id, st.n, st.d || 0, st.e || 0, st.r || 0, { bp: st.bp || undefined, tr: st.tr || undefined }];
+    return st.e || st.r ? [st.id, st.n, st.d || 0, st.e || 0, st.r || 0] : [st.id, st.n, st.d || 0];
+  };
   P._unpackStack = function (a) {
     if (!(Array.isArray(a) && ITEMS[a[0]])) return null;
     const s = { id: a[0], n: clamp(a[1] | 0, 1, stackMax(a[0])), d: a[2] | 0 };
     if (a[3] && typeof a[3] === "object") { const e = {}; for (const [k, v] of Object.entries(a[3])) if (ENCH[k] && v > 0) e[k] = Math.min(ENCH[k].max, v | 0); if (Object.keys(e).length) s.e = e; }
     if (a[4] > 0) s.r = Math.min(10, a[4] | 0);
+    const x = a[5];
+    if (x && typeof x === "object") {
+      const bp = x.bp;
+      if (bp && Number.isFinite(bp.c) && Array.isArray(bp.p)) s.bp = { c: bp.c & 15, p: bp.p.filter(q => Array.isArray(q) && q[0] >= 0 && q[0] < LOOM_N).slice(0, 6).map(q => [q[0] | 0, q[1] & 15]) };
+      if (Array.isArray(x.tr) && ITEMS[a[0]].armor && x.tr[0] >= 0 && x.tr[0] < TRIM_N && x.tr[1] >= 0 && x.tr[1] < TRIM_MAT_N) s.tr = [x.tr[0] | 0, x.tr[1] | 0];
+    }
     return s;
   };
   P._entsToData = function (map) {
     return [...map.entries()].map(([k, e]) => {
       const [x, y] = k.split(",").map(Number);
-      return { x, y, t: e.t, s: e.s.map(st => this._packStack(st)), burn: e.burn, burnMax: e.burnMax, cook: e.cook, xp: e.xp, fuel: e.fuel, brewT: e.brewT, eff: e.eff || undefined, on: e.on ? 1 : undefined };
+      return { x, y, t: e.t, s: e.s.map(st => this._packStack(st)), burn: e.burn, burnMax: e.burnMax, cook: e.cook, xp: e.xp, fuel: e.fuel, brewT: e.brewT, eff: e.eff || undefined, on: e.on ? 1 : undefined, mode: e.mode || undefined, l: e.t === "sign" ? e.l : undefined, c: e.t === "banner" ? e.c : undefined, p: e.t === "banner" ? e.p : undefined };
     });
   };
   P._entsFromData = function (arr) {
     const out = new Map();
     for (const e of Array.isArray(arr) ? arr : []) {
-      if (!e || !(e.t === "chest" || e.t === "furnace" || e.t === "disp" || e.t === "brew" || e.t === "beacon") || !Number.isFinite(e.x) || !Number.isFinite(e.y)) continue;
-      const n = { chest: 27, furnace: 3, disp: 9, brew: 5, beacon: 1 }[e.t];
+      if (!e || !(e.t === "chest" || e.t === "furnace" || e.t === "disp" || e.t === "brew" || e.t === "beacon" || e.t === "stand" || e.t === "camp" || e.t === "cbook" || e.t === "sign" || e.t === "banner") || !Number.isFinite(e.x) || !Number.isFinite(e.y)) continue;
+      const n = { chest: 27, furnace: 3, disp: 9, brew: 5, beacon: 1, stand: 4, camp: 1, cbook: 6, sign: 0, banner: 0 }[e.t];
       const o = { t: e.t, s: Array.from({ length: n }, (_, i) => this._unpackStack((e.s || [])[i])), burn: +e.burn || 0, burnMax: +e.burnMax || 0, cook: +e.cook || 0, xp: +e.xp || 0, fuel: +e.fuel || 0, brewT: +e.brewT || 0 };
       if (e.t === "beacon") { o.eff = BEACON_EFFECTS.includes(e.eff) ? e.eff : null; o.lvl = 0; o.on = false; }
+      if (e.t === "furnace" && (e.mode === "smoke" || e.mode === "blast")) o.mode = e.mode;
+      if (e.t === "sign") o.l = Array.from({ length: 4 }, (_, i) => String((e.l || [])[i] || "").slice(0, 15));
+      if (e.t === "banner") { o.c = (e.c | 0) & 15; o.p = Array.isArray(e.p) ? e.p.filter(q => Array.isArray(q) && q[0] >= 0 && q[0] < LOOM_N).slice(0, 6).map(q => [q[0] | 0, q[1] & 15]) : []; }
       out.set(`${e.x},${e.y}`, o);
     }
     return out;

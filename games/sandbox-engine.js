@@ -7,38 +7,40 @@
 //   Speichern: Blöcke als Lauflängen (Base64) – klein genug für den Spielstand im Drive
 // =====================================================================
 
-import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid, boxesOf } from "./sandbox-data.js?v=8";
-import { installInventory } from "./sandbox-inventory.js?v=8";
-import { installFluids, SRC } from "./sandbox-fluids.js?v=8";
-import { installMobs } from "./sandbox-mobs.js?v=8";
-import { installFarm } from "./sandbox-farm.js?v=8";
-import { installRedstone } from "./sandbox-redstone.js?v=8";
-import { installBrew, ENCH } from "./sandbox-brew.js?v=8";
-import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=8";
-import { addContent6 } from "./sandbox-world6.js?v=8";
-import { addContent8 } from "./sandbox-world8.js?v=8";
-import { migrateData } from "./sandbox-migrate.js?v=8";
-import { installDims } from "./sandbox-dims.js?v=8";
-import { installBoss } from "./sandbox-boss.js?v=8";
-import { installVillagers } from "./sandbox-vill.js?v=8";
-import { installPolish } from "./sandbox-polish.js?v=8";
-import { installFlora } from "./sandbox-flora.js?v=8";
-export { MODES, WEATHER_NAMES, MOON_NAMES, MOON_FULL, findItem, findMob } from "./sandbox-polish.js?v=8";
-import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=8";
+import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid, boxesOf } from "./sandbox-data.js?v=9";
+import { installInventory } from "./sandbox-inventory.js?v=9";
+import { installFluids, SRC } from "./sandbox-fluids.js?v=9";
+import { installMobs } from "./sandbox-mobs.js?v=9";
+import { installFarm } from "./sandbox-farm.js?v=9";
+import { installRedstone } from "./sandbox-redstone.js?v=9";
+import { installBrew, ENCH } from "./sandbox-brew.js?v=9";
+import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=9";
+import { addContent6 } from "./sandbox-world6.js?v=9";
+import { addContent8 } from "./sandbox-world8.js?v=9";
+import { addContent9 } from "./sandbox-world9.js?v=9";
+import { migrateData } from "./sandbox-migrate.js?v=9";
+import { installDims } from "./sandbox-dims.js?v=9";
+import { installBoss } from "./sandbox-boss.js?v=9";
+import { installVillagers } from "./sandbox-vill.js?v=9";
+import { installPolish } from "./sandbox-polish.js?v=9";
+import { installFlora } from "./sandbox-flora.js?v=9";
+import { installCraft9 } from "./sandbox-craft9.js?v=9";
+export { MODES, WEATHER_NAMES, MOON_NAMES, MOON_FULL, findItem, findMob } from "./sandbox-polish.js?v=9";
+import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=9";
 export { BIOMES, BIOME_NAMES };
 export { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS };
 
-import { W, H, SURF, SPAWN_X, OLD_H } from "./sandbox-const.js?v=8";
+import { W, H, SURF, SPAWN_X, OLD_H } from "./sandbox-const.js?v=9";
 export { W, H, SURF, SPAWN_X };
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
-import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=8";
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=9";
 export { mulberry32 };
-export { MOBS, ADV } from "./sandbox-mobs.js?v=8";
-export { ENCH, ROMAN, POTION_KINDS, POTION_FX, EFFECT_NAMES, EFFECT_BAD, stackName, stackLines, enchLines, potionKind, potionMod, potionCode, potionColor, brewResult, BREW_TIME } from "./sandbox-brew.js?v=8";
+export { MOBS, ADV } from "./sandbox-mobs.js?v=9";
+export { ENCH, ROMAN, POTION_KINDS, POTION_FX, EFFECT_NAMES, EFFECT_BAD, stackName, stackLines, enchLines, potionKind, potionMod, potionCode, potionColor, brewResult, BREW_TIME } from "./sandbox-brew.js?v=9";
 
 // ---------------------------------------------------------------------
 // Blöcke ↔ Text (Lauflängen, Base64)
@@ -95,7 +97,7 @@ export class Sandbox {
     this.blk = new Uint8Array(W * H);
     this.spawnT = 2;
     this._mobInit();
-    this._farmInit(); this._floraInit(); this._brewInit();
+    this._farmInit(); this._floraInit(); this._brewInit(); this._craft9Init();
     if (opts.data && opts.data.v >= 4) this._mobsFromData(opts.data.mobs); else this._populate();
     this._rsInit();
     if (opts.data) { this._ensureStronghold(); this._restoreDim(opts.data); }
@@ -117,7 +119,7 @@ export class Sandbox {
 
   // ---------- Welt erzeugen ----------
   _generate() {
-    const w = addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed);
+    const w = addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed);
     this.tiles = w.tiles; this.lvl = w.lvl; this.aux = w.aux; this.structs = w.structs; this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
     this._worldChests = w.chests;
     const sh = placeStronghold(this.seed, this.tiles, this.lvl, this.aux, SPAWN_X, SURF);   // Festung mit Endportal tief unter der Erde
@@ -459,3 +461,4 @@ installBoss(Sandbox, { clamp, W, H });
 installVillagers(Sandbox, { clamp, W, H, SPAWN_X, REACH });
 installFlora(Sandbox, { clamp, W, H });
 installPolish(Sandbox, { clamp, W, H, SURF, stackMax });
+installCraft9(Sandbox, { clamp, W, H });

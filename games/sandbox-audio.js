@@ -7,7 +7,7 @@
 //   Reiner Teil (Node-testbar): SFX-Rezepte, stepMaterial, musicMood, planPhrase, nextGap.
 //   createAudio({ ctor }) bekommt den AudioContext von außen (im Test ein Attrappen-Objekt).
 // =====================================================================
-import { BLOCKS } from "./sandbox-data.js?v=8";
+import { BLOCKS } from "./sandbox-data.js?v=9";
 
 // ---------- Effekte: Liste von [Frequenz, Dauer, Wellenform, Lautstärke, Gleiten, Verzögerung in ms] ----------
 export const SFX = {

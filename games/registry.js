@@ -6,7 +6,7 @@
 //   merge    optional: zwei Stände zusammenführen (z. B. von zwei PCs) – ohne merge gewinnt der neuere
 //   soon     true = steht schon im Katalog, ist aber noch nicht spielbar
 // =====================================================================
-import { summary as worldsSummary, mergeRecords } from "./sandbox-worlds.js?v=8";
+import { summary as worldsSummary, mergeRecords } from "./sandbox-worlds.js?v=9";
 
 const fmt = n => new Intl.NumberFormat("de-DE").format(n);
 
@@ -28,8 +28,8 @@ export const GAMES = [
     id: "sandbox",
     title: "Blockdorf",
     emoji: "⛏️",
-    desc: "Abbauen, handwerken, bauen, kämpfen, Felder bestellen, Redstone-Schaltungen und Tränke brauen – eine hohe Pixelwelt mit Schneebergen, tiefen Höhlen (Tropfstein, Geoden, Moos und Glühbeeren), Kirschhain, Mangroven und Bambuswald, Tieren, Monstern, Tag und Nacht. Durch Portale geht es in den Nether und ins Ende zu Enderdrache und Wither. Dein Dorf wartet schon auf dich – mit Dorfbewohnern zum Handeln, Überfällen, Karten zu Waldvilla und Ozeanmonument, dem Gesprenkelten Wald, verlassenen Lagern und Wolle, Beton und Kissen in 16 Farben. Mit Regen, Schnee und Gewitter, Mondphasen, Ton und Musik, Kreativmodus, Befehlen, mehreren Welten und Gamepad.",
-    load: () => import("./sandbox.js?v=9"),
+    desc: "Abbauen, handwerken, bauen, kämpfen, Felder bestellen, Redstone-Schaltungen und Tränke brauen – eine hohe Pixelwelt mit Schneebergen, tiefen Höhlen (Tropfstein, Geoden, Moos und Glühbeeren), Kirschhain, Mangroven und Bambuswald, Tieren, Monstern, Tag und Nacht. Durch Portale geht es in den Nether und ins Ende zu Enderdrache und Wither. Dein Dorf wartet schon auf dich – mit Dorfbewohnern zum Handeln, Überfällen, Karten zu Waldvilla und Ozeanmonument, dem Gesprenkelten Wald, verlassenen Lagern und Wolle, Beton und Kissen in 16 Farben. Neu: Granit, Diorit und Andesit, Terrakotta und Banner mit Webstuhl-Mustern, Holzsätze aller Baumarten, Steinsäge, Schleifstein, Schmiedetisch mit Rüstungsverzierungen, Räucher- und Schmelzofen, Kupfer (das altert und sich wachsen lässt), Kerzen, Schilder, Rüstungsständer, Schleim- und Honigblöcke. Mit Regen, Schnee und Gewitter, Mondphasen, Ton und Musik, Kreativmodus, Befehlen, mehreren Welten und Gamepad.",
+    load: () => import("./sandbox.js?v=10"),
     summary: worldsSummary,
     merge: mergeRecords
   },

@@ -2,7 +2,7 @@
 // Blockdorf – Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen, Hunger, Erfahrung
 // Wird an die Klasse Sandbox gehängt (installInventory) und hält sandbox-engine.js übersichtlich.
 // =====================================================================
-import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS, boxesOf, colorItem } from "./sandbox-data.js?v=8";
+import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS, boxesOf, colorItem, isFoodSmelt, isOreSmelt } from "./sandbox-data.js?v=9";
 
 export function installInventory(Sandbox, K) {
   const { clamp, REACH } = K;
@@ -32,6 +32,8 @@ export function installInventory(Sandbox, K) {
     const s = { id, n, d };
     if (x && x.e && Object.keys(x.e).length) s.e = { ...x.e };
     if (x && x.r) s.r = x.r;
+    if (x && x.bp) s.bp = { c: x.bp.c, p: x.bp.p.map(q => q.slice()) };      // Banner: Grundfarbe und Muster
+    if (x && x.tr) s.tr = x.tr.slice();                                       // Rüstung: Verzierung [Vorlage, Material]
     return s;
   };
   P.newStack = newStack;
@@ -40,7 +42,7 @@ export function installInventory(Sandbox, K) {
   /** Fügt Gegenstände ein (erst zu vorhandenen Stapeln, dann in leere Plätze). Gibt zurück, wie viele übrig blieben. */
   P._insert = function (arr, id, n, d = 0, from = 0, to = arr.length, x = null) {
     const max = stackMax(id);
-    if (max > 1 && !(x && x.e)) for (let i = from; i < to && n > 0; i++) { const s = arr[i]; if (s && s.id === id && s.n < max) { const m = Math.min(n, max - s.n); s.n += m; n -= m; } }
+    if (max > 1 && !(x && (x.e || x.bp))) for (let i = from; i < to && n > 0; i++) { const s = arr[i]; if (s && s.id === id && s.n < max && !s.bp) { const m = Math.min(n, max - s.n); s.n += m; n -= m; } }
     for (let i = from; i < to && n > 0; i++) if (!arr[i]) { const m = Math.min(n, max); arr[i] = newStack(id, m, d, x); n -= m; }
     return n;
   };
@@ -250,7 +252,7 @@ export function installInventory(Sandbox, K) {
   P.canPut = function (area, idx, st) {
     const it = ITEMS[st.id];
     if (area === "armor") return !!it.armor && it.armor.slot === idx;
-    if (area === "f") return idx === 0 ? !!SMELT[st.id] : idx === 1 ? fuelOf(st.id) > 0 : false;
+    if (area === "f") return idx === 0 ? this._canSmelt(this.winEnt(), st.id) : idx === 1 ? fuelOf(st.id) > 0 : false;
     if (area === "b") return this.brewCanPut(idx, st);
     if (area === "bn") return st.id === "iron_ingot" || st.id === "gold_ingot" || st.id === "emerald" || st.id === "diamond";
     if (area === "grid" && this.win && this.win.kind === "ench") return idx === 0 ? this.enchantable(st) : idx === 1 && st.id === "lapis";
@@ -279,7 +281,7 @@ export function installInventory(Sandbox, K) {
       if (right && c.n > 1) { arr[idx] = newStack(c.id, 1, c.d, c); c.n--; } else { arr[idx] = c; this.cursor = null; }
       return;
     }
-    if (s.id === c.id && stackMax(c.id) > 1 && !s.e && !c.e) {
+    if (s.id === c.id && stackMax(c.id) > 1 && !s.e && !c.e && !s.bp && !c.bp) {
       const m = Math.min(right ? 1 : c.n, stackMax(s.id) - s.n);
       s.n += m; c.n -= m; if (c.n <= 0) this.cursor = null;
       return;
@@ -307,7 +309,7 @@ export function installInventory(Sandbox, K) {
       }
       if (this.win && this.win.kind === "anvil" && (!this.grid[0] || !this.grid[1])) { move(this.grid, 0, 2); return; }
       if (this.win && this.win.kind === "furnace" && e) {
-        if (SMELT[s.id]) { if (!e.s[0] || e.s[0].id === s.id) { move(e.s, 0, 1); return; } }
+        if (this._canSmelt(e, s.id)) { if (!e.s[0] || e.s[0].id === s.id) { move(e.s, 0, 1); return; } }
         if (fuelOf(s.id)) { move(e.s, 1, 2); return; }
       }
       const it = ITEMS[s.id];
@@ -340,7 +342,7 @@ export function installInventory(Sandbox, K) {
     const p = this.player;
     x = x ?? p.x + p.w / 2; y = y ?? p.y + 0.6;
     const r = this.rng || Math.random;
-    this.drops.push({ id: st.id, n: st.n, d: st.d || 0, e: st.e, r: st.r, x: x - 0.15, y: y - 0.15, vx: dir ? dir * 5 : (scatter ? (r() - 0.5) * 3 : (r() - 0.5) * 2), vy: dir ? -3 : -(2 + r() * 3), w: 0.3, h: 0.3, age: dir ? -0.6 : 0, stepUp: false, onGround: false });
+    this.drops.push({ id: st.id, n: st.n, d: st.d || 0, e: st.e, r: st.r, bp: st.bp, tr: st.tr, x: x - 0.15, y: y - 0.15, vx: dir ? dir * 5 : (scatter ? (r() - 0.5) * 3 : (r() - 0.5) * 2), vy: dir ? -3 : -(2 + r() * 3), w: 0.3, h: 0.3, age: dir ? -0.6 : 0, stepUp: false, onGround: false });
     if (this.drops.length > 260) this.drops.shift();
   };
   P._drops = function (dt) {
@@ -509,6 +511,13 @@ export function installInventory(Sandbox, K) {
     if (kind === "disp") return { t: "disp", s: new Array(9).fill(null) };
     if (kind === "brew") return { t: "brew", s: new Array(5).fill(null), fuel: 0, brewT: 0 };
     if (kind === "beacon") return { t: "beacon", s: [null], eff: null, lvl: 0, on: false };
+    if (kind === "smoker") return { t: "furnace", mode: "smoke", s: [null, null, null], burn: 0, burnMax: 0, cook: 0, xp: 0 };
+    if (kind === "blast") return { t: "furnace", mode: "blast", s: [null, null, null], burn: 0, burnMax: 0, cook: 0, xp: 0 };
+    if (kind === "stand") return { t: "stand", s: [null, null, null, null] };
+    if (kind === "camp") return { t: "camp", s: [null], cook: 0 };
+    if (kind === "cbook") return { t: "cbook", s: new Array(6).fill(null) };
+    if (kind === "sign") return { t: "sign", s: [], l: ["", "", "", ""] };
+    if (kind === "banner") return { t: "banner", s: [], c: 0, p: [] };
     return { t: "furnace", s: [null, null, null], burn: 0, burnMax: 0, cook: 0, xp: 0 };
   };
   P.use = function (tx, ty) {
@@ -604,6 +613,13 @@ export function installInventory(Sandbox, K) {
   // ---------- Kampf: siehe sandbox-mobs.js ----------
 
   // ---------- Ofen ----------
+  /** Darf diese Zutat in diesen Ofen? (Räucherofen: Essen, Schmelzofen: Erze und Rohmetalle) */
+  P._canSmelt = function (e, id) {
+    if (!SMELT[id]) return false;
+    if (e && e.mode === "smoke") return isFoodSmelt(id);
+    if (e && e.mode === "blast") return isOreSmelt(id);
+    return true;
+  };
   P._furnaceXp = function () {
     const e = this.winEnt(); if (!e || e.t !== "furnace" || e.xp <= 0) return;
     const n = Math.floor(e.xp) + (this.rng() < e.xp % 1 ? 1 : 0);
@@ -613,14 +629,15 @@ export function installInventory(Sandbox, K) {
     for (const e of this.ents.values()) {
       if (e.t !== "furnace") continue;
       const inp = e.s[0], fuel = e.s[1], out = e.s[2];
-      const res = inp && SMELT[inp.id];
+      const res = inp && this._canSmelt(e, inp.id) ? SMELT[inp.id] : null;
       const can = !!res && (!out || (out.id === res[0] && out.n < stackMax(out.id)));
+      const need = e.mode ? SMELT_TIME / 2 : SMELT_TIME;                      // Räucherofen und Schmelzofen arbeiten doppelt so schnell
       if (e.burn > 0) e.burn = Math.max(0, e.burn - dt);
       if (can) {
         if (e.burn <= 0 && fuel && fuelOf(fuel.id)) { e.burn = e.burnMax = fuelOf(fuel.id); fuel.n--; if (fuel.n <= 0) e.s[1] = null; }
         if (e.burn > 0) {
           e.cook += dt;
-          if (e.cook >= SMELT_TIME) {
+          if (e.cook >= need) {
             e.cook = 0; inp.n--; if (inp.n <= 0) e.s[0] = null;
             if (out) out.n++; else e.s[2] = newStack(res[0], 1);
             e.xp += res[1];

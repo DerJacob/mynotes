@@ -7,10 +7,10 @@
 //   Befehle:   /help /gamemode /time /weather /tp /give /xp /heal /kill /spawnpoint /seed /locate /summon /clear
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=8";
-import { MOBS } from "./sandbox-mobs.js?v=8";
-import { BIOMES, BIOME_NAMES, SNOWY_BIOMES } from "./sandbox-world.js?v=8";
-import { mulberry32 } from "./sandbox-noise.js?v=8";
+import { B, BLOCKS, ITEMS } from "./sandbox-data.js?v=9";
+import { MOBS } from "./sandbox-mobs.js?v=9";
+import { BIOMES, BIOME_NAMES, SNOWY_BIOMES } from "./sandbox-world.js?v=9";
+import { mulberry32 } from "./sandbox-noise.js?v=9";
 
 export const MODES = { survival: "Überleben", creative: "Kreativ" };
 export const WEATHER_NAMES = { clear: "Klar", rain: "Regen", thunder: "Gewitter" };
