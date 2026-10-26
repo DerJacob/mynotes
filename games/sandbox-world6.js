@@ -11,7 +11,7 @@ import { B } from "./sandbox-data.js?v=10";
 import { mulberry32 } from "./sandbox-noise.js?v=10";
 import { BIOMES, MOUNTAIN_BIOMES } from "./sandbox-world.js?v=10";
 
-import { W, H, SURF, SPAWN_X, SEA } from "./sandbox-const.js?v=10";
+import { W, H, SURF, SPAWN_X, SEA, WK } from "./sandbox-const.js?v=10";
 export const DAPPLED = "dappled";
 const BI_OCEAN = BIOMES.indexOf("ocean"), BI_WARM = BIOMES.indexOf("warm_ocean"), BI_DESERT = BIOMES.indexOf("desert");
 const MOUNT_IDS = new Set([...MOUNTAIN_BIOMES].map(n => BIOMES.indexOf(n)));
@@ -97,8 +97,8 @@ export function addContent6(w, seed) {
   // ---------- Dappled Forest ----------
   if (BI_DAP >= 0) {
     const zones = [];
-    for (let k = 0; k < 1500 && zones.length < 2; k++) {
-      const need = k < 500 ? 0.7 : k < 1000 ? 0.5 : 0.35;
+    for (let k = 0; k < 1500 * WK && zones.length < WK; k++) {
+      const need = k < 500 * WK ? 0.7 : k < 1000 * WK ? 0.5 : 0.35;
       const wd = ri(48, 80), x0 = ri(4, W - wd - 4);
       if (!free(x0, x0 + wd, 4) || zones.some(z => x0 < z[1] + 24 && x0 + wd > z[0] - 24)) continue;
       let good = 0;
@@ -144,7 +144,7 @@ export function addContent6(w, seed) {
   }
 
   // ---------- Waldanwesen ----------
-  {
+  for (let mi = 0; mi < Math.round(WK * 0.75); mi++) {
     const s = findSite(33, 90, 9) || findSite(33, 60, 12) || findSite(33, 40, 16);
     if (s) {
       flatten(s.x0, s.wd, s.base, 30);
@@ -183,7 +183,7 @@ export function addContent6(w, seed) {
     else { put(X(4), gy - 1, B.BARREL); stock(X(4), gy - 1, LOOT.camp); }
     put(X(2), gy - 1, B.TORCH);
   };
-  const campCount = 2 + (rnd() < 0.5 ? 1 : 0);
+  const campCount = (2 + (rnd() < 0.5 ? 1 : 0)) * WK;
   for (let k = 0; k < campCount; k++) {
     const s = findSite(22, 45, 6) || findSite(22, 30, 10); if (!s) continue;
     flatten(s.x0, s.wd, s.base);
@@ -197,7 +197,7 @@ export function addContent6(w, seed) {
   }
 
   // ---------- Plünderer-Außenposten ----------
-  const outCount = 1 + (rnd() < 0.6 ? 1 : 0);
+  const outCount = (1 + (rnd() < 0.6 ? 1 : 0)) * WK;
   for (let k = 0; k < outCount; k++) {
     const s = findSite(9, 80, 5) || findSite(9, 45, 9); if (!s) continue;
     flatten(s.x0, s.wd, s.base, 20);
@@ -215,15 +215,17 @@ export function addContent6(w, seed) {
   }
 
   // ---------- Ozeanmonument ----------
-  {
+  for (let mon = 0, from = 4; mon < Math.max(1, Math.round(WK * 0.75)); mon++) {
     const WD = 29;
     let best = null;
-    for (let x = 4; x < W - WD - 4; x++) {
+    for (let x = from; x < W - WD - 4; x++) {
       let ok = true;
       for (let c = 0; c < WD && ok; c++) if ((biomes[x + c] !== BI_OCEAN && biomes[x + c] !== BI_WARM) || ground[x + c] < SEA + 5) ok = false;
       if (ok) { best = x; break; }
     }
-    if (best !== null) {
+    if (best === null) break;
+    from = best + WD + 160;                                                           // das nächste Monument liegt weit entfernt
+    {
       const x0 = best + 0;
       let base = 999, deep = 0;
       for (let c = 0; c < WD; c++) { base = Math.min(base, ground[x0 + c]); deep = Math.max(deep, ground[x0 + c]); }

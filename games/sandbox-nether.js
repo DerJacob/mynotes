@@ -11,7 +11,7 @@
 import { B } from "./sandbox-data.js?v=10";
 import { mulberry32, hash2, fbm, smooth, clamp } from "./sandbox-noise.js?v=10";
 
-import { W, H, NH } from "./sandbox-const.js?v=10";
+import { W, H, NH, WK } from "./sandbox-const.js?v=10";
 export const NETHER_BIOMES = ["nether", "soul_valley"];
 export const NETHER_LAVA = 132;              // Lava-Spiegel im Nether
 export const END_CX = W >> 1, END_TOP = 100; // Mitte und Oberkante der Hauptinsel
@@ -78,7 +78,7 @@ export function generateNether(seed) {
   // Lava-Ozean
   for (let x = 1; x < W - 1; x++) for (let y = NETHER_LAVA; y < floor[x]; y++) { tiles[y * W + x] = B.LAVA; lvl[y * W + x] = 9; }
   // Säulen von der Decke bis zum Boden
-  for (let i = 0, n = 0; i < 80 && n < 16; i++) {
+  for (let i = 0, n = 0; i < 80 * WK && n < 16 * WK; i++) {
     const cx = 20 + Math.floor(rnd() * (W - 40)), w = 2 + Math.floor(rnd() * 4);
     if (floor[cx] > NETHER_LAVA - 6) continue;
     for (let y = ceil[cx] - 1; y <= floor[cx] + 1; y++) for (let x = cx - w; x <= cx + w; x++) {
@@ -90,7 +90,7 @@ export function generateNether(seed) {
   // Zapfen an der Decke
   for (let x = 2; x < W - 2; x++) if (hash2(x, 15, seed) < 0.16) { const len = 2 + Math.floor(hash2(x, 16, seed) * 9); for (let k = 0; k < len; k++) { const w = k < len * 0.5 ? 1 : 0; for (let dx = -w; dx <= w; dx++) if (at(x + dx, ceil[x] + k) === B.AIR) put(x + dx, ceil[x] + k, B.NETHERRACK); } }
   // Schwebende Inseln
-  for (let i = 0; i < 34; i++) {
+  for (let i = 0; i < 34 * WK; i++) {
     const cx = 10 + Math.floor(rnd() * (W - 20)), cy = 48 + Math.floor(rnd() * 56), rx = 4 + Math.floor(rnd() * 8), ry = 2 + Math.floor(rnd() * 3);
     for (let y = cy - ry; y <= cy + ry * 2; y++) for (let x = cx - rx; x <= cx + rx; x++) {
       const dx = (x - cx) / rx, dy = y <= cy ? (y - cy) / ry : (y - cy) / (ry * 2);
@@ -101,7 +101,7 @@ export function generateNether(seed) {
   }
   function valleyAt(x) { return biomes[clamp(x, 0, W - 1)] === 1; }
   // Glowstone-Trauben an der Decke
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < 46 * WK; i++) {
     const cx = 6 + Math.floor(rnd() * (W - 12)), cy = ceil[cx], r = 1.4 + rnd() * 1.8;
     for (let y = cy - 1; y <= cy + 4; y++) for (let x = cx - 3; x <= cx + 3; x++) {
       if (Math.hypot(x - cx, (y - cy) * 0.9) <= r + (hash2(x, y, seed + 21) - 0.5) && y >= ceil[clamp(x, 0, W - 1)] - 1) put(x, y, B.GLOWSTONE);
@@ -118,7 +118,7 @@ export function generateNether(seed) {
       }
     }
   };
-  vein(B.QUARTZ_ORE, 420, [3, 6]); vein(B.NETHER_GOLD, 240, [2, 5]);
+  vein(B.QUARTZ_ORE, 420 * WK, [3, 6]); vein(B.NETHER_GOLD, 240 * WK, [2, 5]);
   // Netherfestungen
   const fortress = (fx, len, fy) => {
     // Platz freiräumen: Gang 5 hoch, darüber Dach, darunter Boden zwei dick
@@ -146,7 +146,7 @@ export function generateNether(seed) {
     fortresses.push({ x: fx, len, y: fy, spawner: { x: sx, y: fy - 1 } });
   };
   const fxs = [];
-  for (let i = 0, n = 0; i < 80 && n < 3; i++) {
+  for (let i = 0, n = 0; i < 80 * WK && n < 3 * WK; i++) {
     const len = 62 + Math.floor(rnd() * 30), fx = 40 + Math.floor(rnd() * (W - 80 - len));
     if (fxs.some(q => Math.abs(q - fx) < len + 80)) continue;
     fxs.push(fx); fortress(fx, len, 92 + Math.floor(rnd() * 14)); n++;

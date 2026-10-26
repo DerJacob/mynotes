@@ -9,7 +9,7 @@
 import { B, WP } from "./sandbox-data.js?v=10";
 import { mulberry32, fbm } from "./sandbox-noise.js?v=10";
 import { BIOMES } from "./sandbox-world.js?v=10";
-import { W, H, SPAWN_X, SEA } from "./sandbox-const.js?v=10";
+import { W, H, SPAWN_X, SEA, WK } from "./sandbox-const.js?v=10";
 
 const SRC = 9;
 const LOOT = {
@@ -98,7 +98,7 @@ export function addContent11(w, seed) {
     taken.push([x - 6, x + 6]); tight.push([x - 5, x + 5]);
   };
   const startX = 12 + Math.floor(rnd() * (W - 24));
-  for (let k = 0; k < W - 24 && treasures.length < 4; k++) {                                           // Strände
+  for (let k = 0; k < W - 24 && treasures.length < 3 * WK; k++) {                                           // Strände
     const x = 12 + (startX - 12 + k) % (W - 24), g = ground[x];
     if (g < SEA - 3 || g > SEA + 3 || at(x, g) !== B.SAND || (at(x, g - 1) !== B.AIR && at(x, g - 1) !== B.WATER) || !freeTight(x)) continue;
     let near = false; for (let d = 2; d <= 14; d++) if (isOcean(x + d) || isOcean(x - d)) near = true;
@@ -114,7 +114,7 @@ export function addContent11(w, seed) {
   // ---------- Schiffswracks ----------
   const hullBot = c => Math.floor(((c - 7) * (c - 7)) / 17), hullTop = c => 5 + Math.floor(Math.abs(c - 7) / 4);
   const wrecks = [];
-  for (let tries = 0; tries < 300 && wrecks.length < 4; tries++) {
+  for (let tries = 0; tries < 300 * WK && wrecks.length < 3 * WK; tries++) {
     const x0 = 14 + Math.floor(rnd() * (W - 44));
     if (!allOcean(x0, 15, 5) || !free(x0, x0 + 14)) continue;
     const base = levelFloor(x0, 15);
@@ -142,7 +142,7 @@ export function addContent11(w, seed) {
 
   // ---------- Unterwasserruinen ----------
   let ruins = 0;
-  for (let tries = 0; tries < 300 && ruins < 5; tries++) {
+  for (let tries = 0; tries < 300 * WK && ruins < 4 * WK; tries++) {
     const wd = 7 + Math.floor(rnd() * 3), x0 = 12 + Math.floor(rnd() * (W - 40));
     if (!allOcean(x0, wd, 4) || !free(x0, x0 + wd - 1)) continue;
     const warm = biomes[x0] === BI.warm_ocean, wall = warm ? B.SANDSTONE : B.COBBLE;

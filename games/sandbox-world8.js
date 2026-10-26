@@ -10,7 +10,7 @@ import { B } from "./sandbox-data.js?v=10";
 import { mulberry32, hash2, fbm } from "./sandbox-noise.js?v=10";
 import { BIOMES } from "./sandbox-world.js?v=10";
 import { azaleaTree } from "./sandbox-trees8.js?v=10";
-import { W, H, SURF, SPAWN_X } from "./sandbox-const.js?v=10";
+import { W, H, SURF, SPAWN_X, WK } from "./sandbox-const.js?v=10";
 
 const STONEISH = new Set([B.STONE, B.DEEPSLATE, B.TUFF, B.DIRT, B.GRAVEL, B.CALCITE, B.SANDSTONE, B.DRIPSTONE, B.CLAY]);
 
@@ -29,7 +29,7 @@ export function addContent8(w, seed) {
   const depthOf = (x, y) => y - ground[x];
 
   // ---------- Tuff: Adern im Gestein, vor allem tief unten ----------
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 70 * WK; i++) {
     const cx = Math.floor(rnd() * W), cy = SURF + 26 + Math.floor(rnd() * (BOT - SURF - 40)), rx = 2.5 + rnd() * 4.5, ry = 1.6 + rnd() * 2.6;
     for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 > 1 + (hash2(x, y, seed + 81) - 0.5) * 0.4) continue;
@@ -38,7 +38,7 @@ export function addContent8(w, seed) {
   }
 
   // ---------- Geoden: Kalzit außen, Amethyst innen, hohl ----------
-  for (let i = 0, made = 0; i < 160 && made < 9; i++) {
+  for (let i = 0, made = 0; i < 160 * WK && made < 9 * WK; i++) {
     const R = 3.6 + rnd() * 2.2, cx = 12 + Math.floor(rnd() * (W - 24)), cy = SURF + 34 + Math.floor(rnd() * (BOT - SURF - 50));
     if (!colOk(cx)) continue;
     let air = 0, n = 0;
@@ -104,7 +104,7 @@ export function addContent8(w, seed) {
   {
     const desertCols = []; for (let x = 0; x < W; x++) if (biomes[x] === BI.desert && !nearVillage(x)) desertCols.push(x);
     const want = desertCols.length >= 16 ? 1 + Math.floor(desertCols.length / 70) : 0;
-    for (let i = 0, made = 0; i < 80 && made < want; i++) {
+    for (let i = 0, made = 0; i < 80 * WK && made < want; i++) {
       const L = 11 + Math.floor(rnd() * 6), x0 = desertCols[Math.floor(rnd() * desertCols.length)] - (L >> 1);
       if (x0 < 4 || x0 + L + 4 >= W - 4) continue;
       let allDesert = true; for (let x = x0; x < x0 + L + 3; x++) if (biomes[x] !== BI.desert) { allDesert = false; break; }

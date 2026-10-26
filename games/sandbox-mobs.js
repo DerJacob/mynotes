@@ -657,7 +657,7 @@ export function installMobs(Sandbox, K) {
   // ---------- Speichern ----------
   P._mobsToData = function (list = this.mobs) {
     const p = this.player, keep = list.filter(m => m.boss || m.type === "end_crystal"), rest = list.filter(m => !(m.boss || m.type === "end_crystal"));
-    const arr = keep.concat(rest.sort((a, b) => Math.abs(cxOf(a) - p.x) - Math.abs(cxOf(b) - p.x)).slice(0, 110));
+    const arr = keep.concat(rest.sort((a, b) => Math.abs(cxOf(a) - p.x) - Math.abs(cxOf(b) - p.x)).slice(0, 400));
     return arr.map(m => {
       const o = { t: m.type, x: +m.x.toFixed(2), y: +m.y.toFixed(3), hp: m.hp };
       if (m.tamed) { o.tm = 1; if (m.sit) o.st = 1; }

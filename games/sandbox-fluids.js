@@ -32,14 +32,14 @@ export function installFluids(Sandbox, K) {
     const old = this.tiles[i];
     this.tiles[i] = id; this.lvl[i] = level; this.aux[i] = 0;
     if (this._rsTouch && old !== id) this._rsTouch(i % W, (i / W) | 0, old, id);
-    this.lightDirty = true;
+    this.lightAt2(i % W);
     this._fluidWake(i % W, (i / W) | 0);
   };
   P._clearFluid = function (i, id = B.AIR) {
     const old = this.tiles[i];
     this.tiles[i] = id; this.lvl[i] = 0; this.aux[i] = 0;
     if (this._rsTouch && old !== id) this._rsTouch(i % W, (i / W) | 0, old, id);
-    this.lightDirty = true;
+    this.lightAt2(i % W);
     this._fluidWake(i % W, (i / W) | 0);
   };
   P.fluidAt = function (x, y) { const t = this.tile(x, y); return isFluid(t) ? t : 0; };
