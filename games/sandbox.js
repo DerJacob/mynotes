@@ -122,7 +122,7 @@ export function mount(root, ctx) {
     h("div", { class: "sb-view" }, canvas,
       h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, chatBtn, soundBtn, pauseBtn)),
       toastEl, chatLog, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), chatIn, winWrap, cursorEl, padEl, overlay),
-    touch, help));
+    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 8 · Etappe 8 · Spielstand 9")));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
   function applySettings() {
     audio.apply(settings);
