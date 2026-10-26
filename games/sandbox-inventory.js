@@ -2,7 +2,7 @@
 // Blockdorf – Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen, Hunger, Erfahrung
 // Wird an die Klasse Sandbox gehängt (installInventory) und hält sandbox-engine.js übersichtlich.
 // =====================================================================
-import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS } from "./sandbox-data.js?v=5";
+import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS } from "./sandbox-data.js?v=6";
 
 export function installInventory(Sandbox, K) {
   const { clamp, REACH } = K;
@@ -243,7 +243,7 @@ export function installInventory(Sandbox, K) {
     if (area === "armor") return this.armor;
     if (area === "grid") return this.grid;
     const e = this.winEnt();
-    if ((area === "f" && e && e.t === "furnace") || (area === "chest" && e && (e.t === "chest" || e.t === "disp")) || (area === "b" && e && e.t === "brew")) return e.s;
+    if ((area === "f" && e && e.t === "furnace") || (area === "chest" && e && (e.t === "chest" || e.t === "disp")) || (area === "b" && e && e.t === "brew") || (area === "bn" && e && e.t === "beacon")) return e.s;
     return null;
   };
   P.canPut = function (area, idx, st) {
@@ -251,6 +251,7 @@ export function installInventory(Sandbox, K) {
     if (area === "armor") return !!it.armor && it.armor.slot === idx;
     if (area === "f") return idx === 0 ? !!SMELT[st.id] : idx === 1 ? fuelOf(st.id) > 0 : false;
     if (area === "b") return this.brewCanPut(idx, st);
+    if (area === "bn") return st.id === "iron_ingot" || st.id === "gold_ingot" || st.id === "emerald" || st.id === "diamond";
     if (area === "grid" && this.win && this.win.kind === "ench") return idx === 0 ? this.enchantable(st) : idx === 1 && st.id === "lapis";
     if (area === "grid" && this.win && this.win.kind === "anvil") return idx < 2;
     return area !== "out";
@@ -295,6 +296,7 @@ export function installInventory(Sandbox, K) {
     if (area === "inv") {
       const e = this.winEnt();
       if (this.win && (this.win.kind === "chest" || this.win.kind === "disp") && e) { move(e.s); return; }
+      if (this.win && this.win.kind === "beacon" && e) { if ((s.id === "iron_ingot" || s.id === "gold_ingot" || s.id === "emerald" || s.id === "diamond") && move(e.s, 0, 1)) return; }
       if (this.win && this.win.kind === "brew" && e) {
         for (const [a, b] of [[0, 3], [3, 4], [4, 5]]) if (this.brewCanPut(a, s) && move(e.s, a, b)) return;
       }
@@ -398,6 +400,7 @@ export function installInventory(Sandbox, K) {
     else if (id === B.DOOR_T || id === B.DOOR_TO) { y += 1; this.setTile(x, y, B.AIR); this.setTile(x, y - 1, B.AIR); this.dropFrom("door", 1, x, y, harvest || !byPlayer); this.stats.mined++; this.events.push({ t: "break", x, y, id }); this._settle(x, y); return; }
     if (this._rsBreak) this._rsBreak(x, y, id, aux);
     this.setTile(x, y, B.AIR);
+    if (this._dimBreak) this._dimBreak(x, y, id);
     const key = `${x},${y}`, ent = this.ents.get(key);
     if (ent) { for (const st of ent.s) if (st) this.dropStack(st, x + 0.5, y + 0.5, true); this.ents.delete(key); }
     const ench = byPlayer ? tool.ench || {} : {};
@@ -434,6 +437,7 @@ export function installInventory(Sandbox, K) {
       const nx = x + dx, ny = y + dy, id = this.tile(nx, ny);
       if (id === B.TORCH && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("torch", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
       else if (id === B.BED && !BLOCKS[this.tile(nx, ny + 1)].solid && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("bed", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); }
+      else if (id === B.SKULL && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("wither_skeleton_skull", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); }
       else if (isPlant(id) && !BLOCKS[this.tile(nx, ny + 1)].solid) { this.setTile(nx, ny, B.AIR); this.events.push({ t: "break", x: nx, y: ny, id }); }
       else if (id === B.CACTUS && this.tile(nx, ny + 1) !== B.SAND && this.tile(nx, ny + 1) !== B.CACTUS) { this.setTile(nx, ny, B.AIR); this.dropFrom("cactus", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
       else if (id === B.LADDER && !this._ladderOk(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("ladder", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
@@ -502,11 +506,13 @@ export function installInventory(Sandbox, K) {
     if (kind === "chest") return { t: "chest", s: new Array(27).fill(null) };
     if (kind === "disp") return { t: "disp", s: new Array(9).fill(null) };
     if (kind === "brew") return { t: "brew", s: new Array(5).fill(null), fuel: 0, brewT: 0 };
+    if (kind === "beacon") return { t: "beacon", s: [null], eff: null, lvl: 0, on: false };
     return { t: "furnace", s: [null, null, null], burn: 0, burnMax: 0, cook: 0, xp: 0 };
   };
   P.use = function (tx, ty) {
     if (this.win) return false;
     if (this.fish && this.selItem() === "fishing_rod") return this._reel();            // Angel einholen: egal wohin man klickt
+    { const s0 = this.selStack(); if (s0 && this._useSpecial(s0, tx, ty)) return true; }   // Feuerzeug, Enderauge, Enderperle
     if (!this.reachOk(tx, ty)) return false;
     const id = this.tile(tx, ty), bd = BLOCKS[id];
     if (bd.interact) {
@@ -565,6 +571,7 @@ export function installInventory(Sandbox, K) {
     this._consumeSel();
     this.stats.built++;
     this.events.push({ t: "place", x: tx, y: ty, id });
+    if (id === B.SKULL) this._witherCheck(tx, ty);
     if (id === B.SAND || id === B.GRAVEL) this._sandFall(tx, ty);
     return true;
   };

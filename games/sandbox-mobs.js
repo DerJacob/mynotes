@@ -6,8 +6,8 @@
 //   Dazu: Spawnregeln nach Licht, Tiefe und Biom, Beute, Bett (Schlafen, Respawn) und Fortschritte.
 // Alles ist Engine-Logik ohne Oberfläche (Node-testbar); gezeichnet wird in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=5";
-import { mulberry32 } from "./sandbox-noise.js?v=5";
+import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=6";
+import { mulberry32 } from "./sandbox-noise.js?v=6";
 
 const sgn = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 
@@ -88,6 +88,7 @@ export function installMobs(Sandbox, K) {
     if (type === "spider") m.leapCd = 1;
     if (type === "enderman") m.tpT = 4;
     if (type === "slime") m.hopT = 0.5 + this.mrng();
+    this._mobInitNew(m, type);
     this.mobs.push(m);
     return m;
   };
@@ -151,8 +152,10 @@ export function installMobs(Sandbox, K) {
   /** Schaden an einem Lebewesen. dir = Richtung des Rückstoßes (0 = keiner). Liefert true, wenn es dabei starb. */
   P._mobHurt = function (m, dmg, dir, src) {
     if (m.dead || dmg <= 0) return false;
+    dmg = this._mobHurtMod(m, dmg, dir, src);
+    if (dmg <= 0) return false;
     m.hp -= dmg; m.hurtT = 0.35;
-    if (dir) { const res = m.type === "enderman" ? 0.3 : m.type === "cow" ? 0.8 : 1; m.vx = dir * (7 + 3 * (this._kb | 0)) * res; m.vy = -5 * res; m.onGround = false; }
+    if (dir && !m.fly && m.kind !== "object") { const res = m.type === "enderman" ? 0.3 : m.type === "cow" ? 0.8 : 1; m.vx = dir * (7 + 3 * (this._kb | 0)) * res; m.vy = -5 * res; m.onGround = false; }
     if (m.kind === "passive") { m.panic = 5; m.flee = dir || (this.mrng() < 0.5 ? -1 : 1); }
     else if (m.type === "wolf" || m.type === "spider" || m.type === "enderman") { if (src === "player" || src === "arrow") m.angry = true; }
     this.events.push({ t: "hit", x: cxOf(m), y: m.y, n: Math.round(dmg), src });
@@ -178,12 +181,14 @@ export function installMobs(Sandbox, K) {
       if (m.kind === "hostile") { this.stats.kills++; this.grant("kill"); if (m.type === "spider") this.grant("spider"); }
     }
     this.events.push({ t: "kill", x: cxOf(m), y: m.y + m.h / 2, type: m.type });
+    this._mobDieNew(m, src);
   };
   /** Spieler greift an (Mausposition in Blockkoordinaten). true = getroffen. */
   const COOLDOWN = { sword: 0.5, axe: 1.0, pick: 0.85, shovel: 0.9, hoe: 0.4 };
   P.attack = function (mx, my) {
     const p = this.player;
     if (p.atkCd > 0 || this.win) return false;
+    if (this._projAttack(mx, my)) return true;
     let target = null, bd = 1e9;
     for (const m of this.mobs) {
       if (mx < m.x - 0.35 || mx > m.x + m.w + 0.35 || my < m.y - 0.35 || my > m.y + m.h + 0.35) continue;
@@ -215,6 +220,7 @@ export function installMobs(Sandbox, K) {
     const m = this.mobAtTile(tx, ty);
     if (!m) return false;
     const s = this.selStack(), id = s && s.id;
+    if (this._mobUseNew(m, s)) return true;
     if (m.type === "sheep" && id === "shears" && !m.sheared && !(m.baby > 0)) {
       m.sheared = true; m.shearT = 120;
       this.dropStack(stk("wool", 1 + Math.floor(this.mrng() * 3)), cxOf(m), m.y + m.h / 2, true);
@@ -271,6 +277,7 @@ export function installMobs(Sandbox, K) {
   P._projectiles = function (dt) {
     const p = this.player;
     for (const a of [...this.proj]) {
+      if (this._projSpecial(a, dt)) continue;
       if (a.stuck) {
         a.stuckT -= dt;
         if (!BLOCKS[this.tile(Math.floor(a.x), Math.floor(a.y))].solid) a.stuck = false;            // Block weg → fällt weiter
@@ -318,9 +325,10 @@ export function installMobs(Sandbox, K) {
     this.events.push({ t: "splash", x: a.x, y: a.y });
     if (Math.hypot(a.x - (p.x + p.w / 2), a.y - (p.y + p.h / 2)) < 2.2) this.hurt(a.dmg, sgn(p.x - a.x), "potion");
   };
-  P.explode = function (cx, cy, r) {
-    const R = Math.ceil(r), p = this.player;
+  P.explode = function (cx, cy, r, opts = {}) {
+    const R = Math.ceil(r), p = this.player, k = opts.k ?? 1;
     for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+      if (opts.noBlocks) break;
       const d = Math.hypot(dx, dy);
       if (d > r * (0.8 + 0.25 * this.mrng())) continue;
       const x = Math.floor(cx) + dx, y = Math.floor(cy) + dy, id = this.tile(x, y), bd = BLOCKS[id];
@@ -331,8 +339,8 @@ export function installMobs(Sandbox, K) {
     const hit = (b, isPlayer) => {
       const bx = b.x + b.w / 2, by = b.y + b.h / 2, d = Math.hypot(bx - cx, by - cy);
       if (d >= r * 2) return;
-      const dmg = Math.round(22 * (1 - d / (r * 2))), dir = sgn(bx - cx) || 1;
-      if (isPlayer) { if (dmg > 0) { p.invuln = 0; this.hurt(dmg, dir, "explosion"); p.vx = dir * 10; p.vy = -8; this.grant("boom"); } }
+      const dmg = Math.round(22 * k * (1 - d / (r * 2))), dir = sgn(bx - cx) || 1;
+      if (isPlayer) { if (opts.noPlayer) return; if (dmg > 0) { p.invuln = 0; this.hurt(dmg, dir, "explosion"); p.vx = dir * 10; p.vy = -8; this.grant("boom"); } }
       else if (dmg > 0) this._mobHurt(b, dmg, dir, "explosion");
     };
     hit(p, true);
@@ -351,6 +359,7 @@ export function installMobs(Sandbox, K) {
     return { x, y };
   };
   P.sleep = function (tx, ty) {
+    if (this.dim) { this._break(tx, ty, false); this.explode(tx + 0.5, ty + 0.5, 4); return true; }
     const t = this.time;
     if (!(t >= 0.78 || t < 0.2)) { this.events.push({ t: "nosleep", why: "day" }); return false; }
     if (this.hostilesNear(this.player.x, 16) > 0) { this.events.push({ t: "nosleep", why: "mobs" }); return false; }
@@ -393,7 +402,7 @@ export function installMobs(Sandbox, K) {
     for (const m of [...this.mobs]) {
       if (m.dead) continue;
       const far = Math.abs(cxOf(m) - (p.x + p.w / 2));
-      if (far > 72 && !m.tamed) { if (m.kind === "hostile" && far > 95) this._remove(m); continue; }
+      if (far > 72 && !m.tamed && !m.boss) { if (m.kind === "hostile" && far > 95) this._remove(m); continue; }
       m.hurtT = Math.max(0, m.hurtT - dt); m.atkCd -= dt;
       const d = MOBS[m.type];
       // Wasser, Lava
@@ -413,7 +422,8 @@ export function installMobs(Sandbox, K) {
       if (m.slowT > 0) m.slowT -= dt;
       const cx = cxOf(m), cy = m.y + m.h * 0.3, pcx = p.x + p.w / 2, pcy = p.y + 0.7;
       const dx = pcx - cx, dy = pcy - cy, dist = Math.hypot(dx, dy) * (this.fx && this.fx.invisibility ? 4 : 1);
-      switch (m.type) {
+      const nb = this._aiNew(m, d, dt, dx, dy, dist);
+      if (!nb) switch (m.type) {
         case "zombie": this._aiMelee(m, d, dt, dx, dy, dist, 11); break;
         case "spider": this._aiSpider(m, d, dt, dx, dy, dist); break;
         case "skeleton": this._aiRanged(m, d, dt, dx, dy, dist, "arrow"); break;
@@ -425,9 +435,9 @@ export function installMobs(Sandbox, K) {
         default: this._aiPassive(m, d, dt, dx, dy, dist);
       }
       if (m.dead) continue;
-      this._body(m, dt, m.type === "enderman" ? 36 : 42);
+      if (nb !== 2) this._body(m, dt, m.type === "enderman" ? 36 : 42);
       m.x = clamp(m.x, 0, W - m.w);
-      if (m.y > H) this._remove(m);
+      if (m.y > H || (this.dim === 2 && !m.boss && m.y > H - 12)) this._remove(m);
     }
     this._projectiles(dt);
     this.advT -= dt; if (this.advT <= 0) { this.advT = 1; this._advTick(); }
@@ -442,7 +452,7 @@ export function installMobs(Sandbox, K) {
   /** Kontaktschaden */
   P._touch = function (m, d, dt) {
     const p = this.player;
-    if (m.atkCd <= 0 && touching(m, p, 0.12)) { m.atkCd = 1.0; this.hurt(d.dmg, sgn(p.x + p.w / 2 - cxOf(m)) || 1, "mob"); }
+    if (m.atkCd <= 0 && touching(m, p, 0.12)) { m.atkCd = 1.0; this.hurt(d.dmg, sgn(p.x + p.w / 2 - cxOf(m)) || 1, "mob"); if (m.type === "wither_skeleton") this.addEffect("wither", 8, 0); }
   };
   P._aiPassive = function (m, d, dt, dx, dy, dist) {
     if (this._loveAI(m, d, dt)) return;
@@ -576,6 +586,7 @@ export function installMobs(Sandbox, K) {
   };
   const inVillage = (self, x, y) => (self.villages || []).some(v => Math.abs(v.x - x) < 28 && y <= v.y + 6 && y >= v.y - 16);
   P._mobSpawn = function (dt) {
+    if (this.dim) return this._mobSpawnDim(dt);
     const p = this.player;
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
@@ -629,18 +640,22 @@ export function installMobs(Sandbox, K) {
     if (has("diamond")) this.grant("diamond");
     if (has("bucket") || has("water_bucket") || has("lava_bucket")) this.grant("bucket");
     if (has("lava_bucket")) this.grant("lava");
-    if (p.y > SURF + 55) this.grant("deep");
+    if (p.y > SURF + 55 && !this.dim) this.grant("deep");
+    if (has("blaze_rod")) this.grant("blaze");
     if (this.inv.some(st => st && st.id === "potion" && st.d > 11)) this.grant("brew");
   };
 
   // ---------- Speichern ----------
-  P._mobsToData = function () {
-    const p = this.player, arr = [...this.mobs].sort((a, b) => Math.abs(cxOf(a) - p.x) - Math.abs(cxOf(b) - p.x)).slice(0, 110);
+  P._mobsToData = function (list = this.mobs) {
+    const p = this.player, keep = list.filter(m => m.boss || m.type === "end_crystal"), rest = list.filter(m => !(m.boss || m.type === "end_crystal"));
+    const arr = keep.concat(rest.sort((a, b) => Math.abs(cxOf(a) - p.x) - Math.abs(cxOf(b) - p.x)).slice(0, 110));
     return arr.map(m => {
       const o = { t: m.type, x: +m.x.toFixed(2), y: +m.y.toFixed(3), hp: m.hp };
       if (m.tamed) { o.tm = 1; if (m.sit) o.st = 1; }
       if (m.sheared) o.sh = Math.round(m.shearT);
       if (m.baby > 0) o.bb = Math.round(m.baby);
+      if (m.fuse > 0 && m.type === "wither") o.fz = +m.fuse.toFixed(1);
+      if (m.angry && (m.type === "piglin" || m.type === "zombie_piglin")) o.an = 1;
       return o;
     });
   };
@@ -652,6 +667,8 @@ export function installMobs(Sandbox, K) {
       m.y = clamp(o.y, 0, H - d.h); m.hp = clamp(+o.hp || d.hp, 1, o.tm ? 20 : d.hp);
       if (o.tm) { m.tamed = true; m.sit = !!o.st; m.maxHp = o.t === "wolf" ? 20 : 10; }
       if (o.sh) { m.sheared = true; m.shearT = o.sh; }
+      if (o.fz > 0) m.fuse = +o.fz;
+      if (o.an) m.angry = true;
       if (o.bb > 0) { m.baby = o.bb; m.w = d.w * 0.55; m.h = d.h * 0.55; m.y = clamp(o.y, 0, H - m.h); }
       if (this._hit(m)) {                                        // Rundung beim Speichern: ein Stück nach oben schieben
         const y0 = m.y; let ok = false;

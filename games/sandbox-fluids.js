@@ -5,7 +5,7 @@
 //   Wasser + Lava: Lavaquelle → Obsidian, fließende Lava → Bruchstein.
 //   Dazu: Schwimmen, Luft anhalten, Lava- und Kaktusschaden, Eimer.
 // =====================================================================
-import { B, BLOCKS, ITEMS, isFluid, isPlant, isSoft } from "./sandbox-data.js?v=5";
+import { B, BLOCKS, ITEMS, isFluid, isPlant, isSoft } from "./sandbox-data.js?v=6";
 
 export const SRC = 9, FALL = 8;
 
@@ -171,6 +171,10 @@ export function installFluids(Sandbox, K) {
         return true;
       }
       return false;
+    }
+    if (s.id === "water_bucket" && this.dim === 1) {                  // im Nether verdampft das Wasser
+      this.inv[this.sel] = this.newStack("bucket", 1); this.events.push({ t: "hiss", x: tx, y: ty });
+      return true;
     }
     if (s.id === "water_bucket" || s.id === "lava_bucket") {
       const f = s.id === "water_bucket" ? B.WATER : B.LAVA;

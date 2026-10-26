@@ -3352,7 +3352,7 @@ function gamesApi() {
 function renderGames(main) {
   if (gamesMod) { gamesMod.render(main, gamesApi()); return; }
   replace(main, h("div", { class: "main-empty" }, h("span", { class: "spinner" }), h("div", null, "Spiele werden geladen …")));
-  import("./games/shell.js?v=6").then(m => {
+  import("./games/shell.js?v=7").then(m => {
     gamesMod = m;
     if (!S.unlocked || S.route.view !== "games" || $(".main") !== main) return;
     m.render(main, gamesApi());
