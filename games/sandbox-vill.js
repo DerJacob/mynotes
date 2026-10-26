@@ -26,7 +26,7 @@ export const BOOK = "@book";
 
 /** Handelsangebote: Beruf → Stufe 1–5 → je zwei Angebote. a/b = was der Spieler gibt, out = was er bekommt */
 const E = "emerald";
-const TRADES = {
+export const TRADES = {
   farmer: [
     [{ a: ["wheat", 20], out: [E, 1], max: 16, xp: 2 }, { a: [E, 1], out: ["bread", 6], max: 16, xp: 1 }],
     [{ a: ["pumpkin", 6], out: [E, 1], max: 12, xp: 5 }, { a: [E, 1], out: ["pumpkin_pie", 4], max: 12, xp: 5 }],
@@ -92,7 +92,7 @@ export function installVillagers(Sandbox, K) {
   // ---------- Erzeugen ----------
   P._newVillager = function (x, y, home, look) {
     return { x, y, w: 0.7, h: 1.7, vx: 0, vy: 0, onGround: false, face: 1, home, t: 1 + look, dir: 0, say: null, sayT: 0, cool: 3 + look * 2, look, stepUp: true, visOff: 0,
-      prof: null, lvl: 1, xp: 0, locked: false, ws: null, offers: [], jobT: 0.5 + (look % 3) * 0.4 };
+      prof: null, lvl: 1, xp: 0, locked: false, ws: null, offers: [], jobT: 0.5 + (look % 3) * 0.4, hp: 20, hurtT: 0, cured: false };
   };
   const prevEntities = P._entities;
   P._entities = function () {
@@ -104,12 +104,36 @@ export function installVillagers(Sandbox, K) {
   };
 
   // ---------- Speichern ----------
+  /** Ein Dorfbewohner als Speicherzeile (auch für Zombie-Dörfler, die einmal Dorfbewohner waren) */
+  P._villPack = function (v) {
+    const o = {
+      x: +v.x.toFixed(2), y: +v.y.toFixed(2), home: v.home, look: v.look, prof: v.prof, lvl: v.lvl, xp: v.xp, locked: v.locked ? 1 : 0, ws: v.ws ? [v.ws.x, v.ws.y] : 0,
+      offers: v.offers.map(o => ({ a: o.a, b: o.b || 0, out: this._packStack(o.out), max: o.max, uses: o.uses, xp: o.xp }))
+    };
+    if (v.hp < 20) o.hp = Math.max(1, Math.round(v.hp));
+    if (v.cured) o.cu = 1;
+    return o;
+  };
+  /** Speicherzeile → Dorfbewohner (null bei kaputten Zahlen) */
+  P._villUnpack = function (r) {
+    if (!r || !Number.isFinite(r.x) || !Number.isFinite(r.y)) return null;
+    const v = this._newVillager(clamp(r.x, 0, W - 1), clamp(r.y, 0, H - 2), Number.isFinite(r.home) ? r.home : r.x, (r.look | 0) % 6);
+    if (PROFS[r.prof]) {
+      v.prof = r.prof; v.lvl = clamp(r.lvl | 0, 1, 5); v.xp = Math.max(0, r.xp | 0); v.locked = !!r.locked;
+      if (Array.isArray(r.ws) && r.ws.length === 2) v.ws = { x: r.ws[0] | 0, y: r.ws[1] | 0 };
+      for (const o of Array.isArray(r.offers) ? r.offers : []) {
+        const out = this._unpackStack(o.out);
+        if (!out || !ITEMS[out.id] || !Array.isArray(o.a) || !ITEMS[o.a[0]]) continue;
+        v.offers.push({ a: [o.a[0], clamp(o.a[1] | 0, 1, 64)], b: Array.isArray(o.b) && ITEMS[o.b[0]] ? [o.b[0], clamp(o.b[1] | 0, 1, 64)] : null, out, max: clamp(o.max | 0, 1, 64), uses: clamp(o.uses | 0, 0, 64), xp: o.xp | 0 });
+      }
+    }
+    if (r.hp > 0) v.hp = clamp(r.hp | 0, 1, 20);
+    if (r.cu) v.cured = true;
+    return v;
+  };
   P._villSave = function () {
     return {
-      villagers: this.villagers.map(v => ({
-        x: +v.x.toFixed(2), y: +v.y.toFixed(2), home: v.home, look: v.look, prof: v.prof, lvl: v.lvl, xp: v.xp, locked: v.locked ? 1 : 0, ws: v.ws ? [v.ws.x, v.ws.y] : 0,
-        offers: v.offers.map(o => ({ a: o.a, b: o.b || 0, out: this._packStack(o.out), max: o.max, uses: o.uses, xp: o.xp }))
-      })),
+      villagers: this.villagers.map(v => this._villPack(v)),
       structs: (this.structs || []).map(s => ({ ...s }))
     };
   };
@@ -117,20 +141,7 @@ export function installVillagers(Sandbox, K) {
     this.structs = Array.isArray(d.structs) ? d.structs.filter(s => s && Number.isFinite(s.x) && Number.isFinite(s.y) && typeof s.kind === "string").map(s => ({ ...s, x: s.x | 0, y: s.y | 0 })) : [];
     if (!Array.isArray(d.villagers) || !d.villagers.length) return;
     const list = [];
-    for (const r of d.villagers) {
-      if (!r || !Number.isFinite(r.x) || !Number.isFinite(r.y)) continue;
-      const v = this._newVillager(clamp(r.x, 0, W - 1), clamp(r.y, 0, H - 2), Number.isFinite(r.home) ? r.home : r.x, (r.look | 0) % 6);
-      if (PROFS[r.prof]) {
-        v.prof = r.prof; v.lvl = clamp(r.lvl | 0, 1, 5); v.xp = Math.max(0, r.xp | 0); v.locked = !!r.locked;
-        if (Array.isArray(r.ws) && r.ws.length === 2) v.ws = { x: r.ws[0] | 0, y: r.ws[1] | 0 };
-        for (const o of Array.isArray(r.offers) ? r.offers : []) {
-          const out = this._unpackStack(o.out);
-          if (!out || !ITEMS[out.id] || !Array.isArray(o.a) || !ITEMS[o.a[0]]) continue;
-          v.offers.push({ a: [o.a[0], clamp(o.a[1] | 0, 1, 64)], b: Array.isArray(o.b) && ITEMS[o.b[0]] ? [o.b[0], clamp(o.b[1] | 0, 1, 64)] : null, out, max: clamp(o.max | 0, 1, 64), uses: clamp(o.uses | 0, 0, 64), xp: o.xp | 0 });
-        }
-      }
-      list.push(v);
-    }
+    for (const r of d.villagers) { const v = this._villUnpack(r); if (v) list.push(v); }
     if (list.length) this.villagers = list;
   };
 

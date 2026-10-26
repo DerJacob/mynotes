@@ -418,7 +418,7 @@ export function installMobs(Sandbox, K) {
       if (m.inWater && m.type !== "enderman" && !d.aq) m.vy = Math.max(-2.6, m.vy - 36 * dt);
       if (m.inLava) { m.lavaT = (m.lavaT || 0) - dt; if (m.lavaT <= 0) { m.lavaT = 0.5; this._mobHurt(m, 4, 0, "lava"); if (m.dead) continue; } }
       if (m.type === "enderman" && m.inWater) { this._mobHurt(m, 2 * dt * 3, 0, "water"); if (m.dead) continue; }
-      if ((m.type === "zombie" || m.type === "skeleton") && !m.inWater) {
+      if ((m.type === "zombie" || m.type === "skeleton" || (m.type === "zombie_villager" && !(m.curing > 0))) && !m.inWater) {
         const ix = Math.floor(cxOf(m)), iy = Math.floor(m.y + 0.2);
         m.fire = iy >= 0 && iy < H && this.sky[iy * W + ix] * this.dayFactor() >= 12.5;
         if (m.fire) { m.burnT = (m.burnT || 1) - dt; if (m.burnT <= 0) { m.burnT = 1; this._mobHurt(m, 1, 0, "fire"); if (m.dead) continue; } }

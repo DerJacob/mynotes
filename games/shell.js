@@ -6,7 +6,7 @@
 // Spielstände liegen verschlüsselt im Drive (Datei „mynotes-games.enc“, nur die Web-App schreibt sie),
 // nicht im Browser. Im Demo-Modus bleiben sie nur im Arbeitsspeicher.
 // =====================================================================
-import { GAMES } from "./registry.js?v=14";
+import { GAMES } from "./registry.js?v=15";
 
 const FORMAT = "mynotes-games";
 let api = null;      // Schnittstelle zur App (kommt bei jedem render() neu)
@@ -113,7 +113,7 @@ function ensureCss() {
   cssDone = true;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = new URL("./games.css?v=14", import.meta.url).href;
+  link.href = new URL("./games.css?v=15", import.meta.url).href;
   document.head.appendChild(link);
 }
 

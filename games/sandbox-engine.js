@@ -20,6 +20,9 @@ import { addContent8 } from "./sandbox-world8.js?v=10";
 import { addContent9 } from "./sandbox-world9.js?v=10";
 import { addContent11 } from "./sandbox-world11.js?v=10";
 import { addContent12 } from "./sandbox-world12.js?v=10";
+import { addContent13 } from "./sandbox-world13.js?v=10";
+import { installVillagers13 } from "./sandbox-vill13.js?v=10";
+import { installIllagers13 } from "./sandbox-illager13.js?v=10";
 import { migrateData } from "./sandbox-migrate.js?v=10";
 import { installWiden } from "./sandbox-widen.js?v=10";
 import { installDims } from "./sandbox-dims.js?v=10";
@@ -132,7 +135,7 @@ export class Sandbox {
 
   // ---------- Welt erzeugen ----------
   /** Die ganze Welt dieser Zahl (seed), noch ohne Festung */
-  _genFull() { return addContent12(addContent11(addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed), this.seed), this.seed); }
+  _genFull() { return addContent13(addContent12(addContent11(addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed), this.seed), this.seed), this.seed); }
   _generate() {
     const w = this._genFull();
     this.tiles = w.tiles; this.lvl = w.lvl; this.aux = w.aux; this.structs = w.structs; this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
@@ -493,4 +496,6 @@ installCombat10(Sandbox, { clamp, W, H, REACH });
 installOcean(Sandbox, { clamp, W, H });
 installSeaMobs(Sandbox, { clamp, W, H, SURF });
 installFauna(Sandbox, { clamp, W, H, SURF });
+installVillagers13(Sandbox, { clamp, W, H });
+installIllagers13(Sandbox, { clamp, W, H });
 installWiden(Sandbox, { clamp, W, H, SURF });

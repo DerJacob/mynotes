@@ -42,7 +42,9 @@ export const B = {
   // Etappe 11: Ozean (Zusatzfeld aux: Korallenart 0–4 · Schildkrötenei: Anzahl-1 | Reifestufe·4). Wasserpflanzen sind KEINE Blöcke, sie stehen als Zusatzfeld auf Wasserquellen (WP)
   CORAL_BLOCK: 205, DEAD_CORAL_BLOCK: 206, SPONGE: 207, WET_SPONGE: 208, CONDUIT: 209, DRIED_KELP_BLOCK: 210, TURTLE_EGG: 211,
   // Etappe 12: Bienenstock/-nest (aux: Honig 0–5 | Bewohner·8 (0–3) | Nektar·32 (0–3)), Honigwabenblock, Schnüffler-Ei, Froschlichter, Süßbeerenstrauch (mit / ohne Beeren)
-  BEEHIVE: 212, BEE_NEST: 213, HONEYCOMB_BLOCK: 214, SNIFFER_EGG: 215, OCHRE_FROGLIGHT: 216, VERDANT_FROGLIGHT: 217, PEARL_FROGLIGHT: 218, BERRY_BUSH: 219, BERRY_BUSH0: 220
+  BEEHIVE: 212, BEE_NEST: 213, HONEYCOMB_BLOCK: 214, SNIFFER_EGG: 215, OCHRE_FROGLIGHT: 216, VERDANT_FROGLIGHT: 217, PEARL_FROGLIGHT: 218, BERRY_BUSH: 219, BERRY_BUSH0: 220,
+  // Etappe 13: Dörfer – Pfeilmachertisch, Kessel, Glocke (weitere Arbeitsblöcke gab es schon)
+  FLETCHING: 221, CAULDRON: 222, BELL: 223
 };
 export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG, B.POPLAR_LOG, B.CHERRY_LOG, B.MANGROVE_LOG, B.BAMBOO_BLOCK];
 export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES, B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y, B.AZALEA_LEAVES, B.FLOWERING_AZALEA_LEAVES, B.CHERRY_LEAVES, B.MANGROVE_LEAVES];
@@ -226,7 +228,12 @@ BLOCKS[B.CARTO] = def("carto", { solid: true, lcost: 3, hard: 3.75, tool: "axe",
 BLOCKS[B.PRISMARINE] = def("prismarine", { solid: true, lcost: 3, hard: 2.25, tool: "pick", tier: 1, drop: "prismarine" });
 BLOCKS[B.SEA_LANTERN] = def("sea_lantern", { solid: true, lcost: 3, hard: 0.45, drop: "sea_lantern", emit: 15 });
 /** Arbeitsblock → Beruf des Dorfbewohners (siehe sandbox-vill.js) */
-export const WORKSTATIONS = { [B.COMPOSTER]: "farmer", [B.LECTERN]: "librarian", [B.CARTO]: "cartographer", [B.ANVIL]: "smith", [B.BREWING]: "cleric" };
+export const WORKSTATIONS = {
+  [B.COMPOSTER]: "farmer", [B.LECTERN]: "librarian", [B.CARTO]: "cartographer", [B.ANVIL]: "smith", [B.BREWING]: "cleric",
+  // Etappe 13
+  [B.BARREL]: "fisherman", [B.FLETCHING]: "fletcher", [B.SMOKER]: "butcher", [B.LOOM]: "shepherd", [B.STONECUTTER]: "mason",
+  [B.CAULDRON]: "leatherworker", [B.GRINDSTONE]: "weaponsmith", [B.SMITHING]: "toolsmith", [B.BLAST]: "armorer"
+};
 
 /** Behutsamkeit (Silk Touch): welcher Gegenstand fällt statt der üblichen Beute */
 export const SILK = {
@@ -919,3 +926,22 @@ shaped("beehive", 1, ["PPP", "HHH", "PPP"], { P: "#planks", H: "honeycomb" });
 shaped("honeycomb_block", 1, ["HH", "HH"], { H: "honeycomb" });
 shapeless("honeycomb_from_block", 4, ["honeycomb_block"], { out: ["honeycomb", 4] });
 shaped("saddle", 1, ["LLL", "I I"], { L: "leather", I: "iron_ingot" });
+
+// ---------------------------------------------------------------------
+// Etappe 13: Dörfer, Handel und Illager 2.0
+//   Pfeilmachertisch, Kessel (Arbeitsblöcke), Glocke (läutet: warnt Dorfbewohner, lässt Plünderer leuchten)
+//   Totem der Unsterblichkeit (rettet vor dem Tod), Goldener Apfel (heilt Zombie-Dörfler)
+// ---------------------------------------------------------------------
+BLOCKS[B.FLETCHING] = solidDef("fletching_table", { hard: 3.75, tool: "axe", drop: "fletching_table" });
+BLOCKS[B.CAULDRON] = solidDef("cauldron", { hard: 3.0, tool: "pick", tier: 1, drop: "cauldron" });
+BLOCKS[B.BELL] = def("bell", { solid: false, lcost: 0, hard: 1.5, tool: "pick", drop: "bell", interact: true });
+export const FIRST13 = B.FLETCHING, LAST13 = B.BELL;
+blockItem("fletching_table", "Pfeilmachertisch", B.FLETCHING, { fuel: 15 });
+blockItem("cauldron", "Kessel", B.CAULDRON);
+blockItem("bell", "Glocke", B.BELL);
+item("totem_of_undying", "Totem der Unsterblichkeit", { stack: 1 });
+item("golden_apple", "Goldener Apfel", { food: [4, 9.6], gapple: true });
+shaped("fletching_table", 1, ["FF", "PP", "PP"], { F: "flint", P: "#planks" });
+shaped("cauldron", 1, ["I I", "I I", "III"], { I: "iron_ingot" });
+shaped("bell", 1, [" S ", "GGG", "GGG"], { S: "stick", G: "gold_ingot" });
+shaped("golden_apple", 1, ["GGG", "GAG", "GGG"], { G: "gold_ingot", A: "apple" });

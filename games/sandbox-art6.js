@@ -261,7 +261,17 @@ const PROF_LOOK = {
   librarian: { robe: ["#d8d4cc", "#b8b2a6"], hat: null },
   cartographer: { robe: ["#9a7a50", "#7a5c38"], hat: "#6a4a2a" },
   smith: { robe: ["#4c4c52", "#34343a"], hat: null },
-  cleric: { robe: ["#7a46a0", "#5a3280"], hat: null }
+  cleric: { robe: ["#7a46a0", "#5a3280"], hat: null },
+  // Etappe 13
+  fisherman: { robe: ["#5a86a8", "#3e6486"], hat: "#9a8a62" },
+  fletcher: { robe: ["#6a7a4a", "#4c5c32"], hat: "#3c5a2c" },
+  butcher: { robe: ["#d8d4cc", "#b8aea2"], hat: "#e8e4dc" },
+  shepherd: { robe: ["#c8b894", "#a8987a"], hat: null },
+  mason: { robe: ["#8a8a84", "#6a6a66"], hat: null },
+  leatherworker: { robe: ["#7a5230", "#5a3a20"], hat: null },
+  weaponsmith: { robe: ["#44464e", "#2e3038"], hat: null },
+  toolsmith: { robe: ["#505a4e", "#363e34"], hat: null },
+  armorer: { robe: ["#3c4048", "#262a30"], hat: null }
 };
 /** Farben und Zubehör je Beruf; undefined = Standardkleidung */
 export function profLook(prof) { return PROF_LOOK[prof]; }
@@ -273,6 +283,15 @@ export function drawProfGear(R, prof, bob, lvl = 1) {
     case "cartographer": R(1.5, 1 - bob, 8, 1.4, "#6a4a2a"); R(2.5, 11 - bob, 3, 4, "#ecdcae"); R(2.5, 11 - bob, 3, 0.8, "#cbb888"); break;
     case "smith": R(2, 9 - bob, 7.5, 14, "#34343a"); R(2.5, 12 - bob, 6.5, 9, "#6a4a30"); R(2.5, 12 - bob, 6.5, 1, "#8a6a48"); R(6.6, 9.4 - bob, 1.4, 3, "#2a2a30"); break;
     case "cleric": R(1.5, 1.2 - bob, 8.5, 2.4, "#5a3280"); R(5.4, 11 - bob, 1.2, 6, "#f4c93a"); R(4.4, 13 - bob, 3.2, 1, "#f4c93a"); break;
+    case "fisherman": R(1, 1.2 - bob, 10, 1.4, "#9a8a62"); R(2.6, -0.8 - bob, 6.4, 2.4, "#b0a074"); R(10.4, 7 - bob, 0.8, 11, "#6a4a2a"); R(10.4, 7 - bob, 3.4, 0.8, "#6a4a2a"); R(13.4, 7.4 - bob, 0.4, 5, "#e8e8e0"); R(3, 15 - bob, 4, 1.6, "#c8d0d8"); break;
+    case "fletcher": R(1.8, 1 - bob, 7.8, 2, "#3c5a2c"); R(7.4, -2.4 - bob, 1.2, 4, "#e8e8e0"); R(8.2, -2 - bob, 0.8, 3, "#c84a3a"); R(10.2, 8 - bob, 0.8, 9, "#8a6a3a"); R(9.8, 7 - bob, 1.6, 1.4, "#c8c8c0"); break;
+    case "butcher": R(2, 9.4 - bob, 7.6, 12, "#f2eee6"); R(3, 14 - bob, 2, 2, "#b02828"); R(6, 17 - bob, 2.4, 1.6, "#b02828"); R(2, 0.8 - bob, 7.6, 2, "#e8e4dc"); R(10.2, 12 - bob, 1.6, 4.4, "#b8bcc4"); R(10.2, 11 - bob, 1.6, 1.4, "#5a3a22"); break;
+    case "shepherd": R(10.4, 3 - bob, 0.9, 20, "#8a5a2a"); R(10.4, 2 - bob, 3, 1, "#8a5a2a"); R(12.6, 2 - bob, 0.9, 2.6, "#8a5a2a"); R(1.8, 1.4 - bob, 7.6, 1.2, "#e8e0cc"); R(2, 12 - bob, 7.6, 3, "#f0f0ea"); break;
+    case "mason": R(2.4, 10 - bob, 6.8, 12, "#b8b8b0"); R(2.4, 10 - bob, 6.8, 1, "#d8d8d0"); R(10.2, 11 - bob, 0.9, 6, "#7a5a32"); R(9.2, 10 - bob, 3, 2, "#6a6a6a"); R(1.8, 1.4 - bob, 7.8, 1, "#c8c8c0"); break;
+    case "leatherworker": R(2.2, 9.6 - bob, 7.2, 13, "#8a5a36"); R(2.2, 9.6 - bob, 7.2, 1, "#a87448"); R(3.6, 13 - bob, 1.4, 1.4, "#c8a064"); R(6.6, 13 - bob, 1.4, 1.4, "#c8a064"); R(2.2, 20.6 - bob, 7.2, 1, "#5a3a20"); break;
+    case "weaponsmith": R(2, 9 - bob, 7.5, 14, "#2c2e34"); R(2.5, 12 - bob, 6.5, 9, "#58524e"); R(10.4, 5 - bob, 1.2, 8.6, "#d4d8e0"); R(9.4, 12.6 - bob, 3.2, 1, "#8a6a2a"); R(10.6, 13.6 - bob, 0.8, 2, "#6a4a2a"); break;
+    case "toolsmith": R(2, 9 - bob, 7.5, 14, "#30382e"); R(2.5, 12 - bob, 6.5, 9, "#665a46"); R(10.4, 4 - bob, 0.9, 12, "#7a5a32"); R(8.6, 3.4 - bob, 4.6, 1.4, "#a8acb4"); R(8.6, 3.4 - bob, 1, 3, "#a8acb4"); break;
+    case "armorer": R(2, 9 - bob, 7.5, 14, "#262a30"); R(2.5, 11 - bob, 6.5, 6, "#8c9098"); R(2.5, 11 - bob, 6.5, 1, "#c4c8d0"); R(1.6, 1.4 - bob, 8.2, 3.6, "#8c9098"); R(1.6, 1.4 - bob, 8.2, 0.9, "#c4c8d0"); R(5.4, 3.4 - bob, 3, 0.8, "#2a2a30"); break;
   }
   if (lvl >= 3 && prof) R(2.2, 22.4 - bob, 1.3, 1.1, lvl >= 5 ? "#6ae0e0" : lvl >= 4 ? "#f4c93a" : "#c8c8d0");
 }

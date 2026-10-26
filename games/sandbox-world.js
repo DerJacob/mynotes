@@ -452,7 +452,7 @@ export function generateWorld(seed) {
     villages.push({ x: cx, y: S, style });
   };
   village(SPAWN_X, SURF, "oak", true);
-  const styleOf = b => (b === "desert" ? "sand" : b === "snow" || b === "taiga" ? "stone" : "oak");
+  const styleOf = b => (b === "desert" ? "sand" : b === "snow" ? "snow" : b === "taiga" ? "spruce" : b === "savanna" ? "acacia" : "oak");       // Etappe 13: Dorfarten je Biom
   for (let tries = 0; tries < 80 * WK && villages.length < 3 * WK; tries++) {
     const x = 40 + Math.floor(rnd() * (W - 80)), b = bname[x];
     if (Math.abs(x - SPAWN_X) < 150 || villages.some(v => Math.abs(v.x - x) < 150)) continue;

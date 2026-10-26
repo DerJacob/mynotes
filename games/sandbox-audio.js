@@ -24,6 +24,9 @@ export const SFX = {
   // neu in Etappe 7
   mode: [[392, 0.1, "triangle", 0.05, 0, 0], [587, 0.16, "triangle", 0.05, 0, 90]], chat: [[660, 0.04, "sine", 0.03, 0, 0]],
   error: [[200, 0.12, "square", 0.04, -60, 0], [150, 0.16, "square", 0.04, -40, 110]], land: [[110, 0.07, "sine", 0.05, -40, 0]],
+  bell: [[1046, 0.9, "sine", 0.07, -12, 0], [1568, 0.7, "sine", 0.04, -10, 0], [523, 0.9, "triangle", 0.03, -6, 0]],
+  totem: [[392, 0.15, "triangle", 0.06, 200, 0], [587, 0.15, "triangle", 0.06, 300, 100], [784, 0.15, "triangle", 0.06, 400, 200], [1175, 0.5, "sine", 0.06, 200, 300]],
+  fang: [[1200, 0.05, "square", 0.05, -900, 0], [180, 0.12, "square", 0.05, -60, 60]], golem: [[90, 0.15, "square", 0.08, -30, 0], [60, 0.2, "sawtooth", 0.06, -20, 60]],
   rain_on: [[900, 0.03, "sine", 0.01, -300, 0]], world: [[330, 0.1, "triangle", 0.05, 0, 0], [440, 0.1, "triangle", 0.05, 0, 100], [660, 0.2, "triangle", 0.05, 0, 200]]
 };
 
@@ -37,7 +40,7 @@ export function stepMaterial(id) {
   if (/snow|ice/.test(k)) return "snow";
   if (/sand|gravel|soul/.test(k)) return "grit";
   if (/grass|dirt|leaves|farmland|mud|moss|litter|bush|mushroom|podzol|mycel/.test(k)) return "soft";
-  if (/plank|log|wood|door|chest|bench|barrel|ladder|fence|bed|lectern|composter|carto|bookshelf|crafting|table|sign|trapdoor/.test(k)) return "wood";
+  if (/plank|log|wood|door|chest|bench|barrel|ladder|fence|bed|lectern|composter|carto|bookshelf|crafting|table|sign|trapdoor|fletching/.test(k)) return "wood";
   if (/wool|hay|cushion|carpet/.test(k)) return "cloth";
   return "hard";
 }
