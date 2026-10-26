@@ -7,10 +7,10 @@
 //   Speichern (Version 6): Oberwelt wie bisher, dazu dim, dimData (Nether/Ende), strongholds, flags.
 // Engine-Logik ohne Oberfläche (Node-testbar).
 // =====================================================================
-import { B, BLOCKS, ITEMS, isFluid, LOOM_PATTERNS, TRIM_PATTERNS, TRIM_MAT_IDS } from "./sandbox-data.js?v=9";
+import { B, BLOCKS, ITEMS, isFluid, LOOM_PATTERNS, TRIM_PATTERNS, TRIM_MAT_IDS } from "./sandbox-data.js?v=10";
 const LOOM_N = LOOM_PATTERNS.length, TRIM_N = TRIM_PATTERNS.length, TRIM_MAT_N = TRIM_MAT_IDS.length;
-import { generateNether, generateEnd, placeStronghold, END_CX, END_TOP, END_ARRIVE, END_PILLARS } from "./sandbox-nether.js?v=9";
-import { BIOME_NAMES } from "./sandbox-world.js?v=9";
+import { generateNether, generateEnd, placeStronghold, END_CX, END_TOP, END_ARRIVE, END_PILLARS } from "./sandbox-nether.js?v=10";
+import { BIOME_NAMES } from "./sandbox-world.js?v=10";
 
 Object.assign(BIOME_NAMES, { nether: "Nether", soul_valley: "Seelensandtal", end: "Das Ende" });
 
@@ -46,7 +46,7 @@ export function installDims(Sandbox, K) {
   // ---------- Speichern / Laden von Kisten und Gegenständen ----------
   P._packStack = function (st) {
     if (!st) return 0;
-    if (st.bp || st.tr) return [st.id, st.n, st.d || 0, st.e || 0, st.r || 0, { bp: st.bp || undefined, tr: st.tr || undefined }];
+    if (st.bp || st.tr || st.ld) return [st.id, st.n, st.d || 0, st.e || 0, st.r || 0, { bp: st.bp || undefined, tr: st.tr || undefined, ld: st.ld || undefined }];
     return st.e || st.r ? [st.id, st.n, st.d || 0, st.e || 0, st.r || 0] : [st.id, st.n, st.d || 0];
   };
   P._unpackStack = function (a) {
@@ -58,6 +58,8 @@ export function installDims(Sandbox, K) {
     if (x && typeof x === "object") {
       const bp = x.bp;
       if (bp && Number.isFinite(bp.c) && Array.isArray(bp.p)) s.bp = { c: bp.c & 15, p: bp.p.filter(q => Array.isArray(q) && q[0] >= 0 && q[0] < LOOM_N).slice(0, 6).map(q => [q[0] | 0, q[1] & 15]) };
+      const ld = x.ld;
+      if (ld && a[0] === "crossbow" && (ld.k === "arrow" || ld.k === "spectral" || ld.k === "tipped" || ld.k === "rocket")) s.ld = { k: ld.k, d: ld.d | 0, m: ld.m ? 1 : 0 };
       if (Array.isArray(x.tr) && ITEMS[a[0]].armor && x.tr[0] >= 0 && x.tr[0] < TRIM_N && x.tr[1] >= 0 && x.tr[1] < TRIM_MAT_N) s.tr = [x.tr[0] | 0, x.tr[1] | 0];
     }
     return s;

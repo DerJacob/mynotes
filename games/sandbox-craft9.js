@@ -9,8 +9,8 @@
 import {
   B, BLOCKS, ITEMS, COLORS, STONE_MATS, STONECUT, COPPER_IDS, isDoorM, isTrap, itemOf9, FIRST9, LAST9, TRIM_MAT_IDS, MAX_LAYERS, LOOM_PATTERNS,
   hasTag, isPlant, isFluid, isFoodSmelt, SMELT
-} from "./sandbox-data.js?v=9";
-import { mulberry32 } from "./sandbox-noise.js?v=9";
+} from "./sandbox-data.js?v=10";
+import { mulberry32 } from "./sandbox-noise.js?v=10";
 
 export const OXIDE_CHANCE = 0.0022;   // je Block und Durchgang (alle 2 s): im Mittel gut 15 Minuten bis zur nächsten Stufe
 export const CAMP_TIME = 30;           // Sekunden, bis Essen am Lagerfeuer gar ist

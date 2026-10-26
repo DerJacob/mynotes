@@ -2,7 +2,7 @@
 // Blockdorf – Grafik der Etappe 8: Berge, üppige und Tropfstein-Höhlen, Kirschhain, Mangrovensumpf, Bambuswald, Fossilien.
 // Eigene 16 × 16-Bilder im kantigen Stil der 1.8-Zeit (kräftige Schattierung, wenige Farben je Block).
 // =====================================================================
-import { B, ITEMS } from "./sandbox-data.js?v=9";
+import { B, ITEMS } from "./sandbox-data.js?v=10";
 
 export const T8 = 16;
 export const FIRST8 = B.POWDER_SNOW, LAST8 = B.FOSSIL;

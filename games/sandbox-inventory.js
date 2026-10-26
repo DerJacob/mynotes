@@ -2,7 +2,7 @@
 // Blockdorf – Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen, Hunger, Erfahrung
 // Wird an die Klasse Sandbox gehängt (installInventory) und hält sandbox-engine.js übersichtlich.
 // =====================================================================
-import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS, boxesOf, colorItem, isFoodSmelt, isOreSmelt } from "./sandbox-data.js?v=9";
+import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS, boxesOf, colorItem, isFoodSmelt, isOreSmelt } from "./sandbox-data.js?v=10";
 
 export function installInventory(Sandbox, K) {
   const { clamp, REACH } = K;
@@ -34,6 +34,7 @@ export function installInventory(Sandbox, K) {
     if (x && x.r) s.r = x.r;
     if (x && x.bp) s.bp = { c: x.bp.c, p: x.bp.p.map(q => q.slice()) };      // Banner: Grundfarbe und Muster
     if (x && x.tr) s.tr = x.tr.slice();                                       // Rüstung: Verzierung [Vorlage, Material]
+    if (x && x.ld) s.ld = { ...x.ld };                                        // Armbrust: geladenes Geschoss
     return s;
   };
   P.newStack = newStack;
@@ -42,7 +43,7 @@ export function installInventory(Sandbox, K) {
   /** Fügt Gegenstände ein (erst zu vorhandenen Stapeln, dann in leere Plätze). Gibt zurück, wie viele übrig blieben. */
   P._insert = function (arr, id, n, d = 0, from = 0, to = arr.length, x = null) {
     const max = stackMax(id);
-    if (max > 1 && !(x && (x.e || x.bp))) for (let i = from; i < to && n > 0; i++) { const s = arr[i]; if (s && s.id === id && s.n < max && !s.bp) { const m = Math.min(n, max - s.n); s.n += m; n -= m; } }
+    if (max > 1 && !(x && (x.e || x.bp))) for (let i = from; i < to && n > 0; i++) { const s = arr[i]; if (s && s.id === id && s.n < max && !s.bp && !s.ld && (!ITEMS[id].byD || (s.d | 0) === (d | 0))) { const m = Math.min(n, max - s.n); s.n += m; n -= m; } }
     for (let i = from; i < to && n > 0; i++) if (!arr[i]) { const m = Math.min(n, max); arr[i] = newStack(id, m, d, x); n -= m; }
     return n;
   };
@@ -281,7 +282,7 @@ export function installInventory(Sandbox, K) {
       if (right && c.n > 1) { arr[idx] = newStack(c.id, 1, c.d, c); c.n--; } else { arr[idx] = c; this.cursor = null; }
       return;
     }
-    if (s.id === c.id && stackMax(c.id) > 1 && !s.e && !c.e && !s.bp && !c.bp) {
+    if (s.id === c.id && stackMax(c.id) > 1 && !s.e && !c.e && !s.bp && !c.bp && (!ITEMS[c.id].byD || (s.d | 0) === (c.d | 0))) {
       const m = Math.min(right ? 1 : c.n, stackMax(s.id) - s.n);
       s.n += m; c.n -= m; if (c.n <= 0) this.cursor = null;
       return;
@@ -342,7 +343,7 @@ export function installInventory(Sandbox, K) {
     const p = this.player;
     x = x ?? p.x + p.w / 2; y = y ?? p.y + 0.6;
     const r = this.rng || Math.random;
-    this.drops.push({ id: st.id, n: st.n, d: st.d || 0, e: st.e, r: st.r, bp: st.bp, tr: st.tr, x: x - 0.15, y: y - 0.15, vx: dir ? dir * 5 : (scatter ? (r() - 0.5) * 3 : (r() - 0.5) * 2), vy: dir ? -3 : -(2 + r() * 3), w: 0.3, h: 0.3, age: dir ? -0.6 : 0, stepUp: false, onGround: false });
+    this.drops.push({ id: st.id, n: st.n, d: st.d || 0, e: st.e, r: st.r, bp: st.bp, tr: st.tr, ld: st.ld, x: x - 0.15, y: y - 0.15, vx: dir ? dir * 5 : (scatter ? (r() - 0.5) * 3 : (r() - 0.5) * 2), vy: dir ? -3 : -(2 + r() * 3), w: 0.3, h: 0.3, age: dir ? -0.6 : 0, stepUp: false, onGround: false });
     if (this.drops.length > 260) this.drops.shift();
   };
   P._drops = function (dt) {
@@ -553,7 +554,7 @@ export function installInventory(Sandbox, K) {
       if (s.id === "fishing_rod") return this._rodUse(tx, ty);
       if (s.id === "glass_bottle" && this._fillBottle(tx, ty)) return true;
       if (s.id === "potion") return this.drink();
-      if (s.id === "splash_potion") return this.throwPotion(tx, ty);
+      if (s.id === "splash_potion" || s.id === "lingering_potion") return this.throwPotion(tx, ty);
       if (it.food && this.food < 20) return this.eat();
     }
     return this.place(tx, ty);

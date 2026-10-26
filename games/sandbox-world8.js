@@ -6,11 +6,11 @@
 //   Fossilien in der Wüste (Rippen und Schädel), Pulverschnee auf den Hängen.
 // Alles in der Seitenansicht; gleiche Zahl → gleiche Welt.
 // =====================================================================
-import { B } from "./sandbox-data.js?v=9";
-import { mulberry32, hash2, fbm } from "./sandbox-noise.js?v=9";
-import { BIOMES } from "./sandbox-world.js?v=9";
-import { azaleaTree } from "./sandbox-trees8.js?v=9";
-import { W, H, SURF, SPAWN_X } from "./sandbox-const.js?v=9";
+import { B } from "./sandbox-data.js?v=10";
+import { mulberry32, hash2, fbm } from "./sandbox-noise.js?v=10";
+import { BIOMES } from "./sandbox-world.js?v=10";
+import { azaleaTree } from "./sandbox-trees8.js?v=10";
+import { W, H, SURF, SPAWN_X } from "./sandbox-const.js?v=10";
 
 const STONEISH = new Set([B.STONE, B.DEEPSLATE, B.TUFF, B.DIRT, B.GRAVEL, B.CALCITE, B.SANDSTONE, B.DRIPSTONE, B.CLAY]);
 

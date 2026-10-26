@@ -5,7 +5,7 @@
 //   Wasser + Lava: Lavaquelle → Obsidian, fließende Lava → Bruchstein.
 //   Dazu: Schwimmen, Luft anhalten, Lava- und Kaktusschaden, Eimer.
 // =====================================================================
-import { B, BLOCKS, ITEMS, isFluid, isPlant, isSoft } from "./sandbox-data.js?v=9";
+import { B, BLOCKS, ITEMS, isFluid, isPlant, isSoft } from "./sandbox-data.js?v=10";
 
 export const SRC = 9, FALL = 8;
 

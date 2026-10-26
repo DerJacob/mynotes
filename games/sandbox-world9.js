@@ -5,10 +5,10 @@
 //   Knochenblöcke in den Fossilien.
 // Gleiche Zahl → gleiche Welt.
 // =====================================================================
-import { B } from "./sandbox-data.js?v=9";
-import { mulberry32, hash2 } from "./sandbox-noise.js?v=9";
-import { BIOMES } from "./sandbox-world.js?v=9";
-import { W, H, SURF } from "./sandbox-const.js?v=9";
+import { B } from "./sandbox-data.js?v=10";
+import { mulberry32, hash2 } from "./sandbox-noise.js?v=10";
+import { BIOMES } from "./sandbox-world.js?v=10";
+import { W, H, SURF } from "./sandbox-const.js?v=10";
 
 // Farbindizes (COLORS): 0 weiß, 1 orange, 4 gelb, 8 hellgrau, 12 braun, 14 rot
 const BAND = [1, 0, 14, 4, 1, 12, 8, 1, 14, 0];

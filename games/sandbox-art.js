@@ -3,13 +3,14 @@
 // Alles wird beim Start per Code gemalt, es gibt keine Bilddateien. Die Texturen sind eigene Malereien im
 // kantigen Minecraft-Stil (nicht die Originale).
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=9";
-import { mulberry32 } from "./sandbox-noise.js?v=9";
-import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=9";
-import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=9";
-import { paintAtlas6, paintItem6, COL6 } from "./sandbox-art6.js?v=9";
-import { paintAtlas8, paintItem8, COL8, FIRST8, LAST8 } from "./sandbox-art8.js?v=9";
-import { paintAtlas9, paintItem9, paintTrim, paintShieldBanner, COL9, FIRST9, LAST9 } from "./sandbox-art9.js?v=9";
+import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=10";
+import { mulberry32 } from "./sandbox-noise.js?v=10";
+import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=10";
+import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=10";
+import { paintAtlas6, paintItem6, COL6 } from "./sandbox-art6.js?v=10";
+import { paintAtlas8, paintItem8, COL8, FIRST8, LAST8 } from "./sandbox-art8.js?v=10";
+import { paintItem10 } from "./sandbox-art10.js?v=10";
+import { paintAtlas9, paintItem9, paintTrim, paintShieldBanner, COL9, FIRST9, LAST9 } from "./sandbox-art9.js?v=10";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -341,6 +342,7 @@ function paintItem(g, atlas, id, st) {
   const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
   const P = (x, y, c) => R(x, y, 1, 1, c);
   const line = (x0, y0, x1, y1, c, w = 1) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) R(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), w, w, c); };
+  if (paintItem10(id, g, atlas, st)) return;
   if (paintItem9(id, g, atlas, st)) return;
   if (paintItem8(id, g, atlas)) return;
   if (paintItem6(id, g, atlas, st)) return;
@@ -448,7 +450,8 @@ export function makeArt() {
   const base = (id, st) => {
     const shiny = !!(st && ((st.e && Object.keys(st.e).length) || id === "enchanted_book"));
     const sig = st && (st.tr || st.bp) ? `${st.tr ? "t" + st.tr.join(".") : ""}${st.bp ? "b" + st.bp.c + ":" + st.bp.p.map(q => q.join(".")).join(",") : ""}` : "";
-    const key = ((id === "potion" || id === "splash_potion") && st ? `${id}:${st.d | 0}${shiny ? ":g" : ""}` : shiny ? id + ":g" : id) + (sig ? "#" + sig : "");
+    const byD = (id === "potion" || id === "splash_potion" || id === "lingering_potion" || id === "tipped_arrow" || id === "firework_star" || id === "firework_rocket") && st;
+    const key = (byD ? `${id}:${st.d | 0}${shiny ? ":g" : ""}` : shiny ? id + ":g" : id) + (id === "crossbow" && st && st.ld ? ":" + st.ld.k + (st.ld.k === "tipped" ? st.ld.d : "") : "") + (sig ? "#" + sig : "");
     let c = cache.get(key);
     if (!c) {
       c = document.createElement("canvas"); c.width = c.height = T; const g = c.getContext("2d"); g.imageSmoothingEnabled = false; paintItem(g, atlas, id, st);

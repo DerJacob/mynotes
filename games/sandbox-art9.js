@@ -3,8 +3,8 @@
 // Eigene 16 × 16-Bilder im kantigen Stil der 1.8-Zeit. Blöcke mit Zusatzfeld (Farbe, Holzart, Alterung)
 // werden je Zustand einmal gemalt und zwischengespeichert, damit der Atlas klein bleibt.
 // =====================================================================
-import { B, COLORS, ITEMS, BLOCKS, boxesOf, WOODS, STONE_MATS, TRIM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, LOOM_PATTERNS, isDoorM, isTrap } from "./sandbox-data.js?v=9";
-import { mulberry32 } from "./sandbox-noise.js?v=9";
+import { B, COLORS, ITEMS, BLOCKS, boxesOf, WOODS, STONE_MATS, TRIM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, LOOM_PATTERNS, isDoorM, isTrap } from "./sandbox-data.js?v=10";
+import { mulberry32 } from "./sandbox-noise.js?v=10";
 
 export const T9 = 16;
 export const FIRST9 = B.GRANITE, LAST9 = B.TRAP_OL;

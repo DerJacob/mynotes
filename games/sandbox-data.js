@@ -788,3 +788,27 @@ export const STONECUT = {};
   // doppelte Einträge (gleiche Ausgabe) entfernen
   for (const k of Object.keys(STONECUT)) { const seen = new Set(); STONECUT[k] = STONECUT[k].filter(([o]) => (seen.has(o) ? false : (seen.add(o), true))); }
 }
+
+// ---------------------------------------------------------------------
+// Etappe 10: Kampf 2.0 und Waffen (Armbrust, Feuerwerk, Spektral- und Zeitpfeile, Verweiltränke)
+//   byD: Stapel mit verschiedenem d (Trank, Farbe, Flugdauer) lassen sich nicht mischen
+//   dyn: das Ergebnis hängt von den Zutaten ab (siehe craftResult in sandbox-combat10.js)
+// ---------------------------------------------------------------------
+item("crossbow", "Armbrust", { stack: 1, dur: 465, fuel: 15 });
+item("spectral_arrow", "Spektralpfeil");
+item("tipped_arrow", "Getränkter Pfeil", { byD: true });
+item("lingering_potion", "Verweiltrank", { stack: 1 });
+item("dragon_breath", "Drachenatem", { returns: "glass_bottle" });
+item("firework_star", "Feuerwerksstern", { byD: true });
+item("firework_rocket", "Feuerwerksrakete", { byD: true });
+/** Geschosse, die ein Bogen / eine Armbrust verschießen kann (Reihenfolge = Vorrang im Inventar) */
+export const AMMO = ["arrow", "spectral_arrow", "tipped_arrow"];
+shaped("crossbow", 1, ["SIS", "TNT", " S "], { S: "stick", I: "iron_ingot", T: "string", N: "iron_ingot" });
+shaped("spectral_arrow", 2, [" G ", "GAG", " G "], { G: "glowstone_dust", A: "arrow" });
+shaped("tipped_arrow", 8, ["AAA", "ALA", "AAA"], { A: "arrow", L: "lingering_potion" }, { dyn: "tipped" });
+shapeless("firework_star", 1, ["gunpowder", "#dye"], { dyn: "star" });
+for (let f = 1; f <= 3; f++) for (const star of [false, true]) {
+  shapeless(`firework_rocket_${f}${star ? "s" : ""}`, star ? 1 : 3, ["paper", ...new Array(f).fill("gunpowder"), ...(star ? ["firework_star"] : [])], { id: f === 1 && !star ? "firework_rocket" : `firework_rocket_${f}${star ? "s" : ""}`, out: ["firework_rocket", star ? 1 : 3], dyn: "rocket", hide: f > 1 || star });
+}
+// Schild + Banner: das Muster kommt auf den Schild
+for (const [key] of COLORS) shapeless(`shield_banner_${key}`, 1, ["shield", `banner_${key}`], { out: ["shield", 1], dyn: "shieldbanner", hide: true });

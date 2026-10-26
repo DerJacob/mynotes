@@ -7,11 +7,11 @@
 //   Bauwerke: Dörfer, Verliese, Minenschächte
 // Gleiche Zahl → gleiche Welt.
 // =====================================================================
-import { B, BLOCKS } from "./sandbox-data.js?v=9";
-import { cherryTree, mangroveTree, bambooStalk } from "./sandbox-trees8.js?v=9";
-import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=9";
+import { B, BLOCKS } from "./sandbox-data.js?v=10";
+import { cherryTree, mangroveTree, bambooStalk } from "./sandbox-trees8.js?v=10";
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=10";
 
-import { W, H, SURF, SPAWN_X, SEA, DEEP } from "./sandbox-const.js?v=9";
+import { W, H, SURF, SPAWN_X, SEA, DEEP } from "./sandbox-const.js?v=10";
 export const BIOMES = ["plains", "forest", "birch", "taiga", "snow", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "dappled", "meadow", "grove", "snowy_slopes", "jagged_peaks", "stony_peaks", "cherry", "mangrove", "bamboo"];
 export const BIOME_NAMES = { plains: "Ebene", forest: "Wald", birch: "Birkenwald", taiga: "Taiga", snow: "Schneeebene", desert: "Wüste", savanna: "Savanne", jungle: "Dschungel", swamp: "Sumpf", mountains: "Berge", ocean: "Ozean", dappled: "Gesprenkelter Wald", meadow: "Wiese", grove: "Schneehain", snowy_slopes: "Verschneite Hänge", jagged_peaks: "Zackengipfel", stony_peaks: "Steingipfel", cherry: "Kirschhain", mangrove: "Mangrovensumpf", bamboo: "Bambuswald" };
 /** Biome der Berge (Höhenstufen der Berge ab 1.18) */
