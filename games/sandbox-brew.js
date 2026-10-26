@@ -6,8 +6,8 @@
 //   Effekte: Schnelligkeit, Langsamkeit, Stärke, Schwäche, Sprungkraft, Regeneration, Gift, Heilung, Schaden, Feuerschutz, Wasseratmung, Nachtsicht, Unsichtbarkeit, Federfall
 // Engine ohne Oberfläche; Anzeige in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag, COLORS, TRIM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, LOOM_PATTERNS } from "./sandbox-data.js?v=9";
-import { mulberry32 } from "./sandbox-noise.js?v=9";
+import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag, COLORS, TRIM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, LOOM_PATTERNS } from "./sandbox-data.js?v=10";
+import { mulberry32 } from "./sandbox-noise.js?v=10";
 
 // ---------------------------------------------------------------------
 // Verzauberungen
@@ -22,18 +22,30 @@ export const ENCH = {
   efficiency: { name: "Effizienz", max: 5, items: ["pick", "axe", "shovel", "hoe", "shears"], base: 1, step: 10, w: 10, cost: 1 },
   fortune: { name: "Glück", max: 3, items: ["pick", "axe", "shovel", "hoe"], base: 15, step: 9, w: 2, cost: 4 },
   silk_touch: { name: "Behutsamkeit", max: 1, items: ["pick", "axe", "shovel", "hoe"], base: 15, step: 0, w: 1, cost: 8 },
-  unbreaking: { name: "Haltbarkeit", max: 3, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "rod", "armor"], base: 5, step: 8, w: 5, cost: 2 },
+  unbreaking: { name: "Haltbarkeit", max: 3, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "crossbow", "rod", "armor"], base: 5, step: 8, w: 5, cost: 2 },
   protection: { name: "Schutz", max: 4, items: ["armor"], base: 1, step: 11, w: 10, cost: 1 },
   feather_falling: { name: "Federfall", max: 4, items: ["boots"], base: 5, step: 6, w: 5, cost: 2 },
   power: { name: "Stärke", max: 5, items: ["bow"], base: 1, step: 10, w: 10, cost: 1 },
   punch: { name: "Schlag", max: 2, items: ["bow"], base: 12, step: 20, w: 2, cost: 4 },
   flame: { name: "Flamme", max: 1, items: ["bow"], base: 20, step: 0, w: 2, cost: 4 },
   infinity: { name: "Unendlichkeit", max: 1, items: ["bow"], base: 20, step: 0, w: 1, cost: 8 },
+  sweeping_edge: { name: "Schwungkraft", max: 3, items: ["sword"], base: 5, step: 9, w: 2, cost: 4 },
+  smite: { name: "Bann", max: 5, items: ["sword", "axe"], base: 5, step: 8, w: 5, cost: 2 },
+  bane_of_arthropods: { name: "Nemesis der Gliederfüßer", max: 5, items: ["sword", "axe"], base: 5, step: 8, w: 5, cost: 2 },
+  fire_protection: { name: "Feuerschutz", max: 4, items: ["armor"], base: 10, step: 8, w: 5, cost: 2 },
+  blast_protection: { name: "Explosionsschutz", max: 4, items: ["armor"], base: 5, step: 8, w: 2, cost: 4 },
+  projectile_protection: { name: "Schussschutz", max: 4, items: ["armor"], base: 3, step: 6, w: 5, cost: 2 },
+  thorns: { name: "Dornen", max: 3, items: ["armor"], base: 10, step: 20, w: 1, cost: 8 },
+  multishot: { name: "Mehrfachschuss", max: 1, items: ["crossbow"], base: 20, step: 0, w: 2, cost: 4 },
+  piercing: { name: "Durchschuss", max: 4, items: ["crossbow"], base: 1, step: 10, w: 10, cost: 1 },
+  quick_charge: { name: "Schnellladen", max: 3, items: ["crossbow"], base: 12, step: 20, w: 5, cost: 2 },
   lure: { name: "Köder", max: 3, items: ["rod"], base: 15, step: 9, w: 2, cost: 4 },
   luck_of_the_sea: { name: "Glück des Meeres", max: 3, items: ["rod"], base: 15, step: 9, w: 2, cost: 4 },
-  mending: { name: "Reparatur", max: 1, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "rod", "armor"], base: 25, step: 0, w: 2, cost: 4, treasure: true }
+  mending: { name: "Reparatur", max: 1, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "crossbow", "rod", "armor"], base: 25, step: 0, w: 2, cost: 4, treasure: true }
 };
-const CONFLICT = [["fortune", "silk_touch"], ["infinity", "mending"]];
+const CONFLICT = [["fortune", "silk_touch"], ["infinity", "mending"], ["multishot", "piercing"],
+  ["sharpness", "smite"], ["sharpness", "bane_of_arthropods"], ["smite", "bane_of_arthropods"],
+  ["protection", "fire_protection"], ["protection", "blast_protection"], ["protection", "projectile_protection"], ["fire_protection", "blast_protection"], ["fire_protection", "projectile_protection"], ["blast_protection", "projectile_protection"]];
 const conflicts = (a, b) => CONFLICT.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
 
 /** Art eines Gegenstands für Verzauberungen: Liste passender Klassen (leer = nicht verzauberbar) */
@@ -43,6 +55,7 @@ export function enchClasses(id) {
   if (it.tool) return [it.tool];
   if (it.armor) return it.armor.slot === 3 ? ["armor", "boots"] : ["armor"];
   if (id === "bow") return ["bow"];
+  if (id === "crossbow") return ["crossbow"];
   if (id === "fishing_rod") return ["rod"];
   return [];
 }
@@ -73,8 +86,14 @@ export const potionKind = d => POTION_KINDS[(d | 0) >> 2] || "water";
 export const potionMod = d => (d | 0) & 3;
 export const potionCode = (kind, mod = 0) => POTION_KINDS.indexOf(kind) * 4 + mod;
 export function potionColor(d) { const k = potionKind(d); return POTION_FX[k] ? POTION_FX[k].col : POTION_BASE[k][1]; }
+/** Tränke in Flaschen und als Geschoss */
+export const POT_IDS = new Set(["potion", "splash_potion", "lingering_potion"]);
+export const FIREWORK_FLIGHT = d => Math.max(1, Math.min(3, (d | 0) & 3));
+export const FIREWORK_STAR = d => ((d | 0) >> 2) & 31;       // 0 = ohne Stern, sonst Farbe + 1
 export function stackName(st) {
   if (!st) return "";
+  if (st.id === "tipped_arrow") { const k = potionKind(st.d), f = POTION_FX[k]; return f ? "Pfeil der " + f.n + (potionMod(st.d) === 2 ? " II" : "") : "Getränkter Pfeil"; }
+  if (st.id === "lingering_potion") { const k = potionKind(st.d), m = potionMod(st.d); return POTION_BASE[k] ? "Verweil-" + POTION_BASE[k][0] : "Verweiltrank der " + POTION_FX[k].n + (m === 2 ? " II" : "") + (m === 1 ? " (verlängert)" : ""); }
   if (st.id === "potion" || st.id === "splash_potion") {
     const k = potionKind(st.d), m = potionMod(st.d);
     if (POTION_BASE[k]) return (st.id === "splash_potion" ? "Wurf-" : "") + POTION_BASE[k][0];
@@ -87,11 +106,15 @@ export function stackLines(st) {
   const out = enchLines(st);
   if (st.tr && TRIM_PATTERNS[st.tr[0]] && TRIM_MAT_IDS[st.tr[1]]) out.push(`Verzierung: ${TRIM_PATTERNS[st.tr[0]][1]} (${TRIM_MATS[TRIM_MAT_IDS[st.tr[1]]][0]})`);
   if (st.bp) for (const q of st.bp.p) if (LOOM_PATTERNS[q[0]]) out.push(`${LOOM_PATTERNS[q[0]][1]} (${COLORS[q[1] & 15][1]})`);
-  if (st.id === "potion" || st.id === "splash_potion") {
+  if (st.id === "crossbow" && st.ld) out.push("Geladen: " + (st.ld.k === "rocket" ? "Feuerwerksrakete" : st.ld.k === "tipped" ? stackName({ id: "tipped_arrow", d: st.ld.d }) : st.ld.k === "spectral" ? "Spektralpfeil" : "Pfeil") + (st.ld.m ? " (×3)" : ""));
+  if (st.id === "firework_rocket") { out.push("Flugdauer " + FIREWORK_FLIGHT(st.d)); if (FIREWORK_STAR(st.d)) out.push("Stern (" + COLORS[(FIREWORK_STAR(st.d) - 1) & 15][1] + ")"); }
+  if (st.id === "firework_star") out.push(COLORS[(st.d | 0) & 15][1]);
+  if (POT_IDS.has(st.id) || st.id === "tipped_arrow") {
     const k = potionKind(st.d), m = potionMod(st.d), f = POTION_FX[k];
-    if (f) {
+    const div = st.id === "tipped_arrow" ? 8 : st.id === "lingering_potion" ? 4 : 1;
+    if (f && !(st.id === "tipped_arrow" && !f)) {
       if (f.instant) out.push((f.instant === "heal" ? "Heilt " : "Schadet ") + (f.instant === "heal" ? (m === 2 ? 4 : 2) : (m === 2 ? 6 : 3)) + " Herzen");
-      else { const s = f.dur[m] || f.dur[0]; out.push(`${f.n}${m === 2 ? " II" : ""} (${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")})`); }
+      else { const s = Math.max(1, Math.round((f.dur[m] || f.dur[0]) / div)); out.push(`${f.n}${m === 2 ? " II" : ""} (${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")})`); }
     }
   }
   return out;
@@ -103,11 +126,12 @@ const AWKWARD_ING = { golden_carrot: "night_vision", sugar: "swiftness", rabbit_
 const CORRUPT = { night_vision: "invisibility", swiftness: "slowness", leaping: "slowness", fire_resistance: "slowness", healing: "harming", poison: "harming", water_breathing: "harming" };
 const LONGER = new Set(["night_vision", "invisibility", "leaping", "fire_resistance", "swiftness", "slowness", "water_breathing", "poison", "weakness", "strength", "regeneration", "slow_falling"]);
 const STRONGER = new Set(["leaping", "swiftness", "slowness", "healing", "harming", "poison", "regeneration", "strength"]);
-export const BREW_INGREDIENTS = new Set([...Object.keys(WATER_ING), ...Object.keys(AWKWARD_ING), "fermented_spider_eye", "redstone", "glowstone_dust", "gunpowder", "magma_cream", "ghast_tear"]);
+export const BREW_INGREDIENTS = new Set([...Object.keys(WATER_ING), ...Object.keys(AWKWARD_ING), "fermented_spider_eye", "redstone", "glowstone_dust", "gunpowder", "dragon_breath", "magma_cream", "ghast_tear"]);
 export function brewResult(st, ing) {
-  if (!st || (st.id !== "potion" && st.id !== "splash_potion")) return null;
+  if (!st || !POT_IDS.has(st.id)) return null;
   const kind = potionKind(st.d), mod = potionMod(st.d), out = (k, m = 0, id = st.id) => ({ id, n: 1, d: potionCode(k, m) });
   if (ing === "gunpowder") return st.id === "potion" ? { ...out(kind, mod, "splash_potion") } : null;
+  if (ing === "dragon_breath") return st.id === "splash_potion" ? out(kind, mod, "lingering_potion") : null;
   if (ing === "redstone") return LONGER.has(kind) && mod === 0 ? out(kind, 1) : null;
   if (ing === "glowstone_dust") return STRONGER.has(kind) && mod === 0 ? out(kind, 2) : null;
   if (ing === "fermented_spider_eye") {
@@ -184,9 +208,9 @@ export function installBrew(Sandbox, K) {
   };
   /** Wurftrank werfen (zur Mausposition) */
   P.throwPotion = function (tx, ty) {
-    const s = this.selStack(); if (!s || s.id !== "splash_potion" || this.eatCd > 0) return false;
+    const s = this.selStack(); if (!s || (s.id !== "splash_potion" && s.id !== "lingering_potion") || this.eatCd > 0) return false;
     const p = this.player, x0 = p.x + p.w / 2, y0 = p.y + 0.5, dx = tx + 0.5 - x0, dy = ty + 0.5 - y0, L = Math.max(0.5, Math.hypot(dx, dy)), sp = 13;
-    this.proj.push({ kind: "potion", x: x0, y: y0, vx: dx / L * sp, vy: dy / L * sp - 3, dmg: 0, pot: s.d, fromPlayer: true, age: 0, stuck: false, stuckT: 0 });
+    this.proj.push({ kind: "potion", x: x0, y: y0, vx: dx / L * sp, vy: dy / L * sp - 3, dmg: 0, pot: s.d, ling: s.id === "lingering_potion", fromPlayer: true, age: 0, stuck: false, stuckT: 0 });
     this._consumeSel(); this.eatCd = 0.4;
     this.events.push({ t: "shoot", mob: false });
     return true;
@@ -195,6 +219,7 @@ export function installBrew(Sandbox, K) {
   P._splashPotion = function (a) {
     const kind = potionKind(a.pot), mod = potionMod(a.pot), p = this.player;
     this.events.push({ t: "splash", x: a.x, y: a.y, col: potionColor(a.pot) });
+    if (a.ling) { this._spawnCloud(a.x, a.y, a.pot); return; }
     const scale = d => (d >= 4 ? 0 : 1 - d / 4 * 0.75);
     const dp = Math.hypot(a.x - (p.x + p.w / 2), a.y - (p.y + p.h / 2));
     if (dp < 4 && POTION_FX[kind]) this._applyPotionTo(kind, mod, scale(dp));
@@ -376,7 +401,7 @@ export function installBrew(Sandbox, K) {
 
   // ---------- Braustand ----------
   P.brewCanPut = function (idx, st) {
-    if (idx < 3) return st.id === "potion" || st.id === "splash_potion";
+    if (idx < 3) return POT_IDS.has(st.id);
     if (idx === 3) return BREW_INGREDIENTS.has(st.id);
     return idx === 4 && st.id === "blaze_powder";
   };

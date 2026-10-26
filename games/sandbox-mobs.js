@@ -6,9 +6,9 @@
 //   Dazu: Spawnregeln nach Licht, Tiefe und Biom, Beute, Bett (Schlafen, Respawn) und Fortschritte.
 // Alles ist Engine-Logik ohne Oberfläche (Node-testbar); gezeichnet wird in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=9";
-import { mulberry32 } from "./sandbox-noise.js?v=9";
-import { NH } from "./sandbox-const.js?v=9";
+import { B, BLOCKS, ITEMS, SMELT, isFluid, hasTag } from "./sandbox-data.js?v=10";
+import { mulberry32 } from "./sandbox-noise.js?v=10";
+import { NH } from "./sandbox-const.js?v=10";
 
 const sgn = v => (v > 0 ? 1 : v < 0 ? -1 : 0);
 
@@ -285,7 +285,7 @@ export function installMobs(Sandbox, K) {
         a.stuckT -= dt;
         if (!BLOCKS[this.tile(Math.floor(a.x), Math.floor(a.y))].solid) a.stuck = false;            // Block weg → fällt weiter
         else {
-          if (a.fromPlayer && a.kind === "arrow" && !a.noPickup && Math.abs(a.x - (p.x + p.w / 2)) < 1.2 && Math.abs(a.y - (p.y + p.h / 2)) < 1.5 && this.room("arrow") > 0) { this.add("arrow", 1); this.proj.splice(this.proj.indexOf(a), 1); continue; }
+          if (a.fromPlayer && a.kind === "arrow" && !a.noPickup && Math.abs(a.x - (p.x + p.w / 2)) < 1.2 && Math.abs(a.y - (p.y + p.h / 2)) < 1.5 && this.room(a.item || "arrow") > 0) { this.add(a.item || "arrow", 1, a.tip | 0); this.proj.splice(this.proj.indexOf(a), 1); continue; }
           if (a.stuckT <= 0) this.proj.splice(this.proj.indexOf(a), 1);
           continue;
         }
@@ -314,8 +314,12 @@ export function installMobs(Sandbox, K) {
           for (const m of this.mobs) {
             if (a.x > m.x - 0.1 && a.x < m.x + m.w + 0.1 && a.y > m.y - 0.1 && a.y < m.y + m.h + 0.1) {
               if (a.kind === "potion") { this._splashPotion(a); gone = true; break; }
+              if (a.hitSet && a.hitSet.has(m)) continue;                      // Durchschuss: jedes Ziel nur einmal
               this._kb = a.kb | 0; if (a.fire) m.ignite = Math.max(m.ignite || 0, 5);
-              this._mobHurt(m, a.dmg, sgn(a.vx), "arrow"); this._kb = 0; this.grant("hit"); gone = true; break;
+              this._mobHurt(m, a.dmg, sgn(a.vx), "arrow"); this._kb = 0; this.grant("hit");
+              if (a.ak) this._arrowEffects(a, m);
+              if (a.pierce > 0) { a.pierce--; (a.hitSet = a.hitSet || new Set()).add(m); continue; }
+              gone = true; break;
             }
           }
         }
@@ -607,7 +611,7 @@ export function installMobs(Sandbox, K) {
             if (this.tile(x, fy - 1) !== B.AIR && BLOCKS[this.tile(x, fy - 1)].solid) { /* Pflanze o. Ä.: ok */ }
             const e = Object.entries(wts).filter(([, v]) => v > 0), tot = e.reduce((a, [, v]) => a + v, 0);
             let r = this.mrng() * tot, type = e[0][0]; for (const [k, v] of e) { r -= v; if (r < 0) { type = k; break; } }
-            this.spawnMob(type, x + 0.5 - MOBS[type].w / 2, fy);
+            this.spawnMob(type, x + 0.5 - MOBS[type].w / 2, fy, type === "zombie" && (x * 31 + this.day) % 8 === 0 ? { shield: true } : {});
           }
         }
       }
@@ -655,6 +659,7 @@ export function installMobs(Sandbox, K) {
       const o = { t: m.type, x: +m.x.toFixed(2), y: +m.y.toFixed(3), hp: m.hp };
       if (m.tamed) { o.tm = 1; if (m.sit) o.st = 1; }
       if (m.sheared) o.sh = Math.round(m.shearT);
+      if (m.shield) o.sd = 1;
       if (m.baby > 0) o.bb = Math.round(m.baby);
       if (m.fuse > 0 && m.type === "wither") o.fz = +m.fuse.toFixed(1);
       if (m.angry && (m.type === "piglin" || m.type === "zombie_piglin")) o.an = 1;
@@ -669,6 +674,7 @@ export function installMobs(Sandbox, K) {
       m.y = clamp(o.y, 0, H - d.h); m.hp = clamp(+o.hp || d.hp, 1, o.tm ? 20 : d.hp);
       if (o.tm) { m.tamed = true; m.sit = !!o.st; m.maxHp = o.t === "wolf" ? 20 : 10; }
       if (o.sh) { m.sheared = true; m.shearT = o.sh; }
+      if (o.sd) m.shield = true;
       if (o.fz > 0) m.fuse = +o.fz;
       if (o.an) m.angry = true;
       if (o.bb > 0) { m.baby = o.bb; m.w = d.w * 0.55; m.h = d.h * 0.55; m.y = clamp(o.y, 0, H - m.h); }

@@ -2,8 +2,8 @@
 // Blockdorf – Menüs (Etappe 7): Einstellungen, Weltenliste, neue Welt, Chat-Zeilen.
 // Die Funktionen bauen nur Knoten mit dem h()-Helfer der App; alle Aktionen laufen über Rückrufe (api).
 // =====================================================================
-import { MODES } from "./sandbox-polish.js?v=9";
-import { listWorlds, canAdd, MAX_WORLDS, NAME_MAX } from "./sandbox-worlds.js?v=9";
+import { MODES } from "./sandbox-polish.js?v=10";
+import { listWorlds, canAdd, MAX_WORLDS, NAME_MAX } from "./sandbox-worlds.js?v=10";
 
 /** Seed aus Text: leer = zufällig (undefined), Zahl = die Zahl, sonst ein Hash des Textes */
 export function seedFrom(text) {

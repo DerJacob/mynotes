@@ -6,7 +6,7 @@
 //   Neue Spielstände tragen das Feld h (Höhe der Welt); fehlt es, war die Welt 192 hoch.
 // Reine Funktion: verändert den übergebenen Spielstand nicht.
 // =====================================================================
-import { W, H, OLD_H } from "./sandbox-const.js?v=9";
+import { W, H, OLD_H } from "./sandbox-const.js?v=10";
 
 const BEDROCK = 15;
 

@@ -5,31 +5,32 @@
 //   A/D laufen · W/Leertaste springen (Leiter: W hoch, S runter) · linke Maustaste abbauen/kämpfen
 //   rechte Maustaste benutzen/bauen/essen · 1–9 oder Mausrad: Platz wählen · E Inventar · Q werfen · P/Esc Pause
 // =====================================================================
-import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV, MODES, WEATHER_NAMES, MOON_FULL } from "./sandbox-engine.js?v=9";
-import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=9";
-import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=9";
-import { drawBlock4 } from "./sandbox-art4.js?v=9";
-import { drawBlock8 } from "./sandbox-art8.js?v=9";
-import { drawBlock9, bannerCloth } from "./sandbox-art9.js?v=9";
-import { LOOM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, FIRST9 } from "./sandbox-data.js?v=9";
-import { mcY } from "./sandbox-const.js?v=9";
-import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=9";
-import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=9";
-import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=9";
-import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=9";
-import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=9";
-import { createAudio, stepMaterial, musicMood } from "./sandbox-audio.js?v=9";
-import { loadRecord, addWorld, switchWorld, renameWorld, deleteWorld, canAdd, nextId, cleanSettings } from "./sandbox-worlds.js?v=9";
-import { padStep, readPad, aimPoint, moveCursor } from "./sandbox-pad.js?v=9";
-import { Precip, drawMoon, drawBolt, drawDebug } from "./sandbox-fx7.js?v=9";
-import { settingsPanel, worldsPanel, newWorldPanel } from "./sandbox-menus.js?v=9";
+import { Sandbox, W, H, SURF, B, BLOCKS, ITEMS, RECIPES, REACH, DAY_LEN, MAX_HP, mulberry32, BIOME_NAMES, MOBS, ADV, MODES, WEATHER_NAMES, MOON_FULL } from "./sandbox-engine.js?v=10";
+import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=10";
+import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=10";
+import { drawBlock4 } from "./sandbox-art4.js?v=10";
+import { drawBlock8 } from "./sandbox-art8.js?v=10";
+import { drawBlock9, bannerCloth } from "./sandbox-art9.js?v=10";
+import { LOOM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, FIRST9, COLORS } from "./sandbox-data.js?v=10";
+import { mcY } from "./sandbox-const.js?v=10";
+import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=10";
+import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=10";
+import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=10";
+import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=10";
+import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD, potionColor } from "./sandbox-brew.js?v=10";
+import { createAudio, stepMaterial, musicMood } from "./sandbox-audio.js?v=10";
+import { loadRecord, addWorld, switchWorld, renameWorld, deleteWorld, canAdd, nextId, cleanSettings } from "./sandbox-worlds.js?v=10";
+import { padStep, readPad, aimPoint, moveCursor } from "./sandbox-pad.js?v=10";
+import { Precip, drawMoon, drawBolt, drawDebug } from "./sandbox-fx7.js?v=10";
+import { settingsPanel, worldsPanel, newWorldPanel } from "./sandbox-menus.js?v=10";
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const rgb = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 const fmt = n => new Intl.NumberFormat("de-DE").format(n);
-const TAGNAME = { "#planks": "Bretter", "#coals": "Kohle", "#logs": "Baumstämme", "#wool": "Wolle (beliebig)" };
+const TAGNAME = { "#planks": "Bretter", "#coals": "Kohle", "#logs": "Baumstämme", "#wool": "Wolle (beliebig)", "#dye": "Farbstoff (beliebig)" };
+const potionColorOf = d => potionColor(d);
 const hex2rgb = c => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c || ''); return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [180, 70, 220]; };
 const ROMAN2 = ['', '', ' II', ' III', ' IV'];
 const DEEP_Y = SURF + 74;           // ab hier werden Erze auf Tiefenschiefer gemalt
@@ -56,7 +57,7 @@ export function mount(root, ctx) {
   const keys = { left: false, right: false, jump: false, down: false };
   const mouse = { px: 0, py: 0, in: false, down: false, btn: 0 };
   const cam = { x: game.player.x, y: game.player.y };
-  const parts = [], floats = [];
+  const parts = [], floats = [], sweeps = [];
   const audio = createAudio();
   audio.apply(settings);
   const ensureAudio = () => audio.ensure();
@@ -108,7 +109,8 @@ export function mount(root, ctx) {
   const help = h("div", { class: "sb-help" },
     h("div", null, kbd("A"), kbd("D"), " laufen · ", kbd("W"), " / ", kbd("Leertaste"), " springen · ", kbd("S"), " Leiter runter"),
     h("div", null, "Linke Maustaste: abbauen und kämpfen · rechte: benutzen, bauen, essen"),
-    h("div", null, "Bogen: rechte Maustaste halten und loslassen · Schild: rechte Maustaste halten · ", kbd("G"), " Fortschritte"),
+    h("div", null, "Bogen und Armbrust: rechte Maustaste halten (Armbrust: loslassen = geladen, nächster Klick = Schuss) · Schild: rechte Maustaste halten · ", kbd("F"), " zweite Hand · ", kbd("G"), " Fortschritte"),
+    h("div", null, "Linke Maustaste gedrückt halten schlägt erst bei voller Ladung zu: Kritisch im Fall, Schwert schwingt, Axt entwaffnet Schilde"),
     h("div", null, kbd("1"), "–", kbd("9"), " / Mausrad: Platz · ", kbd("E"), " Inventar · ", kbd("Q"), " werfen · ", kbd("P"), " Pause"));
   const touchBtn = (label, action, title) => {
     const b = h("button", { class: "tg-tb", type: "button", title, "aria-label": title }, label);
@@ -124,7 +126,7 @@ export function mount(root, ctx) {
     h("div", { class: "sb-view" }, canvas,
       h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, chatBtn, soundBtn, pauseBtn)),
       toastEl, chatLog, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), chatIn, winWrap, cursorEl, padEl, overlay),
-    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 9 · Etappe 9 · Spielstand 10")));
+    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 10 · Etappe 10 · Spielstand 11")));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
   function applySettings() {
     audio.apply(settings);
@@ -165,9 +167,10 @@ export function mount(root, ctx) {
     }
     const sx = `${game.xp}`;
     if (sx !== sig.xp) { sig.xp = sx; xpFill.style.width = Math.round(game.levelFrac() * 100) + "%"; xpLvl.textContent = game.level() > 0 ? String(game.level()) : ""; }
-    const sh = JSON.stringify(game.hotbar()) + "|" + game.sel;
+    const sh = JSON.stringify(game.hotbar()) + "|" + game.sel + "|" + JSON.stringify(game.offh);
     if (sh !== sig.hot) {
       sig.hot = sh; hotbar.textContent = "";
+      if (game.offh[0]) { const oe = slotEl("off", 0, game.offh[0], "sb-slot sb-offslot"); oe.appendChild(h("span", { class: "sb-key" }, "F")); hotbar.appendChild(oe); }
       game.hotbar().forEach((st, i) => {
         const el = slotEl("inv", i, st, "sb-slot" + (i === game.sel ? " on" : ""));
         el.appendChild(h("span", { class: "sb-key" }, String(i + 1)));
@@ -196,9 +199,9 @@ export function mount(root, ctx) {
   function syncWindow() {
     const w = game.win;
     if (!w) { if (!winWrap.hidden) { winWrap.hidden = true; cursorEl.hidden = true; sig.win = ""; } return; }
-    if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.blocking = false; game.bow = null; }
+    if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.blocking = false; game.bow = null; game.xbow = null; }
     const e = game.winEnt();
-    const sg = JSON.stringify([w.kind, cre.tab, game.inv, game.armor, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "trade" && w.v ? [w.v.offers.map(o => o.uses), w.v.lvl, w.v.xp, game.hero()] : 0, w.kind === "map" ? Math.floor(game.player.x / 3) : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
+    const sg = JSON.stringify([w.kind, cre.tab, game.inv, game.armor, game.offh, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "trade" && w.v ? [w.v.offers.map(o => o.uses), w.v.lvl, w.v.xp, game.hero()] : 0, w.kind === "map" ? Math.floor(game.player.x / 3) : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
     if (sg !== sig.win) { sig.win = sg; renderWindow(); renderBook(); updateCursor(); }
     if (w.kind === "brew" && e) { const f = winPanel.querySelector(".sb-bfuel i"), a = winPanel.querySelector(".sb-bprog i"); if (f) f.style.width = Math.round(clamp(e.fuel / 20, 0, 1) * 100) + "%"; if (a) a.style.height = Math.round(clamp(e.brewT / BREW_TIME, 0, 1) * 100) + "%"; }
     if (w.kind === "furnace" && e) { const f = winPanel.querySelector(".sb-flame i"), a = winPanel.querySelector(".sb-arrow i"); if (f) f.style.height = e.burnMax ? Math.round((e.burn / e.burnMax) * 100) + "%" : "0%"; if (a) a.style.width = Math.round((e.cook / (e.mode ? 5 : 10)) * 100) + "%"; }
@@ -246,7 +249,7 @@ export function mount(root, ctx) {
     }
     const row = (area, from, n, cls = "") => { const r = h("div", { class: "sb-srow " + cls }); for (let i = from; i < from + n; i++) r.appendChild(slotEl(area, i, game.slots(area)[i])); return r; };
     const grid = size => { const gEl = h("div", { class: "sb-grid", style: { gridTemplateColumns: `repeat(${size}, 40px)` } }); for (let i = 0; i < size * size; i++) gEl.appendChild(slotEl("grid", i, game.grid[i])); return gEl; };
-    const outStack = () => { const r = game.craftResult(); return r ? { id: r.id, n: r.n, d: 0 } : null; };
+    const outStack = () => { const r = game.craftResult(); return r ? { id: r.id, n: r.n, d: r.d | 0, ...(r.x ? { bp: r.x.bp, e: r.x.e } : {}) } : null; };
     if (w.kind === "creative") {
       const tabs = h("div", { class: "sb-ctabs" }, ...CRE_TABS.map(([k, n]) => h("button", { type: "button", class: "sb-ctab" + (!cre.q.trim() && cre.tab === k ? " on" : ""), onclick: () => { cre.tab = k; cre.q = ""; creScroll = 0; sig.win = ""; blurFocus(); } }, n)));
       const body = () => (cre.tab === "inv" && !cre.q.trim() ? h("div", { class: "sb-cinv" }, row("inv", 9, 9), row("inv", 18, 9), row("inv", 27, 9)) : creGrid());
@@ -256,11 +259,11 @@ export function mount(root, ctx) {
         onkeydown: e => { if (e.key === "Escape") { e.preventDefault(); e.target.blur(); game.closeWindow(); sig.win = ""; } } });
       holder.addEventListener("scroll", () => { creScroll = holder.scrollTop; });
       const trash = h("div", { class: "sb-s sb-trash", "data-area": "trash", "data-idx": "0", title: "Papierkorb: legt den Gegenstand in der Hand weg" }, h("span", { class: "sb-trashic" }, "🗑"));
-      const armorRow2 = h("div", { class: "sb-srow sb-crow" }); for (let i = 0; i < 4; i++) armorRow2.appendChild(slotEl("armor", i, game.armor[i], "sb-armor" + i)); armorRow2.appendChild(trash);
+      const armorRow2 = h("div", { class: "sb-srow sb-crow" }); for (let i = 0; i < 4; i++) armorRow2.appendChild(slotEl("armor", i, game.armor[i], "sb-armor" + i)); armorRow2.appendChild(slotEl("off", 0, game.offh[0], "sb-offslot")); armorRow2.appendChild(trash);
       winPanel.append(tabs, search, holder, armorRow2);
       creScrollApply = () => { holder.scrollTop = creScroll; };
     } else if (w.kind === "inv") {
-      const armor = h("div", { class: "sb-armorcol" }); for (let i = 0; i < 4; i++) armor.appendChild(slotEl("armor", i, game.armor[i], "sb-armor" + i));
+      const armor = h("div", { class: "sb-armorcol" }); for (let i = 0; i < 4; i++) armor.appendChild(slotEl("armor", i, game.armor[i], "sb-armor" + i)); armor.appendChild(slotEl("off", 0, game.offh[0], "sb-offslot"));
       winPanel.appendChild(h("div", { class: "sb-top" }, armor, h("div", { class: "sb-defense" }, h("div", { class: "sb-big" }, String(game.defense())), h("div", null, "Rüstung")), h("div", { class: "sb-craftbox" }, grid(2), arrow(), slotEl("out", 0, outStack(), "sb-out"))));
     } else if (w.kind === "bench") {
       winPanel.appendChild(h("div", { class: "sb-top" }, h("div", { class: "sb-craftbox" }, grid(3), arrow(), slotEl("out", 0, outStack(), "sb-out"))));
@@ -437,7 +440,7 @@ export function mount(root, ctx) {
   });
   hotbar.addEventListener("pointerdown", e => {
     const el = e.target.closest && e.target.closest(".sb-s");
-    if (el && !game.win) { e.preventDefault(); game.select(Number(el.getAttribute("data-idx"))); }
+    if (el && !game.win) { e.preventDefault(); if (el.getAttribute("data-area") === "off") { if (game.swapHands()) dirty = true; } else game.select(Number(el.getAttribute("data-idx"))); }
   });
   function toggleInv() { if (game.win) game.closeWindow(); else game.openWindow("inv"); sig.win = ""; }
   function toggleAdv() { if (game.win && game.win.kind === "adv") game.closeWindow(); else game.openWindow("adv"); sig.win = ""; }
@@ -536,7 +539,7 @@ export function mount(root, ctx) {
   }
   function pause() {
     if (state !== "playing") return;
-    state = "paused"; cancelAnimationFrame(raf); raf = 0; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop(); game.bow = null; game.blocking = false;
+    state = "paused"; cancelAnimationFrame(raf); raf = 0; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop(); game.bow = null; game.xbow = null; game.blocking = false;
     padMine = padUse = false; pad.left = pad.right = pad.jump = pad.down = false; padEl.hidden = true; padShown = false;
     if (!chatIn.hidden) closeChat();
     saveNow(); page = "main"; showOverlay("paused"); draw(0);
@@ -687,7 +690,8 @@ export function mount(root, ctx) {
     if (game.win) return;
     const a = KEYMAP[e.key];
     if (a) { e.preventDefault(); act(a, true); return; }
-    if (e.key === "q" || e.key === "Q") { e.preventDefault(); game.throwHeld(e.shiftKey); dirty = true; }
+    if (e.key === "f" || e.key === "F") { e.preventDefault(); if (!e.repeat && game.swapHands()) { dirty = true; sfx("click"); } }
+    else if (e.key === "q" || e.key === "Q") { e.preventDefault(); game.throwHeld(e.shiftKey); dirty = true; }
     else if (e.key === "m" || e.key === "M") { soundBtn.click ? soundBtn.click() : null; }
   }
   function onKeyUp(e) { const a = KEYMAP[e.key]; if (a) act(a, false); }
@@ -705,7 +709,8 @@ export function mount(root, ctx) {
       const m = worldMouse();
       mouse.first = false;
       if (game.use(Math.floor(m.x), Math.floor(m.y))) { placeCd = 0.25; dirty = true; mouse.used = true; }
-      else if (game.selItem() === "bow" && game.count("arrow") === 0) say("Du brauchst Pfeile für den Bogen.", 1800);
+      else if (game.selItem() === "bow" && !game.hasAmmo()) say("Du brauchst Pfeile für den Bogen.", 1800);
+      else if (game.selItem() === "crossbow" && !game.xbowLoaded() && !game.hasAmmo(true)) say("Du brauchst Pfeile oder Feuerwerksraketen für die Armbrust.", 2200);
     } else mouse.used = false;
   }
   canvas.addEventListener("pointerdown", e => {
@@ -716,8 +721,8 @@ export function mount(root, ctx) {
   });
   canvas.addEventListener("pointermove", setPointer);
   const up = () => {
-    if (mouse.down && mouse.btn === 2 && game.bow) { const m = worldMouse(); if (game.bowRelease(m.x, m.y)) { dirty = true; } }
-    game.bow = null; game.blocking = false; mouse.used = false;
+    if (mouse.down && mouse.btn === 2 && (game.bow || game.xbow)) { const m = worldMouse(); if (game.handRelease(m.x, m.y)) { dirty = true; } }
+    game.bow = null; game.xbow = null; game.blocking = false; mouse.used = false;
     mouse.down = false; game.mineStop();
   };
   canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
@@ -768,16 +773,17 @@ export function mount(root, ctx) {
       const m = worldMouse(), tx = Math.floor(m.x), ty = Math.floor(m.y);
       if (mouse.btn === 2) {
         placeCd -= dt;
-        const heldIt = game.selItem();
-        if (heldIt === "shield") game.blocking = true; else if (heldIt === "bow" && !mouse.used) { if (game.bowDraw(dt) && game.bow.t < dt * 1.5) sfx("click"); }
+        const hs = game.handHold(dt, m.x, m.y, mouse.used);
+        if ((hs === "bow" && game.bow.t < dt * 1.5) || (hs === "xbow" && game.xbow && game.xbow.t < dt * 1.5)) sfx("click");
         if (mouse.first) { mouse.first = false; if (game.use(tx, ty)) { placeCd = 0.25; dirty = true; } }
-        else if (placeCd <= 0) { const it = game.selItem(); if (it && ITEMS[it].block && !BLOCKS[game.tile(tx, ty)].interact && game.place(tx, ty)) { placeCd = 0.12; dirty = true; } }
+        else if (placeCd <= 0) { const it = game.handItem(); if (it && ITEMS[it].block && !BLOCKS[game.tile(tx, ty)].interact && game.place(tx, ty)) { placeCd = 0.12; dirty = true; } }
       }
       else if (game.attack(m.x, m.y)) { swingT = 0.25; sfx("kill"); }
       else { const r = game.mineStep(tx, ty, dt); mining = r === 1 || r === 2; if (mining && Math.random() < dt * 9) sfx("pick"); if (r === 1 && Math.random() < dt * 22) spark(tx + 0.5, ty + 0.5, game.tile(tx, ty), 1); }
     } else game.mineStop();
     game.aim = mouse.in ? worldMouse() : null;
     swingT = Math.max(0, swingT - dt);
+    for (let i = sweeps.length - 1; i >= 0; i--) { sweeps[i].life -= dt; if (sweeps[i].life <= 0) sweeps.splice(i, 1); }
     game.player.swing = mining ? 1 : swingT > 0 ? 1 : 0;
     const air0 = !game.player.onGround, vy0 = game.player.vy;
     game.update(dt);
@@ -817,7 +823,15 @@ export function mount(root, ctx) {
       else if (e.t === "crit") { floats.push({ x: e.x, y: e.y - 0.9, text: "Krit!", color: "#fff070", life: 0.9 }); }
       else if (e.t === "shoot") sfx("shoot");
       else if (e.t === "thunk") sfx("thunk");
-      else if (e.t === "block") { spark(game.player.x + game.player.w / 2 + game.player.face * 0.6, game.player.y + 0.8, [210, 214, 226], 6); sfx("block"); }
+      else if (e.t === "block") { if (e.mob) spark(e.x, e.y, [210, 214, 226], 6); else spark(game.player.x + game.player.w / 2 + game.player.face * 0.6, game.player.y + 0.8, [210, 214, 226], 6); sfx("block"); }
+      else if (e.t === "shieldbreak") { spark(e.x, e.y + 0.6, [200, 150, 90], 12); sfx("hurt"); if (!e.mob) say("Dein Schild ist für 5 Sekunden lahmgelegt!", 1800); }
+      else if (e.t === "sweep") { sweeps.push({ x: e.x, y: e.y, dir: e.dir, life: 0.22 }); sfx("kill"); }
+      else if (e.t === "thorns") { spark(e.x, e.y + 0.8, [150, 210, 90], 6); }
+      else if (e.t === "swap") sfx("click");
+      else if (e.t === "xbowload") { sfx("click"); dirty = true; }
+      else if (e.t === "rocket") { spark(e.x, e.y, [255, 190, 80], 8); sfx("shoot"); }
+      else if (e.t === "firework") { const c = e.col >= 0 ? hex2rgb(COLORS[e.col & 15][2]) : [255, 220, 120]; for (let r = 0; r < 3; r++) spark(e.x, e.y, r === 1 ? [255, 255, 255] : c, 14); sfx("kill"); }
+      else if (e.t === "cloud") { spark(e.x, e.y - 0.3, hex2rgb(e.col), 12); sfx("splash"); }
       else if (e.t === "splash") { spark(e.x, e.y, hex2rgb(e.col), 16); sfx("splash"); }
       else if (e.t === "till") { spark(e.x + 0.5, e.y + 0.3, B.DIRT, 6); sfx("place"); dirty = true; }
       else if (e.t === "grow") { spark(e.x + 0.5, e.y + 0.4, 1000, 9); sfx("xp"); dirty = true; }
@@ -1049,6 +1063,21 @@ export function mount(root, ctx) {
     if (state === "playing" && mouse.in !== false && (mouse.in || mouse.down)) {
       const m = worldMouse(), tx = Math.floor(m.x), ty = Math.floor(m.y), [bx, by] = scr(tx, ty), ok = game.reachOk(tx, ty);
       g.strokeStyle = ok ? "rgba(255,255,255,.85)" : "rgba(255,90,90,.55)"; g.lineWidth = Math.max(1, S); g.strokeRect(bx + S * 0.5, by + S * 0.5, tile - S, tile - S);
+      // Angriffsladung (Etappe 10): schmaler Balken unter dem Zielrahmen, solange der nächste Schlag noch lädt
+      const ch = game.attackCharge();
+      if (ch < 1 && !game.win) {
+        const bw2 = tile, bx2 = bx, by2 = by + tile + S;
+        g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(bx2 - S, by2 - S, bw2 + 2 * S, 3 * S + S); g.fillStyle = ch >= 0.9 ? "#ffe14a" : "#e8ecf4"; g.fillRect(bx2, by2, Math.round(bw2 * ch), 2 * S);
+      }
+    }
+    // Schwungangriff: heller Bogen vor dem Spieler
+    for (const sw of sweeps) {
+      const [sx0, sy0] = scr(sw.x - (sw.dir || 1) * 1.2, sw.y), k = 1 - sw.life / 0.22;
+      g.save(); g.translate(sx0, sy0); g.scale(sw.dir || 1, 1);
+      g.globalAlpha = Math.max(0, 0.9 - k); g.strokeStyle = "#fffbe0"; g.lineWidth = Math.max(2, S * 1.6); g.lineCap = "round";
+      g.beginPath(); g.arc(0, 0, tile * (1.7 + k * 0.5), -1.1 + k * 0.5, 1.1 + k * 0.3); g.stroke();
+      g.globalAlpha = Math.max(0, 0.6 - k); g.lineWidth = Math.max(1, S * 0.8); g.beginPath(); g.arc(0, 0, tile * (1.3 + k * 0.4), -0.9 + k * 0.4, 0.9 + k * 0.3); g.stroke();
+      g.restore();
     }
 
     // --- Drops ---
@@ -1078,7 +1107,25 @@ export function mount(root, ctx) {
       g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(Math.round(px - bwid / 2) - S, py - 7 * S - S, bwid + 2 * S, 3 * S + 2 * S);
       g.fillStyle = f >= 1 ? "#ffe14a" : "#ffffff"; g.fillRect(Math.round(px - bwid / 2), py - 7 * S, Math.round(bwid * f), 3 * S);
     }
+    if (game.xbow && game.xbow.t > 0.05) {
+      const p = game.player, [px, py] = scr(p.x + p.w / 2, p.y), bwid = 16 * S, f = Math.min(1, game.xbow.t / game.crossbowTime());
+      g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(Math.round(px - bwid / 2) - S, py - 7 * S - S, bwid + 2 * S, 3 * S + 2 * S);
+      g.fillStyle = f >= 1 ? "#6ae06a" : "#ffffff"; g.fillRect(Math.round(px - bwid / 2), py - 7 * S, Math.round(bwid * f), 3 * S);
+    }
     drawFluids(fluids, tile);
+    // Wolken am Boden (Verweiltränke, Drachenatem)
+    for (const c of game.clouds) {
+      if (c.x + c.r < left - 2 || c.x - c.r > left + cw / tile + 2) continue;
+      const [cx0, cy0] = scr(c.x, c.y), rr = c.r * tile, now2 = performance.now(), col = c.kind === "breath" ? [176, 74, 216] : hex2rgb(potionColorOf(c.pot));
+      const fade = clamp(1 - c.t / c.life, 0.25, 1);
+      g.save(); g.translate(cx0, cy0);
+      g.globalAlpha = 0.28 * fade; g.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; g.beginPath(); g.ellipse(0, -0.15 * tile, rr, Math.min(rr * 0.42, tile * 0.95), 0, 0, Math.PI * 2); g.fill();
+      for (let i = 0; i < 9; i++) {
+        const a = now2 / 900 + i * 0.7, px2 = Math.sin(a * 1.3 + i) * rr * 0.85, py2 = -0.2 * tile - ((now2 / 1400 + i * 0.37) % 1) * tile * 1.1;
+        g.globalAlpha = (0.55 - ((now2 / 1400 + i * 0.37) % 1) * 0.5) * fade; g.fillStyle = `rgb(${Math.min(255, col[0] + 50)},${Math.min(255, col[1] + 50)},${Math.min(255, col[2] + 50)})`; g.fillRect(Math.round(px2), Math.round(py2), Math.max(2, S * 1.5), Math.max(2, S * 1.5));
+      }
+      g.restore();
+    }
     // Partikel
     for (const q of parts) { const [bx, by] = scr(q.x, q.y); g.globalAlpha = clamp(q.life * 2, 0, 1); g.fillStyle = rgb(q.c); g.fillRect(bx, by, Math.max(2, q.s * tile), Math.max(2, q.s * tile)); }
     g.globalAlpha = 1;
@@ -1193,7 +1240,7 @@ export function mount(root, ctx) {
     const w = vw + 1, hh = vh + 1;
     if (lightCv.width !== w || lightCv.height !== hh) { lightCv.width = glowCv.width = w; lightCv.height = glowCv.height = hh; lightImg = lg.createImageData(w, hh); glowImg = gg.createImageData(w, hh); }
     const a = lightImg.data, b = glowImg.data, sky = game.sky, blk = game.blk, p = game.player;
-    const pcx = p.x + p.w / 2, pcy = p.y + p.h / 2, fl = 1 + 0.05 * Math.sin(game.time * 2600), nv = game.hasFx("night_vision");
+    const he = game.heldEmit(), pcx = p.x + p.w / 2, pcy = p.y + p.h / 2, fl = 1 + 0.05 * Math.sin(game.time * 2600), nv = game.hasFx("night_vision");
     const noSky = !!game.noSky, amb = game.dim === 2 ? 7 : game.ambient || 0, tintC = game.dim === 1 ? [34, 4, 4] : game.dim === 2 ? [12, 2, 28] : null;
     for (let j = 0; j < hh; j++) {
       const ty = y0 + j - 0, rowOk = ty >= 0 && ty < H;
@@ -1203,7 +1250,8 @@ export function mount(root, ctx) {
         if (rowOk && tx >= 0 && tx < W) { const k = ty * W + tx; s = noSky ? 0 : sky[k] * d; bl = blk[k]; }
         else if (ty < 0 && tx >= 0 && tx < W) s = noSky ? 0 : 15 * d;
         const near = Math.max(0, 1 - Math.hypot(tx + 0.5 - pcx, ty + 0.5 - pcy) / 4.2);
-        const lum = Math.max(s, bl * fl, near * near * 5.2, nv ? 12 : 0, amb) / 15;
+        const hl = he ? Math.max(0, he * fl - Math.hypot(tx + 0.5 - pcx, ty + 0.5 - pcy) * 1.5) : 0;
+        const lum = Math.max(s, bl * fl, near * near * 5.2, hl, nv ? 12 : 0, amb) / 15;
         const bright = Math.max(0.025, Math.pow(Math.min(1, lum), 0.82));
         const skyShare = s / (s + bl + 0.001), night = nv ? (1 - d) * 0.25 : 1 - d;
         if (tintC) { a[o] = tintC[0]; a[o + 1] = tintC[1]; a[o + 2] = tintC[2]; } else { a[o] = 2 * night * skyShare; a[o + 1] = 6 * night * skyShare; a[o + 2] = 26 * night * skyShare; }
@@ -1292,7 +1340,24 @@ export function mount(root, ctx) {
       else { const sz = Math.round(7 * S); g.drawImage(base, 0, 0, T, T, Math.round(-sz * 0.2), Math.round(-sz * 0.9), sz, sz); }
     }
     g.restore();
-    if (game.blocking && game.selItem() === "shield") g.drawImage(art.base("shield"), 0, 0, T, T, Math.round(6.5 * S), Math.round(6 * S), Math.round(14 * S), Math.round(14 * S));
+    // Schild (Haupt- oder Zweithand): erhoben vor dem Körper, sonst gesenkt am Arm; nach einem Axthieb grau und wackelnd
+    const mainSh = game.selStack(), offSh = game.offh[0];
+    const shSt = mainSh && mainSh.id === "shield" ? mainSh : offSh && offSh.id === "shield" ? offSh : null;
+    if (shSt) {
+      const dis = game.shieldCd > 0, up = game.blocking && !dis, raised = up ? Math.min(1, game.shieldT / 0.25) : 0;
+      const sz = Math.round(13 * S), shx = Math.round((up ? 6.8 : 4.2 + (dis ? Math.sin(performance.now() / 40) * 0.5 : 0)) * S), shy = Math.round((up ? 6.4 - raised * 0.4 : 12.5) * S);
+      if (dis) g.globalAlpha = 0.55;
+      if (up) { g.drawImage(art.base("shield", shSt), 0, 0, T, T, shx, shy, sz, sz); }
+      else { g.save(); g.translate(shx, shy); g.rotate(-0.35); g.drawImage(art.base("shield", shSt), 0, 0, T, T, 0, 0, Math.round(sz * 0.8), Math.round(sz * 0.8)); g.restore(); }
+      if (dis) { g.globalAlpha = 0.3; R(4, 6, 8, 12, "#c83030"); }
+    }
+    // Zweite Hand: Fackel, Totem u. a. am hinteren Arm (Schild ist oben gezeichnet)
+    if (offSh && offSh.id !== "shield") {
+      g.save(); g.translate(Math.round(2.2 * S), Math.round(11 * S)); g.rotate(-0.15);
+      R(-1, -0.5, 2.4, 6, "#2f5aa8"); R(-1, 5, 2.4, 1.8, "#d8aa84");
+      const sz = Math.round(6 * S); g.drawImage(art.base(offSh.id, offSh), 0, 0, T, T, Math.round(-sz * 0.55), Math.round(3.6 * S) - sz, sz, sz);
+      g.restore();
+    }
     g.restore();
   }
   function drawVillager(v, scr) {

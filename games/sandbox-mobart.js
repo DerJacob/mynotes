@@ -1,4 +1,5 @@
-import { drawMob5, drawProjectile5, MOB_COLORS5 } from "./sandbox-mobart5.js?v=9";
+import { drawMob5, drawProjectile5, MOB_COLORS5 } from "./sandbox-mobart5.js?v=10";
+import { potionColor } from "./sandbox-brew.js?v=10";
 // =====================================================================
 // Blockdorf – Tiere und Monster malen (Etappe 3)
 // Alle Figuren sind aus Rechtecken zusammengesetzt (1 Bildpunkt = S Bildschirmpixel), eigene Entwürfe im
@@ -160,6 +161,14 @@ export function drawMob(g, m, bx, by, S, T, now, art) {
       g.fillStyle = i % 2 ? "#ffd24a" : "#ff8a1c"; g.fillRect(Math.round((0.5 + i * (bw / 5) + jx) * S), Math.round((bh * 0.45 - hh + i % 3 * 3) * S), Math.round(2.4 * S), Math.round(hh * S));
     }
   }
+  if (m.shield) {                                                        // Schild in der Vorderhand (Etappe 10): oben = schützt, lahm = gesenkt
+    const up = !(m.shieldOff > 0), x = bw * 0.6, y = bh * (up ? 0.3 : 0.52);
+    R(x, y, 5.4, 8.4, "#4a2e16"); R(x + 0.6, y + 0.6, 4.2, 7.2, up ? "#8a5a2a" : "#6a5a4a"); R(x + 0.6, y + 3.4, 4.2, 1, "#b8b8c4"); R(x + 2.2, y + 0.6, 1, 7.2, "#b8b8c4"); R(x + 2, y + 3.2, 1.4, 1.4, "#e8e8f0");
+  }
+  if (m.glow > 0) {                                                      // Leuchten (Spektralpfeil): gelber Umriss
+    g.globalAlpha = 0.55 + 0.25 * Math.sin(now / 110); g.strokeStyle = "#ffe14a"; g.lineWidth = Math.max(1, Math.round(S * 0.9));
+    g.strokeRect(Math.round(-0.5 * S), Math.round(-0.5 * S), Math.round(bw * S + S), Math.round(bh * S + S)); g.globalAlpha = 1;
+  }
   g.restore();
 }
 
@@ -182,14 +191,21 @@ export function drawProjectile(g, a, sx, sy, S, now) {
   if (drawProjectile5(g, a, sx, sy, S, now)) return;
   g.save();
   g.translate(sx, sy);
-  if (a.kind === "potion") {
+  if (a.kind === "rocket") {
+    g.rotate(a.up ? -Math.PI / 2 : (a.ang !== undefined ? a.ang : Math.atan2(a.vy, a.vx)));
+    g.fillStyle = "#8a6a42"; g.fillRect(-9 * S, -0.5 * S, 6 * S, Math.max(1, S));
+    g.fillStyle = "#e8dcc0"; g.fillRect(-4 * S, -1.5 * S, 6 * S, 3 * S); g.fillStyle = "#d83a3a"; g.fillRect(-1 * S, -1.5 * S, 1.6 * S, 3 * S); g.fillRect(2 * S, -1.1 * S, 1.8 * S, 2.2 * S);
+    g.fillStyle = "#ffb030"; g.fillRect(-7 * S - Math.random() * 3 * S, -S, 3 * S, 2 * S); g.fillStyle = "#fff0a0"; g.fillRect(-5 * S, -0.5 * S, 2 * S, S);
+  } else if (a.kind === "potion") {
     g.rotate(now / 120);
-    g.fillStyle = "#6a2a8a"; g.fillRect(-2 * S, -2 * S, 4 * S, 4 * S); g.fillStyle = "#c050e0"; g.fillRect(-1.5 * S, -1 * S, 3 * S, 2.5 * S); g.fillStyle = "#e8e0d0"; g.fillRect(-1 * S, -3 * S, 2 * S, 1.2 * S);
+    g.fillStyle = a.pot !== undefined ? potionColor(a.pot) : "#6a2a8a"; g.fillRect(-2 * S, -2 * S, 4 * S, 4 * S); g.fillStyle = a.pot !== undefined ? "#ffffff55" : "#c050e0"; g.fillRect(-1.5 * S, -1 * S, 3 * S, 2.5 * S); g.fillStyle = "#e8e0d0"; g.fillRect(-1 * S, -3 * S, 2 * S, 1.2 * S);
   } else {
     g.rotate(a.ang !== undefined ? a.ang : Math.atan2(a.vy, a.vx));
     g.fillStyle = "#8a6a42"; g.fillRect(-9 * S, -0.5 * S, 10 * S, Math.max(1, S));
-    g.fillStyle = "#aeb2bc"; g.fillRect(0, -1.2 * S, 2.6 * S, 2.4 * S); g.fillStyle = "#e8ecf4"; g.fillRect(1.6 * S, -0.6 * S, 1.4 * S, 1.2 * S);
-    g.fillStyle = "#f0f0f4"; g.fillRect(-9 * S, -1.6 * S, 3 * S, 3.2 * S); g.fillStyle = "#c0c0cc"; g.fillRect(-9 * S, -0.3 * S, 3 * S, 0.6 * S);
+    const tipC = a.ak === "spectral" ? "#ffd83a" : a.tip !== undefined ? potionColor(a.tip) : "#aeb2bc";
+    if (a.ak === "spectral") { g.globalAlpha = 0.35 + 0.15 * Math.sin(now / 90); g.fillStyle = "#ffe85a"; g.fillRect(-8 * S, -2.6 * S, 12 * S, 5.2 * S); g.globalAlpha = 1; }
+    g.fillStyle = tipC; g.fillRect(0, -1.2 * S, 2.6 * S, 2.4 * S); g.fillStyle = a.ak === "spectral" ? "#fff6a8" : "#e8ecf4"; g.fillRect(1.6 * S, -0.6 * S, 1.4 * S, 1.2 * S);
+    g.fillStyle = a.ak === "spectral" ? "#fff2a0" : "#f0f0f4"; g.fillRect(-9 * S, -1.6 * S, 3 * S, 3.2 * S); g.fillStyle = a.tip !== undefined ? tipC : "#c0c0cc"; g.fillRect(-9 * S, -0.3 * S, 3 * S, 0.6 * S);
   }
   g.restore();
 }

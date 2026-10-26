@@ -2,7 +2,7 @@
 // Blockdorf – Grafik der Etappe 5: Nether, Ende, Leuchtfeuer.
 // Eigene 16 × 16-Bilder im kantigen Stil der 1.8-Zeit. Portale, Magma und Spawner haben zwei Bilder und wechseln beim Zeichnen.
 // =====================================================================
-import { B } from "./sandbox-data.js?v=9";
+import { B } from "./sandbox-data.js?v=10";
 
 export const T5 = 16;
 /** Zusatzbilder im Atlas (0…80 und 81…101 sind die Blöcke selbst; 150…189 gehören Etappe 4) */

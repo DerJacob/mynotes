@@ -8,7 +8,7 @@
 //   Staub = Stärke · Fackel = Befestigung (0 unten, 1 links, 2 rechts) · Hebel = an | Befestigung<<1 (0 unten, 1 links, 2 rechts, 3 oben)
 //   Knopf = Restzeit (Ticks) | Befestigung<<4 · Platte = gedrückt · Kolben/Spender = Richtung (0 rechts, 1 links, 2 oben, 3 unten) | 4 (ausgefahren / ausgelöst)
 // =====================================================================
-import { B, BLOCKS, ITEMS, RS_IDS, isFluid } from "./sandbox-data.js?v=9";
+import { B, BLOCKS, ITEMS, RS_IDS, isFluid } from "./sandbox-data.js?v=10";
 
 export const RS_TICK = 0.1;
 export const DIRS = [[1, 0], [-1, 0], [0, -1], [0, 1]];
@@ -337,9 +337,9 @@ export function installRedstone(Sandbox, K) {
     if (s.id === "arrow") {
       use1();
       this.proj.push({ kind: "arrow", x: cx - dx * 0.3, y: cy, vx: dx * 22, vy: dy * 22 - (dx ? 1.5 : 0), dmg: 4, fromPlayer: true, age: 0, stuck: false, stuckT: 0, disp: true });
-    } else if (s.id === "splash_potion") {
+    } else if (s.id === "splash_potion" || s.id === "lingering_potion") {
       use1();
-      this.proj.push({ kind: "potion", x: cx - dx * 0.3, y: cy, vx: dx * 10, vy: dy * 10 - 4, dmg: 0, pot: s.d, fromPlayer: true, age: 0, stuck: false, stuckT: 0 });
+      this.proj.push({ kind: "potion", x: cx - dx * 0.3, y: cy, vx: dx * 10, vy: dy * 10 - 4, dmg: 0, pot: s.d, ling: s.id === "lingering_potion", fromPlayer: true, age: 0, stuck: false, stuckT: 0 });
     } else if ((s.id === "water_bucket" || s.id === "lava_bucket") && (front === B.AIR || this._softAt(front))) {
       this._setFluid(fy * W + fx, s.id === "water_bucket" ? B.WATER : B.LAVA, 9);
       ent.s[k] = stk("bucket");

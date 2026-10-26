@@ -4,9 +4,9 @@
 //   Bambus (wächst), Höhlenranken (wachsen nach unten, tragen Glühbeeren), Mangrovenschössling und Knochenmehl.
 // Wird in sandbox-engine.js eingebunden und hängt sich an bestehende Methoden (Muster wie in den früheren Etappen).
 // =====================================================================
-import { B, BLOCKS, ITEMS, isHang, isAttach, bambooBase, isPlant } from "./sandbox-data.js?v=9";
-import { mulberry32 } from "./sandbox-noise.js?v=9";
-import { mangroveTree } from "./sandbox-trees8.js?v=9";
+import { B, BLOCKS, ITEMS, isHang, isAttach, bambooBase, isPlant } from "./sandbox-data.js?v=10";
+import { mulberry32 } from "./sandbox-noise.js?v=10";
+import { mangroveTree } from "./sandbox-trees8.js?v=10";
 
 const GROW = { bamboo: 0.045, vine: 0.04, berry: 0.12, range: 36 };
 export function installFlora(Sandbox, K) {
