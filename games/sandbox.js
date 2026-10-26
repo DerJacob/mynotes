@@ -12,6 +12,7 @@ import { drawBlock4 } from "./sandbox-art4.js?v=10";
 import { drawBlock8 } from "./sandbox-art8.js?v=10";
 import { drawBlock9, bannerCloth } from "./sandbox-art9.js?v=10";
 import { drawBlock11, plantSprite, FIRST11 } from "./sandbox-art11.js?v=10";
+import { FIRST12, COL12 } from "./sandbox-art12.js?v=10";
 import { LOOM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, FIRST9, COLORS } from "./sandbox-data.js?v=10";
 import { mcY } from "./sandbox-const.js?v=10";
 import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=10";
@@ -127,7 +128,7 @@ export function mount(root, ctx) {
     h("div", { class: "sb-view" }, canvas,
       h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, chatBtn, soundBtn, pauseBtn)),
       toastEl, chatLog, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), chatIn, winWrap, cursorEl, padEl, overlay),
-    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 11 · Etappe 11 · Spielstand 12")));
+    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 12 · Etappe 12 · Spielstand 13")));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
   function applySettings() {
     audio.apply(settings);
@@ -1074,14 +1075,14 @@ export function mount(root, ctx) {
         const id = game.tiles[ty * W + tx], gy = game.ground[tx], bd = BLOCKS[id];
         if (ty > gy && (id === B.AIR || !bd.solid || id === B.GLASS)) g.drawImage(atlas, (dim === 1 ? IDX5.WALL_NETHER : ty < gy + 7 ? IDX.WALL_DIRT : ty >= DEEP_Y - 2 ? IDX.WALL_DEEP : IDX.WALL_STONE) * T, 0, T, T, px, py, tile, tile);
         if (id === B.AIR) continue;
-        if (bd.fluid) { fluids.push(px, py, id, game.lvl[ty * W + tx], ty > 0 ? game.tiles[(ty - 1) * W + tx] : 0); if (id === B.WATER) { const wa = game.aux[ty * W + tx]; if (wa > 0 && wa < 40) plants.push(px, py, wa, tx); } continue; }
+        if (bd.fluid) { fluids.push(px, py, id, game.lvl[ty * W + tx], ty > 0 ? game.tiles[(ty - 1) * W + tx] : 0); if (id === B.WATER) { const wa = game.aux[ty * W + tx]; if (wa > 0 && wa < 48) plants.push(px, py, wa, tx); } continue; }
         if ((id === B.SOUL_SAND || id === B.MAGMA) && ty > 0 && game.tiles[(ty - 1) * W + tx] === B.WATER) bcols.push(tx, ty, id === B.SOUL_SAND ? 1 : -1);
         let idx = id, row = 0;
         if (id === B.FLOWER) idx = [B.FLOWER, IDX.FLOWER2, IDX.FLOWER3][(tx * 7 + ty * 3) % 3];
         else if (id === B.FURNACE) { const fe = game.ents.get(tx + "," + ty); if (fe && fe.burn > 0) idx = IDX.FURNACE_LIT; }
         else if (id === B.GRASS || id === B.LEAVES || id === B.TALLGRASS) { idx = game.biomes[tx] * 3 + (id === B.GRASS ? 0 : id === B.LEAVES ? 1 : 2); row = 1; }
         else if (ty >= DEEP_Y && ORE_DEEP[id] != null) idx = ORE_DEEP[id];
-        if (id >= FIRST11 && drawBlock11(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 11 */ } else if (id >= FIRST9 && drawBlock9(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 9 */ } else if (id >= B.POWDER_SNOW && drawBlock8(g, atlas, id, 0, px, py, tile)) { /* Etappe 8 */ } else if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
+        if (id >= FIRST12) g.drawImage(atlas, COL12(id) * T, 0, T, T, px, py, tile, tile); /* Etappe 12 */ else if (id >= FIRST11 && drawBlock11(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 11 */ } else if (id >= FIRST9 && drawBlock9(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 9 */ } else if (id >= B.POWDER_SNOW && drawBlock8(g, atlas, id, 0, px, py, tile)) { /* Etappe 8 */ } else if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
         if (id === B.TORCH) { const fl = 0.5 + 0.5 * Math.sin(game.time * 3000 + tx * 2.1); g.fillStyle = `rgba(255,${180 + fl * 60 | 0},80,${0.35 + fl * 0.3})`; g.fillRect(px + 6 * S, py + (2 + (fl > 0.6 ? 0 : 1)) * S, 4 * S, 3 * S); }
       }
     }

@@ -19,6 +19,7 @@ import { addContent6 } from "./sandbox-world6.js?v=10";
 import { addContent8 } from "./sandbox-world8.js?v=10";
 import { addContent9 } from "./sandbox-world9.js?v=10";
 import { addContent11 } from "./sandbox-world11.js?v=10";
+import { addContent12 } from "./sandbox-world12.js?v=10";
 import { migrateData } from "./sandbox-migrate.js?v=10";
 import { installDims } from "./sandbox-dims.js?v=10";
 import { installBoss } from "./sandbox-boss.js?v=10";
@@ -29,6 +30,7 @@ import { installCraft9 } from "./sandbox-craft9.js?v=10";
 import { installCombat10 } from "./sandbox-combat10.js?v=10";
 import { installOcean } from "./sandbox-ocean11.js?v=10";
 import { installSeaMobs } from "./sandbox-seamobs11.js?v=10";
+import { installFauna } from "./sandbox-fauna12.js?v=10";
 export { MODES, WEATHER_NAMES, MOON_NAMES, MOON_FULL, findItem, findMob } from "./sandbox-polish.js?v=10";
 import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=10";
 export { BIOMES, BIOME_NAMES };
@@ -39,7 +41,7 @@ export { W, H, SURF, SPAWN_X };
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=10";
 export { mulberry32 };
@@ -123,7 +125,7 @@ export class Sandbox {
 
   // ---------- Welt erzeugen ----------
   _generate() {
-    const w = addContent11(addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed), this.seed);
+    const w = addContent12(addContent11(addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed), this.seed), this.seed);
     this.tiles = w.tiles; this.lvl = w.lvl; this.aux = w.aux; this.structs = w.structs; this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
     this._worldChests = w.chests;
     const sh = placeStronghold(this.seed, this.tiles, this.lvl, this.aux, SPAWN_X, SURF);   // Festung mit Endportal tief unter der Erde
@@ -176,7 +178,7 @@ export class Sandbox {
       mobs: this._mobsToData(ow.mobs), adv: { ...this.adv }, bed: this.bed ? { ...this.bed } : null,
       aux: encodeTiles(ow.aux), fx: Object.fromEntries(Object.entries(this.fx).map(([k, f]) => [k, [+f.t.toFixed(1), f.amp]])), es: this.enchSeed
     };
-    Object.assign(data, this._villSave(), this._polishSave(), this._c10Save(), this._oceanSave());
+    Object.assign(data, this._villSave(), this._polishSave(), this._c10Save(), this._oceanSave(), this._faunaSave());
     this._saveDims(data);
     return data;
   }
@@ -230,6 +232,7 @@ export class Sandbox {
     this._polishLoad(d);
     this._c10Load(d);
     this._oceanLoad(d);
+    this._faunaLoad(d);
     // Falls der Spielstand im Boden steckt (beschädigt), zurück ins Dorf (steht der Spieler im Nether/Ende, prüft _restoreDim das)
     if (!d.dim && this._hit(p)) { p.x = SPAWN_X - 6.4; p.y = SURF - 1.8 - 0.001; }
   }
@@ -468,3 +471,4 @@ installCraft9(Sandbox, { clamp, W, H });
 installCombat10(Sandbox, { clamp, W, H, REACH });
 installOcean(Sandbox, { clamp, W, H });
 installSeaMobs(Sandbox, { clamp, W, H, SURF });
+installFauna(Sandbox, { clamp, W, H, SURF });

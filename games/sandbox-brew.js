@@ -129,7 +129,7 @@ export function stackLines(st) {
 
 /** Brauen: was passiert, wenn man Zutat ing auf Flasche st gibt? Liefert den neuen Stapel oder null. */
 const WATER_ING = { nether_wart: "awkward", fermented_spider_eye: "weakness", sugar: "mundane", glistering_melon_slice: "mundane", spider_eye: "mundane", blaze_powder: "mundane", rabbit_foot: "mundane" };
-const AWKWARD_ING = { golden_carrot: "night_vision", sugar: "swiftness", rabbit_foot: "leaping", pufferfish: "water_breathing", glistering_melon_slice: "healing", spider_eye: "poison", blaze_powder: "strength", magma_cream: "fire_resistance", ghast_tear: "regeneration" };
+const AWKWARD_ING = { phantom_membrane: "slow_falling", golden_carrot: "night_vision", sugar: "swiftness", rabbit_foot: "leaping", pufferfish: "water_breathing", glistering_melon_slice: "healing", spider_eye: "poison", blaze_powder: "strength", magma_cream: "fire_resistance", ghast_tear: "regeneration" };
 const CORRUPT = { night_vision: "invisibility", swiftness: "slowness", leaping: "slowness", fire_resistance: "slowness", healing: "harming", poison: "harming", water_breathing: "harming" };
 const LONGER = new Set(["night_vision", "invisibility", "leaping", "fire_resistance", "swiftness", "slowness", "water_breathing", "poison", "weakness", "strength", "regeneration", "slow_falling"]);
 const STRONGER = new Set(["leaping", "swiftness", "slowness", "healing", "harming", "poison", "regeneration", "strength"]);

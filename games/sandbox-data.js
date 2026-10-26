@@ -40,7 +40,9 @@ export const B = {
   DOORM_B: 193, DOORM_T: 194, DOORM_BO: 195, DOORM_TO: 196, TRAP: 197, TRAP_O: 198, SIGN: 199, HSIGN: 200, CBOOKSHELF: 201,
   CANDLE_LIT: 202, BULB_ON: 203, TRAP_OL: 204,
   // Etappe 11: Ozean (Zusatzfeld aux: Korallenart 0–4 · Schildkrötenei: Anzahl-1 | Reifestufe·4). Wasserpflanzen sind KEINE Blöcke, sie stehen als Zusatzfeld auf Wasserquellen (WP)
-  CORAL_BLOCK: 205, DEAD_CORAL_BLOCK: 206, SPONGE: 207, WET_SPONGE: 208, CONDUIT: 209, DRIED_KELP_BLOCK: 210, TURTLE_EGG: 211
+  CORAL_BLOCK: 205, DEAD_CORAL_BLOCK: 206, SPONGE: 207, WET_SPONGE: 208, CONDUIT: 209, DRIED_KELP_BLOCK: 210, TURTLE_EGG: 211,
+  // Etappe 12: Bienenstock/-nest (aux: Honig 0–5 | Bewohner·8 (0–3) | Nektar·32 (0–3)), Honigwabenblock, Schnüffler-Ei, Froschlichter, Süßbeerenstrauch (mit / ohne Beeren)
+  BEEHIVE: 212, BEE_NEST: 213, HONEYCOMB_BLOCK: 214, SNIFFER_EGG: 215, OCHRE_FROGLIGHT: 216, VERDANT_FROGLIGHT: 217, PEARL_FROGLIGHT: 218, BERRY_BUSH: 219, BERRY_BUSH0: 220
 };
 export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG, B.POPLAR_LOG, B.CHERRY_LOG, B.MANGROVE_LOG, B.BAMBOO_BLOCK];
 export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES, B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y, B.AZALEA_LEAVES, B.FLOWERING_AZALEA_LEAVES, B.CHERRY_LEAVES, B.MANGROVE_LEAVES];
@@ -49,7 +51,7 @@ export const isLeaves = id => id === B.LEAVES || id === B.BIRCH_LEAVES || id ===
 export const isFluid = id => id === B.WATER || id === B.LAVA;
 /** Pflanzen, die einen festen Boden brauchen */
 export const isPlant = id => id === B.FLOWER || id === B.TALLGRASS || id === B.DEADBUSH || (id >= B.LITTER_R && id <= B.PARASOL) || id === B.STALAGMITE || id === B.AMETHYST_CLUSTER || id === B.MOSS_CARPET ||
-  id === B.AZALEA || id === B.FLOWERING_AZALEA || id === B.PINK_PETALS || id === B.PROPAGULE;
+  id === B.AZALEA || id === B.FLOWERING_AZALEA || id === B.PINK_PETALS || id === B.PROPAGULE || id === B.BERRY_BUSH || id === B.BERRY_BUSH0;
 /** Hängende Blöcke: brauchen oben festen Halt (oder ihresgleichen) */
 export const isHang = id => id === B.STALACTITE || id === B.CAVE_VINES || id === B.CAVE_VINES_BERRIES;
 /** Leuchtflechte haftet an jeder Wand, Decke oder jedem Boden */
@@ -821,9 +823,9 @@ for (const [key] of COLORS) shapeless(`shield_banner_${key}`, 1, ["shield", `ban
 //   Wasserpflanzen: Zusatzfeld (aux) auf einer Wasserquelle. Fließt die Quelle weg oder wird sie aufgenommen, ist die Pflanze weg.
 //     1 Tang (Stiel) · 2 Tang (Spitze) · 3 Seegras · 4–7 Seegurken (Anzahl 1–4) · 8–12 Koralle · 16–20 Korallenfächer · 24–28 tote Koralle · 32–36 toter Fächer
 // ---------------------------------------------------------------------
-export const WP = { KELP: 1, KELP_TOP: 2, SEAGRASS: 3, PICKLE: 4, CORAL: 8, FAN: 16, DEAD_CORAL: 24, DEAD_FAN: 32 };
+export const WP = { KELP: 1, KELP_TOP: 2, SEAGRASS: 3, PICKLE: 4, CORAL: 8, FAN: 16, DEAD_CORAL: 24, DEAD_FAN: 32, SPAWN: 40 };
 /** Wasserpflanze (aux auf Wasser)? */
-export const isWaterPlant = aux => aux > 0 && aux < 40;
+export const isWaterPlant = aux => aux > 0 && aux < 48;
 export const CORALS = [["tube", "Röhrenkoralle", "#3050c8"], ["brain", "Hirnkoralle", "#d060a0"], ["bubble", "Blasenkoralle", "#a030b8"], ["fire", "Feuerkoralle", "#d03030"], ["horn", "Geweihkoralle", "#e0c038"]];
 export const coralBlockOf = c => `coral_block_${CORALS[c][0]}`;
 BLOCKS[B.CORAL_BLOCK] = def("coral_block", { solid: true, lcost: 3, hard: 2.25, tool: "pick", tier: 1, drop: "coral_block_tube" });
@@ -876,3 +878,44 @@ shapeless("dried_kelp_block", 1, new Array(9).fill("dried_kelp"), { id: "dried_k
 shapeless("dried_kelp_b", 9, ["dried_kelp_block"], { out: ["dried_kelp", 9] });
 shapeless("dye_black_ink", 1, ["ink_sac"], { out: ["dye_black", 1] });
 shapeless("dye_cyan_glow", 1, ["glow_ink_sac"], { out: ["dye_cyan", 1] });
+
+
+// ---------------------------------------------------------------------
+// Etappe 12: Neue Tiere und Monster (Bienen, Frösche, Schnüffler, Kamele, Ziegen, Lamas, Pandas, Füchse, Eisbären, Allay, Phantome …)
+//   Bienenstock / Bienennest: aux = Honig (0–5) | Bewohner (0–3) << 3 | Nektar tragende Bewohner (0–3) << 5
+// ---------------------------------------------------------------------
+BLOCKS[B.BEEHIVE] = def("beehive", { solid: true, lcost: 3, hard: 0.6, tool: "axe", drop: null });
+BLOCKS[B.BEE_NEST] = def("bee_nest", { solid: true, lcost: 3, hard: 0.3, drop: null });
+BLOCKS[B.HONEYCOMB_BLOCK] = def("honeycomb_block", { solid: true, lcost: 3, hard: 0.6, drop: "honeycomb_block" });
+BLOCKS[B.SNIFFER_EGG] = def("sniffer_egg", { solid: true, lcost: 3, hard: 0.5, drop: "sniffer_egg" });
+BLOCKS[B.OCHRE_FROGLIGHT] = def("ochre_froglight", { solid: true, lcost: 1, hard: 0.3, drop: "ochre_froglight", emit: 15 });
+BLOCKS[B.VERDANT_FROGLIGHT] = def("verdant_froglight", { solid: true, lcost: 1, hard: 0.3, drop: "verdant_froglight", emit: 15 });
+BLOCKS[B.PEARL_FROGLIGHT] = def("pearl_froglight", { solid: true, lcost: 1, hard: 0.3, drop: "pearl_froglight", emit: 15 });
+BLOCKS[B.BERRY_BUSH] = def("berry_bush", { solid: false, lcost: 0, hard: 0, drop: "sweet_berries", interact: true });
+BLOCKS[B.BERRY_BUSH0] = def("berry_bush0", { solid: false, lcost: 0, hard: 0, drop: "berry_bush", interact: false });
+export const FIRST12 = B.BEEHIVE, LAST12 = B.BERRY_BUSH0;
+SILK[B.BEEHIVE] = "beehive"; SILK[B.BEE_NEST] = "bee_nest";
+/** Beehive-Aux: Honig, Bewohner, Nektar */
+export const hiveHoney = a => a & 7;
+export const hiveOcc = a => (a >> 3) & 3;
+export const hiveNec = a => (a >> 5) & 3;
+export const hiveAux = (h, o, n) => (Math.min(5, h) | (Math.min(3, o) << 3) | (Math.min(3, n) << 5));
+export const HIVE_MAX = 3;
+
+blockItem("beehive", "Bienenstock", B.BEEHIVE, { fuel: 15 }); blockItem("bee_nest", "Bienennest", B.BEE_NEST, { fuel: 15 });
+blockItem("honeycomb_block", "Honigwabenblock", B.HONEYCOMB_BLOCK);
+blockItem("sniffer_egg", "Schnüffler-Ei", B.SNIFFER_EGG);
+blockItem("ochre_froglight", "Ockerfroschlicht", B.OCHRE_FROGLIGHT); blockItem("verdant_froglight", "Grünfroschlicht", B.VERDANT_FROGLIGHT); blockItem("pearl_froglight", "Perlfroschlicht", B.PEARL_FROGLIGHT);
+// ein Süßbeerenstrauch wird aus Beeren gepflanzt (Strauch mit Beeren); ohne Beeren fällt er als Beeren-Setzling
+blockItem("berry_bush", "Süßbeerenstrauch", B.BERRY_BUSH0);
+item("sweet_berries", "Süßbeeren", { food: [2, 0.4], fast: true, plants: true });
+item("saddle", "Sattel", { stack: 1 });
+item("goat_horn", "Ziegenhorn", { stack: 1, horn: true, byD: true });
+item("phantom_membrane", "Phantommembran");
+item("torchflower_seeds", "Fackellilien-Samen"); item("pitcher_pod", "Krugpflanzen-Kapsel");
+item("frogspawn", "Froschlaich", { wet: WP.SPAWN });
+export const HORNS = ["Sinnen", "Singen", "Suchen", "Fühlen", "Bewundern", "Rufen", "Sehnen", "Träumen"];
+shaped("beehive", 1, ["PPP", "HHH", "PPP"], { P: "#planks", H: "honeycomb" });
+shaped("honeycomb_block", 1, ["HH", "HH"], { H: "honeycomb" });
+shapeless("honeycomb_from_block", 4, ["honeycomb_block"], { out: ["honeycomb", 4] });
+shaped("saddle", 1, ["LLL", "I I"], { L: "leather", I: "iron_ingot" });

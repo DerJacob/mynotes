@@ -6,6 +6,7 @@
 import { B, COLORS, ITEMS, BLOCKS, boxesOf, WOODS, STONE_MATS, TRIM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, LOOM_PATTERNS, isDoorM, isTrap } from "./sandbox-data.js?v=10";
 import { mulberry32 } from "./sandbox-noise.js?v=10";
 import { COL11, FIRST11, LAST11 } from "./sandbox-art11.js?v=10";
+import { COL12, FIRST12, LAST12 } from "./sandbox-art12.js?v=10";
 
 export const T9 = 16;
 export const FIRST9 = B.GRANITE, LAST9 = B.TRAP_OL;
@@ -20,6 +21,7 @@ const mkCanvas = (w = T9, h = T9) => { const c = document.createElement("canvas"
 
 /** Wo liegt das Bild eines vollen Blocks im Atlas? (Spalte; Zeile 0) */
 export function atlasCol(id) {
+  if (id >= FIRST12 && id <= LAST12) return COL12(id);
   if (id >= FIRST11 && id <= LAST11) return COL11(id);
   if (id >= FIRST9) return COL9(id);
   if (id >= B.POWDER_SNOW) return 224 + (id - B.POWDER_SNOW);

@@ -1,6 +1,7 @@
 import { drawMob5, drawProjectile5, MOB_COLORS5 } from "./sandbox-mobart5.js?v=10";
 import { potionColor } from "./sandbox-brew.js?v=10";
 import { drawMob11, drawTrident } from "./sandbox-art11.js?v=10";
+import { drawMob12, drawExtras12, drawProjectile12, MOB_COLORS12 } from "./sandbox-art12.js?v=10";
 // =====================================================================
 // Blockdorf – Tiere und Monster malen (Etappe 3)
 // Alle Figuren sind aus Rechtecken zusammengesetzt (1 Bildpunkt = S Bildschirmpixel), eigene Entwürfe im
@@ -11,7 +12,7 @@ import { drawMob11, drawTrident } from "./sandbox-art11.js?v=10";
 export const MOB_COLORS = {
   cow: [86, 62, 46], pig: [240, 160, 164], sheep: [236, 236, 230], chicken: [244, 244, 240], rabbit: [168, 132, 88], wolf: [200, 200, 200], cat: [201, 138, 74],
   cod: [160, 132, 90], salmon: [124, 138, 114], tropical_fish: [236, 122, 34], pufferfish: [226, 198, 62], squid: [42, 68, 114], glow_squid: [42, 142, 160], dolphin: [110, 127, 147], turtle: [74, 138, 56], axolotl: [240, 184, 196], drowned: [106, 168, 158], guardian: [74, 154, 134], elder_guardian: [154, 156, 136],
-  zombie: [92, 154, 84], skeleton: [216, 216, 204], creeper: [78, 166, 75], spider: [58, 47, 42], witch: [74, 42, 106], enderman: [28, 24, 36], slime: [60, 174, 94], ...MOB_COLORS5
+  zombie: [92, 154, 84], skeleton: [216, 216, 204], creeper: [78, 166, 75], spider: [58, 47, 42], witch: [74, 42, 106], enderman: [28, 24, 36], slime: [60, 174, 94], ...MOB_COLORS12, ...MOB_COLORS5
 };
 
 const tintCache = new Map();
@@ -155,8 +156,9 @@ export function drawMob(g, m, bx, by, S, T, now, art) {
       drawSlime(g, m, bx, by, S, T, k);
       return;
     }
-    default: if (!drawMob11(R, m, bw, bh, sw, g, S, now) && !drawMob5(R, m, bw, bh, sw, g, S, now)) R(0, 0, bw, bh, "#f0f");
+    default: if (!drawMob12(R, m, bw, bh, sw, g, S, now) && !drawMob11(R, m, bw, bh, sw, g, S, now) && !drawMob5(R, m, bw, bh, sw, g, S, now)) R(0, 0, bw, bh, "#f0f");
   }
+  drawExtras12(R, m);
   if (m.fire) {
     for (let i = 0; i < 5; i++) {
       const jx = Math.sin(now / 90 + i * 2.1 + m.id) * 0.8, hh = 3.5 + (Math.sin(now / 70 + i * 3.3) + 1) * 2.2;
@@ -191,6 +193,7 @@ export function drawSlime(g, s, bx, by, S, T, k = 0) {
 /** Pfeil oder Trank, sx/sy = Bildschirmposition der Spitze */
 export function drawProjectile(g, a, sx, sy, S, now) {
   if (a.kind === "trident") { drawTrident(g, a, sx, sy, S, now); return; }
+  if (drawProjectile12(g, a, sx, sy, S, now)) return;
   if (drawProjectile5(g, a, sx, sy, S, now)) return;
   g.save();
   g.translate(sx, sy);

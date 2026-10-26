@@ -70,6 +70,9 @@ export function installMobs(Sandbox, K) {
   const P = Sandbox.prototype;
   const stk = (id, n = 1) => ({ id, n, d: 0 });
 
+  /** Haken für zusätzliche Felder beim Speichern / Laden von Tieren (ab Etappe 12 gefüllt) */
+  P._mobSaveX = function () {};
+  P._mobLoadX = function () {};
   P._mobInit = function () {
     this.mrng = mulberry32((this.seed ^ 0x3f1d) + Math.floor(this.time * 1000));   // eigener Zufall: Tiere ändern nichts am übrigen Weltgeschehen
     this.mobs = []; this.proj = []; this._mobId = 0; this.passT = 4; this.advT = 1; this.blocking = false; this.bow = null; this.aim = null;
@@ -667,6 +670,7 @@ export function installMobs(Sandbox, K) {
       if (m.type === "turtle") { o.hm = Math.round(m.home); if (m.gravid) o.gv = 1; }
       if (m.mon !== undefined) o.mn = m.mon;
       if (m.trident) o.tr = 1;
+      this._mobSaveX(m, o);
       return o;
     });
   };
@@ -686,6 +690,7 @@ export function installMobs(Sandbox, K) {
       if (o.gv) m.gravid = true;
       if (Number.isFinite(o.mn)) m.mon = o.mn;
       if (o.tr) m.trident = true;
+      this._mobLoadX(m, o);
       if (o.bb > 0) { m.baby = o.bb; m.w = d.w * 0.55; m.h = d.h * 0.55; m.y = clamp(o.y, 0, H - m.h); }
       if (this._hit(m)) {                                        // Rundung beim Speichern: ein Stück nach oben schieben
         const y0 = m.y; let ok = false;
