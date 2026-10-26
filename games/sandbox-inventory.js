@@ -2,7 +2,7 @@
 // Blockdorf – Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen, Hunger, Erfahrung
 // Wird an die Klasse Sandbox gehängt (installInventory) und hält sandbox-engine.js übersichtlich.
 // =====================================================================
-import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS } from "./sandbox-data.js?v=6";
+import { B, BLOCKS, ITEMS, RECIPES, SMELT, SMELT_TIME, hasTag, stackMax, isLog, isLeaves, isFluid, isPlant, isCrop, SILK, FORTUNE_BLOCKS, boxesOf, colorItem } from "./sandbox-data.js?v=6";
 
 export function installInventory(Sandbox, K) {
   const { clamp, REACH } = K;
@@ -233,8 +233,9 @@ export function installInventory(Sandbox, K) {
   };
   P._windowCheck = function () {
     const w = this.win;
-    if (!w || w.kind === "inv" || w.kind === "adv") return;
+    if (!w || w.kind === "inv" || w.kind === "adv" || w.kind === "map") return;
     const p = this.player;
+    if (w.kind === "trade") { if (!w.v || !this.villagers.includes(w.v) || Math.hypot(w.v.x + w.v.w / 2 - (p.x + p.w / 2), w.v.y - p.y) > REACH + 2) this.closeWindow(); return; }
     if (Math.hypot(w.x + 0.5 - (p.x + p.w / 2), w.y + 0.5 - (p.y + p.h / 2)) > REACH + 2 || !BLOCKS[this.tile(w.x, w.y)].interact) this.closeWindow();
   };
   P.winEnt = function () { return this.win ? this.ents.get(`${this.win.x},${this.win.y}`) || null : null; };
@@ -437,6 +438,7 @@ export function installInventory(Sandbox, K) {
       const nx = x + dx, ny = y + dy, id = this.tile(nx, ny);
       if (id === B.TORCH && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("torch", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
       else if (id === B.BED && !BLOCKS[this.tile(nx, ny + 1)].solid && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("bed", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); }
+      else if ((id === B.STRAW_BED || id === B.CAMPFIRE) && !BLOCKS[this.tile(nx, ny + 1)].solid) { this.setTile(nx, ny, B.AIR); this.dropFrom(id === B.STRAW_BED ? "straw_bed" : "campfire", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); }
       else if (id === B.SKULL && !this._supported(nx, ny)) { this.setTile(nx, ny, B.AIR); this.dropFrom("wither_skeleton_skull", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); }
       else if (isPlant(id) && !BLOCKS[this.tile(nx, ny + 1)].solid) { this.setTile(nx, ny, B.AIR); this.events.push({ t: "break", x: nx, y: ny, id }); }
       else if (id === B.CACTUS && this.tile(nx, ny + 1) !== B.SAND && this.tile(nx, ny + 1) !== B.CACTUS) { this.setTile(nx, ny, B.AIR); this.dropFrom("cactus", 1, nx, ny); this.events.push({ t: "break", x: nx, y: ny, id }); this._settle(nx, ny); }
@@ -512,8 +514,9 @@ export function installInventory(Sandbox, K) {
   P.use = function (tx, ty) {
     if (this.win) return false;
     if (this.fish && this.selItem() === "fishing_rod") return this._reel();            // Angel einholen: egal wohin man klickt
-    { const s0 = this.selStack(); if (s0 && this._useSpecial(s0, tx, ty)) return true; }   // Feuerzeug, Enderauge, Enderperle
+    { const s0 = this.selStack(); if (s0 && (this._useSpecial(s0, tx, ty) || this._useMap(s0))) return true; }   // Feuerzeug, Enderauge, Enderperle
     if (!this.reachOk(tx, ty)) return false;
+    if (this._villagerUse(tx, ty)) return true;
     const id = this.tile(tx, ty), bd = BLOCKS[id];
     if (bd.interact) {
       if (id === B.BENCH) { this.openWindow("bench", tx, ty); return true; }
@@ -526,6 +529,8 @@ export function installInventory(Sandbox, K) {
       }
       if (id >= B.DOOR_B && id <= B.DOOR_TO) return this._toggleDoor(tx, ty);
       if (id === B.BED) return this.sleep(tx, ty);
+      if (id === B.STRAW_BED) return this.sleep(tx, ty, true);
+      if (id === B.CUSHION) return this.sitOn(tx, ty);
       if (id === B.LEVER) return this._rsLever(tx, ty);
       if (id === B.BUTTON) return this._rsButton(tx, ty);
     }
@@ -552,6 +557,15 @@ export function installInventory(Sandbox, K) {
     if (!this.reachOk(tx, ty) || tx < 0 || tx >= W || ty < 2 || ty >= H - 2) return false;
     const cur = this.tile(tx, ty);
     const id = ITEMS[s.id].block;
+    const col = ITEMS[s.id].col | 0;
+    // zwei gleiche Stufen ergeben wieder einen vollen Block
+    if (BLOCKS[id].shape === "slab" && cur === id && (this.aux[ty * W + tx] & 15) === col) {
+      const full = BLOCKS[id].parent;
+      if (!this.reachOk(tx, ty)) return false;
+      this.setTile(tx, ty, full); this.aux[ty * W + tx] = col;
+      this._consumeSel(); this.stats.built++; this.events.push({ t: "place", x: tx, y: ty, id: full });
+      return true;
+    }
     if (cur !== B.AIR && !isPlant(cur) && !(isFluid(cur) && BLOCKS[id].solid)) return false;
     const isDoor = id === B.DOOR_B;
     if (isDoor) {
@@ -560,12 +574,23 @@ export function installInventory(Sandbox, K) {
     } else if (id === B.LADDER) { if (!this._ladderOk(tx, ty)) return false; }
     else if (!this._supported(tx, ty)) return false;
     const solid = BLOCKS[id].solid;
+    // Zusatzfeld: Farbe, Lage (oben/unten) und Richtung der Treppe
+    let aux = col;
+    const shape = BLOCKS[id].shape;
+    if (shape === "slab" || shape === "stairs") {
+      const a = this.aim, p = this.player;
+      if (a && a.y - ty < 0.5) aux |= 16;
+      if (shape === "stairs" && (a ? a.x < p.x + p.w / 2 : p.face < 0)) aux |= 32;
+    }
     if (solid) {
       const box = { x: tx, y: isDoor ? ty - 1 : ty, w: 1, h: isDoor ? 2 : 1 };
       const over = b => b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
-      if (over(this.player) || this.villagers.some(over) || this.mobs.some(over)) return false;
+      const overShape = b => boxesOf(id, aux).some(k => b.x < tx + k[2] && b.x + b.w > tx + k[0] && b.y < ty + k[3] && b.y + b.h > ty + k[1]);
+      const hit = shape ? overShape : over;
+      if (hit(this.player) || this.villagers.some(hit) || this.mobs.some(hit)) return false;
     }
     this.setTile(tx, ty, id);
+    if (aux) this.aux[ty * W + tx] = aux;
     if (isDoor) this.setTile(tx, ty - 1, B.DOOR_T);
     if (BLOCKS[id].entity) this.ents.set(`${tx},${ty}`, this._newEnt(BLOCKS[id].entity));
     this._consumeSel();

@@ -7,7 +7,7 @@
 //   Speichern: Blöcke als Lauflängen (Base64) – klein genug für den Spielstand im Drive
 // =====================================================================
 
-import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid } from "./sandbox-data.js?v=6";
+import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid, boxesOf } from "./sandbox-data.js?v=6";
 import { installInventory } from "./sandbox-inventory.js?v=6";
 import { installFluids, SRC } from "./sandbox-fluids.js?v=6";
 import { installMobs } from "./sandbox-mobs.js?v=6";
@@ -15,8 +15,10 @@ import { installFarm } from "./sandbox-farm.js?v=6";
 import { installRedstone } from "./sandbox-redstone.js?v=6";
 import { installBrew, ENCH } from "./sandbox-brew.js?v=6";
 import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=6";
+import { addContent6 } from "./sandbox-world6.js?v=6";
 import { installDims } from "./sandbox-dims.js?v=6";
 import { installBoss } from "./sandbox-boss.js?v=6";
+import { installVillagers } from "./sandbox-vill.js?v=6";
 import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=6";
 export { BIOMES, BIOME_NAMES };
 export { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS };
@@ -25,7 +27,7 @@ export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=6";
 export { mulberry32 };
@@ -70,6 +72,7 @@ const LINES = [
 ];
 
 // =====================================================================
+const FULL = [0, 0, 1, 1], STEPS = [0.5, 1];
 export class Sandbox {
   /** opts.seed: neue Welt · opts.data: gespeicherte Welt (Ergebnis von toData) */
   constructor(opts = {}) {
@@ -108,8 +111,8 @@ export class Sandbox {
 
   // ---------- Welt erzeugen ----------
   _generate() {
-    const w = generateWorld(this.seed);
-    this.tiles = w.tiles; this.lvl = w.lvl; this.aux = new Uint8Array(W * H); this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
+    const w = addContent6(generateWorld(this.seed), this.seed);
+    this.tiles = w.tiles; this.lvl = w.lvl; this.aux = w.aux; this.structs = w.structs; this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
     this._worldChests = w.chests;
     const sh = placeStronghold(this.seed, this.tiles, this.lvl, this.aux, SPAWN_X, SURF);   // Festung mit Endportal tief unter der Erde
     if (sh) { this.strongholds = [{ x: sh.x, y: sh.y }]; this._worldChests.push(...sh.chests); }
@@ -161,11 +164,12 @@ export class Sandbox {
       mobs: this._mobsToData(ow.mobs), adv: { ...this.adv }, bed: this.bed ? { ...this.bed } : null,
       aux: encodeTiles(ow.aux), fx: Object.fromEntries(Object.entries(this.fx).map(([k, f]) => [k, [+f.t.toFixed(1), f.amp]])), es: this.enchSeed
     };
+    Object.assign(data, this._villSave());
     this._saveDims(data);
     return data;
   }
   _fromData(d) {
-    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3 && d.v !== 4 && d.v !== 5 && d.v !== 6) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
+    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3 && d.v !== 4 && d.v !== 5 && d.v !== 6 && d.v !== 7) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
     this.seed = d.seed | 0;
     this.tiles = decodeTiles(d.tiles);
     this.aux = new Uint8Array(W * H);
@@ -210,6 +214,7 @@ export class Sandbox {
     if (d.stats) this.stats = { mined: d.stats.mined | 0, built: d.stats.built | 0, kills: d.stats.kills | 0 };
     if (Array.isArray(d.strongholds)) this.strongholds = d.strongholds.filter(s => s && Number.isFinite(s.x) && Number.isFinite(s.y)).map(s => ({ x: s.x | 0, y: s.y | 0 }));
     if (d.flags && typeof d.flags === "object") this.flags.dragonDead = !!d.flags.dragonDead;
+    this._villLoad(d);
     // Falls der Spielstand im Boden steckt (beschädigt), zurück ins Dorf (steht der Spieler im Nether/Ende, prüft _restoreDim das)
     if (!d.dim && this._hit(p)) { p.x = SPAWN_X - 6.4; p.y = SURF - 1.8 - 0.001; }
   }
@@ -256,20 +261,39 @@ export class Sandbox {
   // Inventar, Handwerk, Abbauen, Bauen, Kampf, Ofen, Truhen: siehe sandbox-inventory.js
 
   // ---------- Physik ----------
+  /** Kästen (Teilblöcke) im Weg des Körpers: ruft cb(tileX, tileY, kasten) für jeden überlappenden Kasten auf */
+  _boxesHit(b, cb) {
+    const x0 = Math.floor(b.x), x1 = Math.floor(b.x + b.w - 1e-6), y0 = Math.floor(b.y), y1 = Math.floor(b.y + b.h - 1e-6);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const t = this.tile(x, y), bd = BLOCKS[t];
+      if (!bd.solid) continue;
+      if (!bd.shape) { if (cb(x, y, FULL) === true) return true; continue; }
+      for (const k of boxesOf(t, this.aux[y * W + x])) {
+        if (b.x + b.w - 1e-6 > x + k[0] && b.x < x + k[2] && b.y + b.h - 1e-6 > y + k[1] && b.y < y + k[3] && cb(x, y, k) === true) return true;
+      }
+    }
+    return false;
+  }
   _hit(b) {
     const x0 = Math.floor(b.x), x1 = Math.floor(b.x + b.w - 1e-6), y0 = Math.floor(b.y), y1 = Math.floor(b.y + b.h - 1e-6);
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (BLOCKS[this.tile(x, y)].solid) return true;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const t = this.tile(x, y), bd = BLOCKS[t];
+      if (!bd.solid) continue;
+      if (!bd.shape) return true;
+      for (const k of boxesOf(t, this.aux[y * W + x])) if (b.x + b.w - 1e-6 > x + k[0] && b.x < x + k[2] && b.y + b.h - 1e-6 > y + k[1] && b.y < y + k[3]) return true;
+    }
     return false;
   }
   _moveX(b, dx) {
     b.x = clamp(b.x + dx, 0, W - b.w);
     if (!this._hit(b)) return;
     if (b.stepUp && b.onGround && dx !== 0) {
-      const y0 = b.y; b.y -= 1;
-      if (!this._hit(b)) { b.visOff = (b.visOff || 0) + 1; return; }
+      const y0 = b.y;
+      for (const up of STEPS) { b.y = y0 - up; if (!this._hit(b)) { b.visOff = (b.visOff || 0) + up; return; } }
       b.y = y0;
     }
-    if (dx > 0) b.x = Math.floor(b.x + b.w - 1e-6) - b.w - 1e-4; else b.x = Math.floor(b.x) + 1 + 1e-4;
+    if (dx > 0) { const c = Math.floor(b.x + b.w - 1e-6); let lim = Infinity; this._boxesHit(b, (x, y, k) => { if (x === c) lim = Math.min(lim, x + k[0]); }); b.x = (isFinite(lim) ? lim : Math.floor(b.x + b.w - 1e-6)) - b.w - 1e-4; }
+    else { const c = Math.floor(b.x); let lim = -Infinity; this._boxesHit(b, (x, y, k) => { if (x === c) lim = Math.max(lim, x + k[2]); }); b.x = (isFinite(lim) ? lim : Math.floor(b.x) + 1) + 1e-4; }
     b.x = clamp(b.x, 0, W - b.w);
     b.vx = 0; b.blocked = true;
   }
@@ -277,8 +301,8 @@ export class Sandbox {
     b.y = clamp(b.y + dy, 0, H - b.h);
     b.landV = 0;
     if (this._hit(b)) {
-      if (dy > 0) { b.y = Math.floor(b.y + b.h - 1e-6) - b.h - 1e-4; b.landV = b.vy; b.onGround = true; }
-      else { b.y = Math.floor(b.y) + 1 + 1e-4; }
+      if (dy > 0) { const r = Math.floor(b.y + b.h - 1e-6); let lim = Infinity; this._boxesHit(b, (x, y, k) => { if (y === r) lim = Math.min(lim, y + k[1]); }); b.y = (isFinite(lim) ? lim : Math.floor(b.y + b.h - 1e-6)) - b.h - 1e-4; b.landV = b.vy; b.onGround = true; }
+      else { const r = Math.floor(b.y); let lim = -Infinity; this._boxesHit(b, (x, y, k) => { if (y === r) lim = Math.max(lim, y + k[3]); }); b.y = (isFinite(lim) ? lim : Math.floor(b.y) + 1) + 1e-4; }
       b.vy = 0;
     } else if (dy > 0.0001) b.onGround = false;
   }
@@ -424,3 +448,4 @@ installRedstone(Sandbox, { clamp, W, H });
 installBrew(Sandbox, { clamp, W, H, MAX_HP });
 installDims(Sandbox, { clamp, W, H, SURF, SPAWN_X, encodeTiles, decodeTiles, ENCH, stackMax });
 installBoss(Sandbox, { clamp, W, H });
+installVillagers(Sandbox, { clamp, W, H, SPAWN_X, REACH });

@@ -13,8 +13,8 @@ import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.j
 export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const SEA = SURF + 4;                         // Wasserspiegel
 export const DEEP = SURF + 72;                       // ab hier Tiefenschiefer
-export const BIOMES = ["plains", "forest", "birch", "taiga", "snow", "desert", "savanna", "jungle", "swamp", "mountains", "ocean"];
-export const BIOME_NAMES = { plains: "Ebene", forest: "Wald", birch: "Birkenwald", taiga: "Taiga", snow: "Schneeebene", desert: "Wüste", savanna: "Savanne", jungle: "Dschungel", swamp: "Sumpf", mountains: "Berge", ocean: "Ozean" };
+export const BIOMES = ["plains", "forest", "birch", "taiga", "snow", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "dappled"];
+export const BIOME_NAMES = { plains: "Ebene", forest: "Wald", birch: "Birkenwald", taiga: "Taiga", snow: "Schneeebene", desert: "Wüste", savanna: "Savanne", jungle: "Dschungel", swamp: "Sumpf", mountains: "Berge", ocean: "Ozean", dappled: "Gesprenkelter Wald" };
 const BI = Object.fromEntries(BIOMES.map((b, i) => [b, i]));
 
 /** Truheninhalt */

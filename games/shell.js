@@ -113,7 +113,7 @@ function ensureCss() {
   cssDone = true;
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = new URL("./games.css?v=7", import.meta.url).href;
+  link.href = new URL("./games.css?v=8", import.meta.url).href;
   document.head.appendChild(link);
 }
 

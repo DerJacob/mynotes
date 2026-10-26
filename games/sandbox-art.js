@@ -7,6 +7,7 @@ import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=6";
 import { mulberry32 } from "./sandbox-noise.js?v=6";
 import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=6";
 import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=6";
+import { paintAtlas6, paintItem6, COL6 } from "./sandbox-art6.js?v=6";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -16,7 +17,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 export const IDX = { FLOWER2: 120, FLOWER3: 121, WALL_DIRT: 122, WALL_STONE: 123, FURNACE_LIT: 124, CRACK: 125 /* 125…129 = Risse in 5 Stufen */, LAVA2: 130, WALL_DEEP: 131, WATER2: 132, ORE_DEEP: 140 /* 140…147 */ };
 export const ORE_DEEP = { [B.COAL]: 140, [B.IRON]: 141, [B.GOLD]: 142, [B.DIAMOND]: 143, [B.COPPER]: 144, [B.REDSTONE]: 145, [B.LAPIS]: 146, [B.EMERALD]: 147 };
 // Farb-Faktoren (R, G, B) für Gras/Laub je Biom – Reihenfolge wie BIOMES in sandbox-world.js
-export const BIOME_TINT = [[1, 1, 1], [0.9, 0.96, 0.88], [1.04, 1.02, 0.88], [0.7, 0.92, 0.86], [0.82, 0.98, 0.94], [1.4, 0.96, 0.6], [1.38, 0.97, 0.62], [0.72, 1.14, 0.58], [0.74, 0.8, 0.56], [0.86, 1.0, 0.92], [1, 1, 1]];
+export const BIOME_TINT = [[1, 1, 1], [0.9, 0.96, 0.88], [1.04, 1.02, 0.88], [0.7, 0.92, 0.86], [0.82, 0.98, 0.94], [1.4, 0.96, 0.6], [1.38, 0.97, 0.62], [0.72, 1.14, 0.58], [0.74, 0.8, 0.56], [0.86, 1.0, 0.92], [1, 1, 1], [1.08, 1.0, 0.78]];
 const ATLAS_N = 224;
 
 export function makeAtlas() {
@@ -299,6 +300,8 @@ export function makeAtlas() {
   paintAtlas4(paint, noise, specks);
   // ---------- Etappe 5: Nether, Ende ----------
   paintAtlas5(paint, noise, specks);
+  paintAtlas6(paint, noise, specks);
+  for (let id = B.CONCRETE; id <= B.SEA_LANTERN; id++) avg[id] = avg[COL6(id)] || [200, 200, 200];
   // ---------- gefärbte Varianten (Zeile 2): Gras, Laub, hohes Gras je Biom ----------
   {
     const grab = i => g.getImageData(i * T, 0, T, T);
@@ -332,6 +335,7 @@ function paintItem(g, atlas, id, st) {
   const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
   const P = (x, y, c) => R(x, y, 1, 1, c);
   const line = (x0, y0, x1, y1, c, w = 1) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let i = 0; i <= n; i++) R(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), w, w, c); };
+  if (paintItem6(id, g, atlas, st)) return;
   if (it.block != null) {
     const idx = id === "flower" ? B.FLOWER : id === "door" ? B.DOOR_B : it.block;
     g.drawImage(atlas, idx * T, 0, T, T, 0, 0, T, T);

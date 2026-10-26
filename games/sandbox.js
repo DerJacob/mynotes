@@ -10,6 +10,8 @@ import { makeArt, IDX, ORE_DEEP, T } from "./sandbox-art.js?v=6";
 import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=6";
 import { drawBlock4 } from "./sandbox-art4.js?v=6";
 import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=6";
+import { drawBlock6, profLook, drawProfGear } from "./sandbox-art6.js?v=6";
+import { PROFS, LEVEL_NAMES } from "./sandbox-vill.js?v=6";
 import { DIM_NAMES, BEACON_EFFECTS, BEACON_PAY } from "./sandbox-dims.js?v=6";
 import { stackName, stackLines, BREW_TIME, EFFECT_NAMES, EFFECT_BAD } from "./sandbox-brew.js?v=6";
 
@@ -18,7 +20,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const mix = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const rgb = c => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 const fmt = n => new Intl.NumberFormat("de-DE").format(n);
-const TAGNAME = { "#planks": "Bretter", "#coals": "Kohle", "#logs": "Baumstämme" };
+const TAGNAME = { "#planks": "Bretter", "#coals": "Kohle", "#logs": "Baumstämme", "#wool": "Wolle (beliebig)" };
 const hex2rgb = c => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c || ''); return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [180, 70, 220]; };
 const ROMAN2 = ['', '', ' II', ' III', ' IV'];
 const DEEP_Y = SURF + 74;           // ab hier werden Erze auf Tiefenschiefer gemalt
@@ -157,15 +159,38 @@ export function mount(root, ctx) {
     if (!w) { if (!winWrap.hidden) { winWrap.hidden = true; cursorEl.hidden = true; sig.win = ""; } return; }
     if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.blocking = false; game.bow = null; }
     const e = game.winEnt();
-    const sg = JSON.stringify([w.kind, game.inv, game.armor, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
+    const sg = JSON.stringify([w.kind, game.inv, game.armor, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "trade" && w.v ? [w.v.offers.map(o => o.uses), w.v.lvl, w.v.xp, game.hero()] : 0, w.kind === "map" ? Math.floor(game.player.x / 3) : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
     if (sg !== sig.win) { sig.win = sg; renderWindow(); renderBook(); updateCursor(); }
     if (w.kind === "brew" && e) { const f = winPanel.querySelector(".sb-bfuel i"), a = winPanel.querySelector(".sb-bprog i"); if (f) f.style.width = Math.round(clamp(e.fuel / 20, 0, 1) * 100) + "%"; if (a) a.style.height = Math.round(clamp(e.brewT / BREW_TIME, 0, 1) * 100) + "%"; }
     if (w.kind === "furnace" && e) { const f = winPanel.querySelector(".sb-flame i"), a = winPanel.querySelector(".sb-arrow i"); if (f) f.style.height = e.burnMax ? Math.round((e.burn / e.burnMax) * 100) + "%" : "0%"; if (a) a.style.width = Math.round((e.cook / 10) * 100) + "%"; }
   }
   const arrow = () => h("div", { class: "sb-arrow" }, h("i"));
+  const BIOME_MAPCOL = ["#6eaa46", "#40783a", "#80aa5a", "#3c6e5c", "#ecf0f4", "#e2d08e", "#aaaa46", "#288c32", "#50643c", "#80808a", "#4070aa", "#c86428"];
+  /** Entdeckerkarte: Geländeprofil der ganzen Welt, du (weiß) und das Ziel (rotes Kreuz) */
+  function drawMap(cvm, mi) {
+    const c = cvm.getContext("2d"), cw = cvm.width, ch = cvm.height, sx = cw / W;
+    c.fillStyle = "#d9c08a"; c.fillRect(0, 0, cw, ch);
+    c.fillStyle = "#e8d6a4"; c.fillRect(3, 3, cw - 6, ch - 6);
+    const y0 = 38, ys = 1.9;
+    for (let x = 0; x < W; x++) {
+      const gy = game.ground[x], top = Math.round((gy - y0) * ys);
+      c.fillStyle = BIOME_MAPCOL[game.biomes[x]] || "#6eaa46";
+      c.fillRect(Math.floor(x * sx), clamp(top, 4, ch - 4), Math.ceil(sx) + 0, ch - 4 - clamp(top, 4, ch - 4));
+      if (game.tiles[(gy - 1) * W + x] === B.WATER || (gy > SURF + 4 && game.tiles[(SURF + 4) * W + x] === B.WATER)) {
+        const wt = Math.round((SURF + 4 - y0) * ys); c.fillStyle = "#4a86c8"; c.fillRect(Math.floor(x * sx), wt, Math.ceil(sx), Math.max(0, top - wt));
+      }
+    }
+    c.strokeStyle = "rgba(60,40,20,.5)"; c.lineWidth = 2; c.strokeRect(3, 3, cw - 6, ch - 6);
+    const px = mi.px * sx;
+    c.fillStyle = "#fff"; c.strokeStyle = "#222"; c.lineWidth = 2; c.beginPath(); c.moveTo(px, 8); c.lineTo(px - 6, 22); c.lineTo(px + 6, 22); c.closePath(); c.fill(); c.stroke();
+    if (mi.target) {
+      const tx = mi.target * sx; c.strokeStyle = "#d02020"; c.lineWidth = 4; c.beginPath(); c.moveTo(tx - 8, 30); c.lineTo(tx + 8, 46); c.moveTo(tx + 8, 30); c.lineTo(tx - 8, 46); c.stroke();
+      c.setLineDash([4, 4]); c.lineWidth = 2; c.beginPath(); c.moveTo(px, 26); c.lineTo(tx, 26); c.stroke(); c.setLineDash([]);
+    }
+  }
   function renderWindow() {
     const w = game.win; winPanel.textContent = "";
-    const title = { inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe", adv: "Fortschritte", ench: "Verzaubern", anvil: "Amboss", brew: "Braustand", disp: "Spender", beacon: "Leuchtfeuer" }[w.kind];
+    const title = { inv: "Inventar", bench: "Werkbank", furnace: "Ofen", chest: "Truhe", adv: "Fortschritte", ench: "Verzaubern", anvil: "Amboss", brew: "Braustand", disp: "Spender", beacon: "Leuchtfeuer", trade: "Handel", map: "Entdeckerkarte" }[w.kind];
     winPanel.appendChild(h("div", { class: "sb-wt" }, h("b", null, title), h("button", { class: "sb-x", type: "button", title: "Schließen (E)", onclick: () => { game.closeWindow(); blurFocus(); } }, "✕")));
     if (w.kind === "adv") {
       const ids = Object.keys(ADV), done = ids.filter(k => game.adv[k]).length;
@@ -216,6 +241,29 @@ export function mount(root, ctx) {
         h("div", { class: "sb-bcol" }, slotEl("b", 4, e.s[4]), h("div", { class: "sb-bfuel", title: "Brennstoff" }, h("i"))),
         h("div", { class: "sb-bmid" }, slotEl("b", 3, e.s[3]), h("div", { class: "sb-bprog" }, h("i")), h("div", { class: "sb-bbots" }, slotEl("b", 0, e.s[0]), slotEl("b", 1, e.s[1]), slotEl("b", 2, e.s[2]))))));
       winPanel.appendChild(h("div", { class: "sb-hint" }, "Oben die Zutat, unten bis zu drei Flaschen. Lohenstaub links ist der Brennstoff."));
+    } else if (w.kind === "trade") {
+      const v = w.v, pf = PROFS[v.prof] || { name: "Dorfbewohner" };
+      const need = [10, 70, 150, 250][v.lvl - 1];
+      winPanel.appendChild(h("div", { class: "sb-hint" }, `${pf.name} · ${LEVEL_NAMES[v.lvl - 1]}${need ? ` (${v.xp}/${need} Erfahrung)` : " (Meister)"}${game.hero() ? " · Held des Dorfes: Smaragde −30 %" : ""}`));
+      const list = h("div", { class: "sb-offers sb-trades" });
+      v.offers.forEach((o, i) => {
+        const a = game.offerCost(o.a), b = game.offerCost(o.b), ok = game.offerCan(o), sold = o.uses >= o.max;
+        const side = (pair, st) => h("span", { class: "sb-tg", title: ITEMS[pair[0]].name }, art.icon(pair[0], 26, st), h("i", null, pair[1] > 1 ? "×" + pair[1] : ""));
+        list.appendChild(h("button", { class: "sb-offer sb-trade" + (ok ? " can" : "") + (sold ? " sold" : ""), type: "button", title: `${ITEMS[o.out.id].name}${o.out.n > 1 ? " ×" + o.out.n : ""}`, onclick: () => { if (game.trade(i)) dirty = true; sig.win = ""; blurFocus(); } },
+          side(a), b ? h("span", { class: "sb-plus" }, "+") : null, b ? side(b) : null, h("span", { class: "sb-ar" }, "→"), side([o.out.id, o.out.n], o.out),
+          h("span", { class: "sb-uses" }, sold ? "ausverkauft" : `${o.max - o.uses}/${o.max}`)));
+      });
+      winPanel.appendChild(list);
+      winPanel.appendChild(h("div", { class: "sb-hint" }, "Klicke auf ein Angebot, um zu tauschen. Am Morgen füllen die Händler ihre Vorräte wieder auf."));
+    } else if (w.kind === "map") {
+      const mi = game.mapInfo();
+      const cvm = h("canvas", { class: "sb-map", width: 480, height: 160 });
+      winPanel.appendChild(cvm);
+      if (mi) {
+        drawMap(cvm, mi);
+        const dist = mi.target ? Math.round(Math.abs(mi.target - mi.px)) : 0;
+        winPanel.appendChild(h("div", { class: "sb-hint" }, mi.target ? `${mi.name}: Das Ziel (rotes Kreuz) liegt ${dist} Blöcke ${mi.target > mi.px ? "östlich" : "westlich"} von dir.` : "Diese Karte zeigt kein Ziel."));
+      }
     } else if (w.kind === "beacon") {
       const e = game.winEnt(), lv = game.beaconLevel(w.x, w.y), pay = e.s[0], payOk = !!(pay && BEACON_PAY.has(pay.id));
       const list = h("div", { class: "sb-offers" });
@@ -244,7 +292,7 @@ export function mount(root, ctx) {
     bookPanel.hidden = false;
     bookPanel.appendChild(h("div", { class: "sb-wt" }, h("b", null, "Rezepte")));
     const size = sizeOf(w.kind);
-    const list = RECIPES.map(r => ({ r, can: game.recipeAvailable(r), big: game.recipeNeedsBench(r) })).filter(x => !(x.big && size === 2 && !x.can));
+    const list = RECIPES.map(r => ({ r, can: game.recipeAvailable(r), big: game.recipeNeedsBench(r) })).filter(x => !(x.big && size === 2 && !x.can) && !(x.r.hide && !x.can));
     list.sort((a, b) => (b.can && (!b.big || size === 3)) - (a.can && (!a.big || size === 3)));
     const box = h("div", { class: "sb-booklist" });
     for (const { r, can, big } of list) {
@@ -518,6 +566,17 @@ export function mount(root, ctx) {
       else if (e.t === "eye_in") { spark(e.x + 0.5, e.y + 0.3, [90, 230, 190], 10); sfx("click"); dirty = true; }
       else if (e.t === "eye_break") { say("Das Enderauge zerbricht.", 1800); sfx("break"); }
       else if (e.t === "endportal") { say("Das Endportal öffnet sich!", 3600); sfx("adv"); whiteout = 0.3; spark(e.x + 0.5, e.y + 0.5, [120, 230, 200], 26); dirty = true; }
+      else if (e.t === "trade") { spark(e.x, e.y + 0.5, [60, 220, 120], 8); sfx("xp"); }
+      else if (e.t === "job") { spark(e.x, e.y + 0.3, [240, 220, 120], 8); sfx("click"); }
+      else if (e.t === "villager_level") say(`Der Händler ist jetzt: ${LEVEL_NAMES[e.lvl - 1]} – neue Angebote!`, 2800);
+      else if (e.t === "sit") sfx("place");
+      else if (e.t === "omen") say("Du spürst ein Unheilvolles Omen … betritt ein Dorf!", 4200);
+      else if (e.t === "raid") {
+        if (e.s === "start") { say("⚔ Überfall! Verteidige das Dorf!", 4200); sfx("roar"); }
+        else if (e.s === "wave") { say(`Welle ${e.wave} greift an!`, 2600); sfx("roar"); }
+        else if (e.s === "win") { say("🏆 Der Überfall ist abgewehrt – du bist Held des Dorfes!", 4600); sfx("adv"); dirty = true; }
+        else if (e.s === "lose") say("Der Überfall ist gescheitert …", 3400);
+      }
       else if (e.t === "barter_start") sfx("click");
       else if (e.t === "barter") { spark(e.x, e.y + 0.5, [244, 201, 58], 8); sfx("xp"); }
       else if (e.t === "ghast_charge") sfx("gcharge");
@@ -656,7 +715,7 @@ export function mount(root, ctx) {
         else if (id === B.FURNACE) { const fe = game.ents.get(tx + "," + ty); if (fe && fe.burn > 0) idx = IDX.FURNACE_LIT; }
         else if (id === B.GRASS || id === B.LEAVES || id === B.TALLGRASS) { idx = game.biomes[tx] * 3 + (id === B.GRASS ? 0 : id === B.LEAVES ? 1 : 2); row = 1; }
         else if (ty >= DEEP_Y && ORE_DEEP[id] != null) idx = ORE_DEEP[id];
-        if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
+        if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
         if (id === B.TORCH) { const fl = 0.5 + 0.5 * Math.sin(game.time * 3000 + tx * 2.1); g.fillStyle = `rgba(255,${180 + fl * 60 | 0},80,${0.35 + fl * 0.3})`; g.fillRect(px + 6 * S, py + (2 + (fl > 0.6 ? 0 : 1)) * S, 4 * S, 3 * S); }
       }
     }
@@ -759,10 +818,22 @@ export function mount(root, ctx) {
     g.globalCompositeOperation = "source-over";
   }
   /** Bossleiste oben in der Mitte (Drache, Wither) */
+  function drawRaidBar(cw, ri) {
+    const w = Math.min(cw * 0.6, 180 * S), x = Math.round((cw - w) / 2), y = Math.round(22 * S), hh = Math.round(3.4 * S);
+    const f = ri.state === "wait" && ri.left === 0 ? 0 : clamp(1 - ri.left / Math.max(1, ri.total), 0, 1);
+    const nm = ri.state === "wait" ? `Überfall – Welle ${Math.min(ri.wave + 1, ri.waves)} von ${ri.waves} naht …` : `Überfall – Welle ${ri.wave} von ${ri.waves}`;
+    g.font = `bold ${Math.round(4.8 * S)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "alphabetic"; g.lineWidth = S; g.strokeStyle = "rgba(0,0,0,.8)";
+    g.strokeText(nm, cw / 2, y - 2 * S); g.fillStyle = "#fff"; g.fillText(nm, cw / 2, y - 2 * S);
+    g.fillStyle = "rgba(0,0,0,.7)"; g.fillRect(x - S, y - S, w + 2 * S, hh + 2 * S);
+    g.fillStyle = "#c83c3c"; g.fillRect(x, y, Math.round(w * f), hh);
+    g.fillStyle = "rgba(255,255,255,.25)"; g.fillRect(x, y, Math.round(w * f), Math.max(1, Math.round(hh * 0.3)));
+    for (let i = 1; i < 6; i++) { g.fillStyle = "rgba(0,0,0,.45)"; g.fillRect(x + Math.round(w * i / 6), y, Math.max(1, Math.round(S * 0.5)), hh); }
+    g.textBaseline = "middle";
+  }
   function drawBossBar(cw, ch) {
     const p = game.player; let b = null;
     for (const m of game.mobs) if (m.boss && (!b || Math.abs(m.x - p.x) < Math.abs(b.x - p.x))) b = m;
-    if (!b || Math.abs(b.x - p.x) > 120) return;
+    if (!b || Math.abs(b.x - p.x) > 120) { const ri = game.raidInfo(); if (ri) drawRaidBar(cw, ri); return; }
     const w = Math.min(cw * 0.6, 180 * S), x = Math.round((cw - w) / 2), y = Math.round(22 * S), f = clamp(b.hp / b.maxHp, 0, 1), hh = Math.round(3.4 * S);
     const nm = b.fuse > 0 ? "Der Wither erwacht …" : MOBS[b.type].name;
     g.font = `bold ${Math.round(4.8 * S)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "alphabetic"; g.lineWidth = S; g.strokeStyle = "rgba(0,0,0,.8)";
@@ -849,9 +920,11 @@ export function mount(root, ctx) {
       if (p.glide) { for (let i = 0; i < 7; i++) { R(3 - i * 2.4, 8 + i * 0.4 - Math.sin(performance.now() / 120 + i) * 0.5, 3, 11 - i * 0.9, i % 2 ? "#6e6e82" : "#8a8aa0"); R(3 - i * 2.4, 8 + i * 0.4, 3, 1.1, "#b4b4c8"); } }
       else { R(-1.2, 9 - bob, 3.4, 11, "#6e6e82"); R(-1.2, 9 - bob, 3.4, 1.4, "#a0a0b8"); R(-0.4, 17 - bob, 2.6, 3.2, "#585870"); }
     }
-    // Beine
-    R(3 + sw * 0.5, 18 - bob, 3, 8, "#463c78"); R(7 - sw * 0.5, 18 - bob, 3, 8, "#3a3264");
-    R(2.5 + sw * 0.5, 25.5 - bob, 4, 2.5, "#3c2a1c"); R(6.5 - sw * 0.5, 25.5 - bob, 4, 2.5, "#2e2014");
+    // Beine (sitzend: nach vorn ausgestreckt, der ganze Körper rutscht tiefer)
+    const sit = !!p.sit;
+    if (sit) { g.translate(0, Math.round(5 * S)); R(5, 18, 9, 3, "#463c78"); R(5, 20.4, 9, 0.6, "#2c2650"); R(13, 17.6, 3.4, 3.8, "#3c2a1c"); }
+    else { R(3 + sw * 0.5, 18 - bob, 3, 8, "#463c78"); R(7 - sw * 0.5, 18 - bob, 3, 8, "#3a3264");
+    R(2.5 + sw * 0.5, 25.5 - bob, 4, 2.5, "#3c2a1c"); R(6.5 - sw * 0.5, 25.5 - bob, 4, 2.5, "#2e2014"); }
     // Körper
     R(2, 9 - bob, 9, 9.5, "#3c6ec8"); R(2, 9 - bob, 9, 1.3, "#5a8ee0"); R(2, 17 - bob, 9, 1.3, "#3c281c");
     // Kopf
@@ -859,8 +932,8 @@ export function mount(root, ctx) {
     // Rüstung
     const AC = { leather: ["#a0612f", "#c98a52", "#6f4220"], iron: ["#d0d3de", "#f4f5fa", "#8e91a0"], gold: ["#f2c93c", "#fff0a0", "#b8861a"], diamond: ["#4fe0d8", "#c8fffa", "#1f9c9e"] };
     const arm = i => (game.armor[i] ? AC[ITEMS[game.armor[i].id].mat] : null);
-    let c = arm(2); if (c) { R(3 + sw * 0.5, 17.5 - bob, 3, 5, c[0]); R(7 - sw * 0.5, 17.5 - bob, 3, 5, c[1]); R(2, 16.5 - bob, 9, 2, c[2]); }
-    c = arm(3); if (c) { R(2.5 + sw * 0.5, 24.5 - bob, 4, 3.5, c[0]); R(6.5 - sw * 0.5, 24.5 - bob, 4, 3.5, c[2]); }
+    let c = arm(2); if (c && !sit) { R(3 + sw * 0.5, 17.5 - bob, 3, 5, c[0]); R(7 - sw * 0.5, 17.5 - bob, 3, 5, c[1]); R(2, 16.5 - bob, 9, 2, c[2]); }
+    c = arm(3); if (c && !sit) { R(2.5 + sw * 0.5, 24.5 - bob, 4, 3.5, c[0]); R(6.5 - sw * 0.5, 24.5 - bob, 4, 3.5, c[2]); }
     c = arm(1); if (c) { R(2, 9 - bob, 9, 8, c[0]); R(2, 9 - bob, 9, 1.3, c[1]); R(2, 16 - bob, 9, 1.3, c[2]); R(5, 10 - bob, 3, 5, c[1]); }
     c = arm(0); if (c) { R(2.6, 0.6 - bob, 8.4, 4.4, c[0]); R(2.6, 0.6 - bob, 8.4, 1.2, c[1]); R(2.2, 1 - bob, 1.6, 6, c[2]); R(8.6, 3.6 - bob, 2.4, 1.2, "#00000055"); }
     // Arm und Gegenstand in der Hand
@@ -881,7 +954,8 @@ export function mount(root, ctx) {
   }
   function drawVillager(v, scr) {
     const [bx, by0] = scr(v.x, v.y), by = by0 + Math.round((v.visOff || 0) * T * S), flip = v.face < 0;
-    const robes = [["#9b5a36", "#7a4426"], ["#4c8a56", "#376b40"], ["#8a5aa8", "#6a4486"]][v.look % 3];
+    const pl = v.prof ? profLook(v.prof) : null;
+    const robes = pl ? pl.robe : [["#9b5a36", "#7a4426"], ["#4c8a56", "#376b40"], ["#8a5aa8", "#6a4486"]][v.look % 3];
     const moving = v.dir !== 0, bob = moving ? Math.abs(Math.sin(performance.now() / 120 + v.look)) * 0.7 : 0;
     g.save(); g.translate(bx + (flip ? Math.round(v.w * T * S) : 0), by); g.scale(flip ? -1 : 1, 1);
     const R = (x, y, w, h2, c) => { g.fillStyle = c; g.fillRect(Math.round(x * S), Math.round(y * S), Math.round(w * S), Math.round(h2 * S)); };
@@ -889,6 +963,7 @@ export function mount(root, ctx) {
     R(2.5, 25 - bob * 0.5, 3, 2, "#3c2a1c"); R(6, 25 - bob * 0.5, 3, 2, "#3c2a1c");
     R(2.5, 2.5 - bob, 6.5, 7, "#e2b48c"); R(8.4, 5.6 - bob, 2.3, 3, "#d29c78"); R(6.4, 4.6 - bob, 1.4, 1.4, "#1e1e28");
     R(2, 1.5 - bob, 7.5, 2.2, v.look === 1 ? "#d8d8d8" : "#4a3020"); R(1.5, 2 - bob, 1.6, 4, v.look === 1 ? "#d8d8d8" : "#4a3020");
+    if (v.prof) drawProfGear(R, v.prof, bob, v.lvl);
     g.restore();
   }
   showOverlay("ready");

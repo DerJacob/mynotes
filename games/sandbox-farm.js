@@ -5,7 +5,7 @@
 //   Tiere füttern → Liebe → Baby (wächst nach 2,5 Minuten heran) · Angeln mit Beute, Müll und Schätzen
 // Gewachsen wird nur in Spielernähe (±48 Blöcke) und nur bei Licht (Stufe 9) – wie in Minecraft, nur schneller.
 // =====================================================================
-import { B, BLOCKS, ITEMS, isCrop, isPlant } from "./sandbox-data.js?v=6";
+import { B, BLOCKS, ITEMS, isCrop, isPlant, colorItem } from "./sandbox-data.js?v=6";
 import { mulberry32 } from "./sandbox-noise.js?v=6";
 import { MOBS } from "./sandbox-mobs.js?v=6";
 
@@ -171,6 +171,7 @@ export function installFarm(Sandbox, K) {
   /** Besondere Beute beim Abbauen: [[Gegenstand, Anzahl], …] oder null (dann gilt BLOCKS[id].drop) */
   P._specialDrops = function (id, aux, harvest, fortune = 0) {
     const r = this.frng, n = (a, b) => a + Math.floor(r() * (b - a + 1));
+    if (BLOCKS[id].colored) return [[colorItem(BLOCKS[id].colored, aux & 15), 1]];
     switch (id) {
       case B.WHEAT: return aux >= 7 ? [["wheat", 1], ["wheat_seeds", n(0, 3 + fortune)]] : [["wheat_seeds", 1]];
       case B.CARROT: return [["carrot", aux >= 7 ? n(2, 5 + fortune) : 1]];
