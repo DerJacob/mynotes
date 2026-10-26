@@ -29,7 +29,7 @@ export const GAMES = [
     title: "Blockdorf",
     emoji: "⛏️",
     desc: "Abbauen, handwerken, bauen, kämpfen, Felder bestellen, Redstone-Schaltungen und Tränke brauen – eine hohe Pixelwelt mit Schneebergen, tiefen Höhlen (Tropfstein, Geoden, Moos und Glühbeeren), Kirschhain, Mangroven und Bambuswald, Tieren, Monstern, Tag und Nacht. Durch Portale geht es in den Nether und ins Ende zu Enderdrache und Wither. Dein Dorf wartet schon auf dich – mit Dorfbewohnern zum Handeln, Überfällen, Karten zu Waldvilla und Ozeanmonument, dem Gesprenkelten Wald, verlassenen Lagern und Wolle, Beton und Kissen in 16 Farben. Mit Regen, Schnee und Gewitter, Mondphasen, Ton und Musik, Kreativmodus, Befehlen, mehreren Welten und Gamepad.",
-    load: () => import("./sandbox.js?v=8"),
+    load: () => import("./sandbox.js?v=9"),
     summary: worldsSummary,
     merge: mergeRecords
   },

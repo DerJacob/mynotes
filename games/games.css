@@ -115,6 +115,7 @@
 .sb-mode { font-size: .85rem; }
 .sb-help { display: grid; gap: 5px; font-size: .82rem; color: var(--muted); justify-items: center; text-align: center; }
 .sb-help kbd { margin-right: 3px; }
+.sb-ver { text-align: right; font-size: .7rem; color: var(--muted); opacity: .7; }
 @media (pointer: coarse), (max-width: 760px) {
   .sb-touch { display: grid; }
   .sb-help { display: none; }
