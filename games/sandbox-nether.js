@@ -8,10 +8,10 @@
 //   Festung: versiegelter Raum tief unter der Erde mit dem Endportal-Rahmen
 // Reine Funktionen: gleiche Zahl → gleiche Welt. Spielregeln stehen in sandbox-dims.js / sandbox-boss.js.
 // =====================================================================
-import { B } from "./sandbox-data.js?v=7";
-import { mulberry32, hash2, fbm, smooth, clamp } from "./sandbox-noise.js?v=7";
+import { B } from "./sandbox-data.js?v=8";
+import { mulberry32, hash2, fbm, smooth, clamp } from "./sandbox-noise.js?v=8";
 
-export const W = 512, H = 192;
+import { W, H, NH } from "./sandbox-const.js?v=8";
 export const NETHER_BIOMES = ["nether", "soul_valley"];
 export const NETHER_LAVA = 132;              // Lava-Spiegel im Nether
 export const END_CX = W >> 1, END_TOP = 100; // Mitte und Oberkante der Hauptinsel
@@ -28,7 +28,16 @@ function loot(table, rnd, cap = 7) {
   return out.slice(0, cap);
 }
 
-function arrays() { return { tiles: new Uint8Array(W * H), lvl: new Uint8Array(W * H), aux: new Uint8Array(W * H), ground: new Int16Array(W), biomes: new Uint8Array(W) }; }
+/** Nether und Ende werden in NH Zeilen erzeugt; auf die Höhe der Welt aufgefüllt (unten Grundgestein bzw. Leere) */
+function padDim(o, fill) {
+  for (const k of ["tiles", "lvl", "aux"]) {
+    const a = new Uint8Array(W * H); a.set(o[k]);
+    if (k === "tiles" && fill) a.fill(fill, W * NH);
+    o[k] = a;
+  }
+  return o;
+}
+function arrays() { return { tiles: new Uint8Array(W * NH), lvl: new Uint8Array(W * NH), aux: new Uint8Array(W * NH), ground: new Int16Array(W), biomes: new Uint8Array(W) }; }
 
 // ---------------------------------------------------------------------
 // Nether
@@ -37,8 +46,8 @@ export function generateNether(seed) {
   const rnd = mulberry32((seed ^ 0x4e7e5) | 0), s2 = (seed ^ 0x77aa) | 0;
   const { tiles, lvl, aux, ground, biomes } = arrays();
   const chests = [], strongholds = [], fortresses = [];
-  const at = (x, y) => (x < 0 || x >= W || y < 0 || y >= H ? B.BEDROCK : tiles[y * W + x]);
-  const put = (x, y, id) => { if (x > 0 && x < W - 1 && y > 3 && y < H - 4) tiles[y * W + x] = id; };
+  const at = (x, y) => (x < 0 || x >= W || y < 0 || y >= NH ? B.BEDROCK : tiles[y * W + x]);
+  const put = (x, y, id) => { if (x > 0 && x < W - 1 && y > 3 && y < NH - 4) tiles[y * W + x] = id; };
   const ceil = new Int16Array(W), floor = new Int16Array(W);
   for (let x = 0; x < W; x++) {
     ceil[x] = Math.round(18 + (fbm(x * 0.03, 2.2, s2 + 1, 3) - 0.5) * 22);
@@ -47,13 +56,13 @@ export function generateNether(seed) {
   }
   // Grundgestein-Schalen, Netherrack, Höhle, Lava-Ozean
   for (let x = 0; x < W; x++) {
-    const fl = clamp(floor[x], ceil[x] + 24, H - 14);
+    const fl = clamp(floor[x], ceil[x] + 24, NH - 14);
     floor[x] = fl;
-    for (let y = 0; y < H; y++) {
+    for (let y = 0; y < NH; y++) {
       let id;
-      if (y <= 1 || y >= H - 2) id = B.BEDROCK;
+      if (y <= 1 || y >= NH - 2) id = B.BEDROCK;
       else if (y <= 4 && hash2(x, y, seed + 3) < (y === 2 ? 0.9 : y === 3 ? 0.55 : 0.25)) id = B.BEDROCK;
-      else if (y >= H - 5 && hash2(x, y, seed + 4) < (y === H - 3 ? 0.9 : 0.4)) id = B.BEDROCK;
+      else if (y >= NH - 5 && hash2(x, y, seed + 4) < (y === NH - 3 ? 0.9 : 0.4)) id = B.BEDROCK;
       else if (y < ceil[x] || y >= fl) id = B.NETHERRACK;
       else id = B.AIR;
       tiles[y * W + x] = id;
@@ -101,10 +110,10 @@ export function generateNether(seed) {
   // Erze im Netherrack
   const vein = (type, count, size) => {
     for (let i = 0; i < count; i++) {
-      let cx = Math.floor(rnd() * W), cy = 6 + Math.floor(rnd() * (H - 14));
+      let cx = Math.floor(rnd() * W), cy = 6 + Math.floor(rnd() * (NH - 14));
       const n = size[0] + Math.floor(rnd() * (size[1] - size[0] + 1));
       for (let k = 0; k < n; k++) {
-        if (cx > 0 && cx < W - 1 && cy > 4 && cy < H - 5 && at(cx, cy) === B.NETHERRACK) put(cx, cy, type);
+        if (cx > 0 && cx < W - 1 && cy > 4 && cy < NH - 5 && at(cx, cy) === B.NETHERRACK) put(cx, cy, type);
         const d = Math.floor(rnd() * 4); cx += d === 0 ? 1 : d === 1 ? -1 : 0; cy += d === 2 ? 1 : d === 3 ? -1 : 0;
       }
     }
@@ -123,7 +132,7 @@ export function generateNether(seed) {
       if (!open && (x - fx) % 9 === 4) for (let y = fy - 5; y <= fy - 1; y++) { put(x, y, B.NETHER_BRICK); put(x + 1, y, B.NETHER_BRICK); }   // Stützpfeiler im Gang... mit Durchgang
       if (!open && (x - fx) % 9 === 4) { put(x, fy - 1, B.AIR); put(x + 1, fy - 1, B.AIR); put(x, fy - 2, B.AIR); put(x + 1, fy - 2, B.AIR); put(x, fy - 3, B.AIR); put(x + 1, fy - 3, B.AIR); }
       // Stützen nach unten bis zum Boden oder zur Lava
-      if ((x - fx) % 8 === 0) for (let y = fy + 2; y < H - 5 && (at(x, y) === B.AIR || at(x, y) === B.LAVA); y++) { put(x, y, B.NETHER_BRICK); put(x + 1, y, B.NETHER_BRICK); }
+      if ((x - fx) % 8 === 0) for (let y = fy + 2; y < NH - 5 && (at(x, y) === B.AIR || at(x, y) === B.LAVA); y++) { put(x, y, B.NETHER_BRICK); put(x + 1, y, B.NETHER_BRICK); }
     }
     for (let y = fy - 7; y <= fy + 1; y++) { put(fx - 1, y, B.NETHER_BRICK); put(fx + len, y, B.NETHER_BRICK); }
     // Wald aus Netherwarzen auf Seelensand in der Mitte
@@ -143,8 +152,8 @@ export function generateNether(seed) {
     fxs.push(fx); fortress(fx, len, 92 + Math.floor(rnd() * 14)); n++;
   }
   // Wasser und flüssige Reste gibt es hier nicht; Lava-Zellen brauchen einen Wert
-  for (let i = 0; i < W * H; i++) { if (tiles[i] === B.LAVA && !lvl[i]) lvl[i] = 9; }
-  return { tiles, lvl, aux, ground, biomes, chests, fortresses, strongholds };
+  for (let i = 0; i < W * NH; i++) { if (tiles[i] === B.LAVA && !lvl[i]) lvl[i] = 9; }
+  return padDim({ tiles, lvl, aux, ground, biomes, chests, fortresses, strongholds }, B.BEDROCK);
 }
 
 // ---------------------------------------------------------------------
@@ -155,7 +164,7 @@ export function generateEnd(seed) {
   const rnd = mulberry32((seed ^ 0x3d1e) | 0);
   const { tiles, lvl, aux, ground, biomes } = arrays();
   const chests = [], crystals = [], gateways = {};
-  const put = (x, y, id) => { if (x > 0 && x < W - 1 && y > 0 && y < H - 1) tiles[y * W + x] = id; };
+  const put = (x, y, id) => { if (x > 0 && x < W - 1 && y > 0 && y < NH - 1) tiles[y * W + x] = id; };
   const isle = (cx, top, r, th) => {
     for (let dx = -r; dx <= r; dx++) {
       const k = 1 - Math.pow(Math.abs(dx) / (r + 0.5), 2.2), t = Math.round(th * Math.pow(Math.max(0, k), 0.85) + (hash2(cx + dx, 3, seed) - 0.5) * 2);
@@ -165,7 +174,7 @@ export function generateEnd(seed) {
   isle(END_CX, END_TOP, 42, 22);
   isle(END_RIGHT, END_TOP - 2, 16, 10);
   isle(END_CX - 150, END_TOP + 3, 12, 8);
-  ground.fill(H + 30);
+  ground.fill(NH + 30);
   // Obsidiansäulen
   END_PILLARS.forEach((dx, i) => {
     const cx = END_CX + dx, h = 12 + Math.floor(hash2(i, 5, seed) * 20), w = h > 24 ? 1 : 1;
@@ -199,7 +208,7 @@ export function generateEnd(seed) {
   put(gateways.right.x, END_TOP - 3, B.GATEWAY); put(gateways.right.x, END_TOP - 4, B.GATEWAY);
   // Ankunftsplattform am linken Rand der Hauptinsel (Obsidian), darüber frei
   for (let x = END_CX - 50; x <= END_CX - 41; x++) { put(x, END_TOP, B.OBSIDIAN); for (let y = END_TOP - 5; y < END_TOP; y++) put(x, y, B.AIR); }
-  return { tiles, lvl, aux, ground, biomes, chests, crystals, gateways };
+  return padDim({ tiles, lvl, aux, ground, biomes, chests, crystals, gateways }, 0);
 }
 
 // ---------------------------------------------------------------------

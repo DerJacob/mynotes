@@ -3,8 +3,8 @@
 // Texturen werden beim Start gemalt (eigene Bilder, 16 × 16). Dreh- und spiegelbare Bauteile (Kolben, Hebel,
 // Spender …) sind einmal "nach rechts" bzw. "unten angebracht" gemalt und werden beim Zeichnen gedreht.
 // =====================================================================
-import { B, BLOCKS } from "./sandbox-data.js?v=7";
-import { potionColor } from "./sandbox-brew.js?v=7";
+import { B, BLOCKS } from "./sandbox-data.js?v=8";
+import { potionColor } from "./sandbox-brew.js?v=8";
 
 export const T4 = 16;
 /** Atlas-Plätze der Zusatzbilder (Spalte im Atlas; 0…80 sind die Blöcke selbst) */
