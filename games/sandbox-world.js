@@ -12,8 +12,9 @@ import { cherryTree, mangroveTree, bambooStalk } from "./sandbox-trees8.js?v=10"
 import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=10";
 
 import { W, H, SURF, SPAWN_X, SEA, DEEP } from "./sandbox-const.js?v=10";
-export const BIOMES = ["plains", "forest", "birch", "taiga", "snow", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "dappled", "meadow", "grove", "snowy_slopes", "jagged_peaks", "stony_peaks", "cherry", "mangrove", "bamboo"];
-export const BIOME_NAMES = { plains: "Ebene", forest: "Wald", birch: "Birkenwald", taiga: "Taiga", snow: "Schneeebene", desert: "Wüste", savanna: "Savanne", jungle: "Dschungel", swamp: "Sumpf", mountains: "Berge", ocean: "Ozean", dappled: "Gesprenkelter Wald", meadow: "Wiese", grove: "Schneehain", snowy_slopes: "Verschneite Hänge", jagged_peaks: "Zackengipfel", stony_peaks: "Steingipfel", cherry: "Kirschhain", mangrove: "Mangrovensumpf", bamboo: "Bambuswald" };
+export const BIOMES = ["plains", "forest", "birch", "taiga", "snow", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "dappled", "meadow", "grove", "snowy_slopes", "jagged_peaks", "stony_peaks", "cherry", "mangrove", "bamboo", "warm_ocean"];
+export const BIOME_NAMES = { plains: "Ebene", forest: "Wald", birch: "Birkenwald", taiga: "Taiga", snow: "Schneeebene", desert: "Wüste", savanna: "Savanne", jungle: "Dschungel", swamp: "Sumpf", mountains: "Berge", ocean: "Ozean", dappled: "Gesprenkelter Wald", meadow: "Wiese", grove: "Schneehain", snowy_slopes: "Verschneite Hänge", jagged_peaks: "Zackengipfel", stony_peaks: "Steingipfel", cherry: "Kirschhain", mangrove: "Mangrovensumpf", bamboo: "Bambuswald", warm_ocean: "Warmer Ozean" };
+export const OCEANS = new Set(["ocean", "warm_ocean"]);
 /** Biome der Berge (Höhenstufen der Berge ab 1.18) */
 export const MOUNTAIN_BIOMES = new Set(["mountains", "grove", "snowy_slopes", "jagged_peaks", "stony_peaks"]);
 /** Biome mit Schnee statt Regen */
@@ -121,6 +122,22 @@ export function generateWorld(seed) {
       mnt[x] = Math.max(mnt[x], 0.5 * smooth(0, 0.3, k));
     }
   }
+  // Etappe 11: Jede Welt bekommt auch ein Meer (sonst blieben Monument, Riffe und Wracks vielen Welten verborgen).
+  // Gezählt werden die Spalten, die gleich als Ozean eingeteilt werden; zu wenige → ein Meer wird wie das Gebirge oben aufgesetzt.
+  {
+    let n = 0;
+    for (let x = 0; x < W; x++) if (Math.abs(x - SPAWN_X) > 44 && mnt[x] <= 0.3 && oce[x] > 0.45 && Math.round(hgt[x]) >= SEA + 3) n++;
+    if (n < 40) {
+      const cx = (hash2(11, 11, seed) < 0.5 ? 60 : 350) + Math.floor(hash2(12, 12, seed) * 90), wd = 70;
+      for (let x = 0; x < W; x++) {
+        const k = 1 - Math.pow(Math.abs(x - cx) / wd, 2);
+        if (k <= 0 || Math.abs(x - SPAWN_X) < 60) continue;
+        const f = smooth(0, 0.35, k);
+        oce[x] = Math.max(oce[x], f); mnt[x] *= 1 - smooth(0, 0.2, k);
+        hgt[x] = Math.max(hgt[x], SEA + 3 + 18 * smooth(0, 0.7, k));
+      }
+    }
+  }
   // Biome je Spalte
   const bname = new Array(W);
   for (let x = 0; x < W; x++) {
@@ -132,7 +149,7 @@ export function generateWorld(seed) {
       const rise = SURF - top, cold = temp[x] < 0.5;
       b = rise < 22 ? "meadow" : rise < 44 ? (cold ? "grove" : rise < 34 ? "meadow" : "stony_peaks") : rise < 70 ? (cold ? "snowy_slopes" : "stony_peaks") : (cold ? "jagged_peaks" : "stony_peaks");
     }
-    else if (oce[x] > 0.45 && top >= SEA + 3) b = "ocean";
+    else if (oce[x] > 0.45 && top >= SEA + 3) b = temp[x] > 0.55 ? "warm_ocean" : "ocean";
     bname[x] = b; biomes[x] = BI[b]; ground[x] = top;
   }
 
@@ -149,6 +166,7 @@ export function generateWorld(seed) {
       let id;
       if (y >= H - 2) id = B.BEDROCK;
       else if (y >= H - 4 && hash2(x, y, seed + 3) < (y === H - 3 ? 0.6 : 0.3)) id = B.BEDROCK;
+      else if (b === "warm_ocean") id = d < 4 ? B.SAND : (y >= dsLine ? B.DEEPSLATE : B.STONE);
       else if (b === "ocean") id = d < 4 ? (clayPatch && d < 3 ? B.CLAY : hash2(x >> 2, 3, seed) < 0.3 ? B.GRAVEL : B.SAND) : (y >= dsLine ? B.DEEPSLATE : B.STONE);
       else if (beach && d < 5) id = B.SAND;
       else if (b === "desert" && d < 5) id = B.SAND;
@@ -201,7 +219,7 @@ export function generateWorld(seed) {
   // Schluchten: senkrechte Risse von der Oberfläche in die Tiefe
   for (let i = 0; i < 7; i++) {
     const sx = 20 + Math.floor(rnd() * (W - 40));
-    if (nearVillage(sx) || bname[sx] === "ocean") continue;
+    if (nearVillage(sx) || OCEANS.has(bname[sx])) continue;
     const depth = 22 + Math.floor(rnd() * 45), ph = rnd() * 6;
     for (let k = 0; k < depth; k++) {
       const y = ground[clamp(Math.round(sx), 0, W - 1)] - 1 + k, wd = 1.1 + vnoise(k * 0.2, i, seed + 61) * 1.8 + (k < 6 ? 0.8 : 0);
@@ -211,7 +229,7 @@ export function generateWorld(seed) {
   // Höhleneingänge: schräge Gänge von der Oberfläche
   for (let i = 0; i < 12; i++) {
     let x = 15 + rnd() * (W - 30);
-    if (nearVillage(x) || bname[Math.round(x)] === "ocean") continue;
+    if (nearVillage(x) || OCEANS.has(bname[Math.round(x)])) continue;
     let y = ground[Math.round(x)] - 1;
     const dir = rnd() < 0.5 ? -1 : 1;
     for (let k = 0; k < 34; k++) { carveDisc(x, y, 1.7, 1.7); x += dir * (0.5 + 0.3 * Math.sin(k * 0.4)); y += 0.85; }
@@ -229,7 +247,7 @@ export function generateWorld(seed) {
   // Unterirdische Seen (1.18): Wasser füllt eine Kammer bis zu einem festen Spiegel
   for (let k = 0, made = 0; k < 160 && made < 12; k++) {
     const sx = 10 + Math.floor(rnd() * (W - 20));
-    if (nearVillage(sx) || bname[sx] === "ocean") continue;
+    if (nearVillage(sx) || OCEANS.has(bname[sx])) continue;
     const sy = ground[sx] + 22 + Math.floor(rnd() * Math.min(80, H - 40 - ground[sx] - 22));
     if (sy >= H - 34 || tiles[sy * W + sx] !== B.AIR) continue;
     let fy = sy; while (fy + 1 < H - 6 && tiles[(fy + 1) * W + sx] === B.AIR) fy++;
@@ -419,10 +437,10 @@ export function generateWorld(seed) {
   for (let tries = 0; tries < 80 && villages.length < 4; tries++) {
     const x = 40 + Math.floor(rnd() * (W - 80)), b = bname[x];
     if (Math.abs(x - SPAWN_X) < 110 || villages.some(v => Math.abs(v.x - x) < 100)) continue;
-    if (MOUNTAIN_BIOMES.has(b) || b === "ocean" || b === "swamp" || b === "jungle" || b === "mangrove" || b === "bamboo") continue;
+    if (MOUNTAIN_BIOMES.has(b) || OCEANS.has(b) || b === "swamp" || b === "jungle" || b === "mangrove" || b === "bamboo") continue;
     const g = ground[x];
     if (g > SEA - 1 || g < SURF - 14) continue;
-    let ok = true; for (let dx = -24; dx <= 24; dx += 6) if (bname[clamp(x + dx, 0, W - 1)] === "ocean" || ground[clamp(x + dx, 0, W - 1)] > SEA + 4 || Math.abs(ground[clamp(x + dx, 0, W - 1)] - g) > 12) ok = false;
+    let ok = true; for (let dx = -24; dx <= 24; dx += 6) if (OCEANS.has(bname[clamp(x + dx, 0, W - 1)]) || ground[clamp(x + dx, 0, W - 1)] > SEA + 4 || Math.abs(ground[clamp(x + dx, 0, W - 1)] - g) > 12) ok = false;
     if (ok) village(x, g, styleOf(b), false);
   }
 
@@ -432,7 +450,7 @@ export function generateWorld(seed) {
   for (let i = 0, n = 0; i < 200 && n < 10; i++) {
     const w = 5 + Math.floor(rnd() * 5), hh = 4, x = 12 + Math.floor(rnd() * (W - 24 - w)), y = SURF + 16 + Math.floor(rnd() * 88);
     if (nearVillage(x) || !far(x, y, 30) || y + hh + 2 >= H - 8) continue;
-    if (!isStoneish(at(x + (w >> 1), y)) || bname[x] === "ocean") continue;
+    if (!isStoneish(at(x + (w >> 1), y)) || OCEANS.has(bname[x])) continue;
     for (let yy = y - 1; yy <= y + hh; yy++) for (let xx = x - 1; xx <= x + w; xx++) put(xx, yy, xx === x - 1 || xx === x + w || yy === y - 1 || yy === y + hh ? B.COBBLE : B.AIR);
     const cxp = x + 1 + Math.floor(rnd() * (w - 2));
     put(cxp, y + hh - 1, B.CHEST); chests.push({ x: cxp, y: y + hh - 1, items: loot(rnd, "dungeon", mulberry32(seed + chests.length * 977 + 7)) });
@@ -454,5 +472,6 @@ export function generateWorld(seed) {
   }
   // fließendes Wasser/Lava, das durch Bauwerke ungültig wurde, bereinigen
   for (let i = 0; i < W * H; i++) { if (tiles[i] !== B.WATER && tiles[i] !== B.LAVA) lvl[i] = 0; else if (!lvl[i]) lvl[i] = 8; }
+  for (const c of chests) if (tiles[c.y * W + c.x] !== B.CHEST) tiles[c.y * W + c.x] = B.CHEST;       // eine überlappende Röhre darf keine Truhe wegräumen
   return { tiles, lvl, ground, biomes, villages, chests };
 }

@@ -32,7 +32,7 @@ export const MOBS = {
 const HERD = { // Biom → Gewichte der Tiere beim Erzeugen der Welt
   plains: { cow: 3, pig: 2, sheep: 3, chicken: 2 }, forest: { pig: 2, sheep: 2, cow: 2, chicken: 1, wolf: 2 }, birch: { pig: 2, sheep: 2, cow: 2, chicken: 1 },
   taiga: { wolf: 3, rabbit: 2, sheep: 1, pig: 1, cow: 1 }, snow: { rabbit: 3, sheep: 1 }, desert: { rabbit: 2 }, savanna: { cow: 2, sheep: 2, pig: 1, chicken: 1 },
-  jungle: { chicken: 3, pig: 1 }, swamp: { cow: 1, chicken: 1 }, mountains: { sheep: 3 }, ocean: {}, dappled: { pig: 2, sheep: 2, cow: 2, wolf: 1, chicken: 1 },
+  jungle: { chicken: 3, pig: 1 }, swamp: { cow: 1, chicken: 1 }, mountains: { sheep: 3 }, ocean: {}, warm_ocean: {}, dappled: { pig: 2, sheep: 2, cow: 2, wolf: 1, chicken: 1 },
   meadow: { sheep: 3, cow: 2, pig: 1, rabbit: 2 }, grove: { rabbit: 2, wolf: 2, sheep: 1 }, snowy_slopes: { rabbit: 2 }, jagged_peaks: {}, stony_peaks: { sheep: 1 },
   cherry: { pig: 2, sheep: 2, rabbit: 2, cow: 1 }, mangrove: { cow: 1, chicken: 1 }, bamboo: { pig: 2, chicken: 2 }
 };
@@ -412,7 +412,7 @@ export function installMobs(Sandbox, K) {
       m.hurtT = Math.max(0, m.hurtT - dt); m.atkCd -= dt;
       const d = MOBS[m.type];
       // Wasser, Lava
-      if (m.inWater && m.type !== "enderman") m.vy = Math.max(-2.6, m.vy - 36 * dt);
+      if (m.inWater && m.type !== "enderman" && !d.aq) m.vy = Math.max(-2.6, m.vy - 36 * dt);
       if (m.inLava) { m.lavaT = (m.lavaT || 0) - dt; if (m.lavaT <= 0) { m.lavaT = 0.5; this._mobHurt(m, 4, 0, "lava"); if (m.dead) continue; } }
       if (m.type === "enderman" && m.inWater) { this._mobHurt(m, 2 * dt * 3, 0, "water"); if (m.dead) continue; }
       if ((m.type === "zombie" || m.type === "skeleton") && !m.inWater) {
@@ -605,7 +605,7 @@ export function installMobs(Sandbox, K) {
           if (fy > 0 && !inVillage(this, x, fy) && this.lightAt(x, fy - 1) <= 6) {
             const cave = fy > this.ground[x] + 3, wts = { ...(cave ? HOSTILE_W.cave : HOSTILE_W.surface) }, bi = this.biomeAt(x);
             if (bi === "swamp") { wts.witch += 12; wts.slime = (wts.slime || 0) + (cave ? 0 : 14); }
-            if (bi === "desert" || bi === "ocean") wts.slime = 0;
+            if (bi === "desert" || bi === "ocean" || bi === "warm_ocean") wts.slime = 0;
             // Enderman braucht drei freie Blöcke
             if (!(this.tile(x, fy - 3) === B.AIR)) delete wts.enderman;
             if (this.tile(x, fy - 1) !== B.AIR && BLOCKS[this.tile(x, fy - 1)].solid) { /* Pflanze o. Ä.: ok */ }
@@ -619,7 +619,7 @@ export function installMobs(Sandbox, K) {
     this.passT -= dt;
     if (this.passT <= 0) {
       this.passT = 9;
-      let n = 0; for (const m of this.mobs) if (m.kind === "passive" && Math.abs(cxOf(m) - p.x) < 80) n++;
+      let n = 0; for (const m of this.mobs) if (m.kind === "passive" && !MOBS[m.type].aq && Math.abs(cxOf(m) - p.x) < 80) n++;
       if (n < 6 && this.dayFactor() > 0.6) {
         const side = this.mrng() < 0.5 ? -1 : 1, x = Math.floor(p.x + side * (26 + this.mrng() * 24));
         if (x >= 3 && x < W - 3) {
@@ -663,6 +663,10 @@ export function installMobs(Sandbox, K) {
       if (m.baby > 0) o.bb = Math.round(m.baby);
       if (m.fuse > 0 && m.type === "wither") o.fz = +m.fuse.toFixed(1);
       if (m.angry && (m.type === "piglin" || m.type === "zombie_piglin")) o.an = 1;
+      if (m.var) o.vr = m.var;
+      if (m.type === "turtle") { o.hm = Math.round(m.home); if (m.gravid) o.gv = 1; }
+      if (m.mon !== undefined) o.mn = m.mon;
+      if (m.trident) o.tr = 1;
       return o;
     });
   };
@@ -677,6 +681,11 @@ export function installMobs(Sandbox, K) {
       if (o.sd) m.shield = true;
       if (o.fz > 0) m.fuse = +o.fz;
       if (o.an) m.angry = true;
+      if (o.vr > 0) m.var = o.vr | 0;
+      if (Number.isFinite(o.hm)) m.home = o.hm;
+      if (o.gv) m.gravid = true;
+      if (Number.isFinite(o.mn)) m.mon = o.mn;
+      if (o.tr) m.trident = true;
       if (o.bb > 0) { m.baby = o.bb; m.w = d.w * 0.55; m.h = d.h * 0.55; m.y = clamp(o.y, 0, H - m.h); }
       if (this._hit(m)) {                                        // Rundung beim Speichern: ein Stück nach oben schieben
         const y0 = m.y; let ok = false;

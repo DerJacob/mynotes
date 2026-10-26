@@ -15,7 +15,7 @@ export const GROW_RANGE = 48;
 export const GROW = { wet: 0.05, dry: 0.02, cane: 0.04, wart: 0.03, fruit: 0.15 };
 export const BABY_TIME = 150, LOVE_TIME = 20, BREED_COOLDOWN = 60;
 /** Was Tiere fressen, um sich zu paaren */
-const BREED_FOOD = {
+export const BREED_FOOD = {
   cow: ["wheat"], sheep: ["wheat"], pig: ["carrot", "potato", "golden_carrot"], chicken: ["wheat_seeds", "pumpkin_seeds", "melon_seeds"],
   rabbit: ["carrot", "golden_carrot", "flower"], wolf: ["raw_beef", "steak", "raw_porkchop", "cooked_porkchop", "raw_chicken", "cooked_chicken", "raw_mutton", "cooked_mutton", "raw_rabbit", "cooked_rabbit", "rotten_flesh"], cat: ["raw_cod", "raw_salmon", "raw_chicken"]
 };
@@ -235,7 +235,7 @@ export function installFarm(Sandbox, K) {
   };
 
   // ---------- Angeln ----------
-  const FISH = [["raw_cod", 62], ["raw_salmon", 25], ["pufferfish", 13]];
+  const FISH = [["raw_cod", 60], ["raw_salmon", 25], ["tropical_fish", 2], ["pufferfish", 13]];
   const JUNK = ["stick", "string", "bone", "leather", "rotten_flesh", "feather"];
   P._rodStack = function () { const s = this.selStack(); return s && s.id === "fishing_rod" ? s : null; };
   /** Rechtsklick mit der Angel: auswerfen oder einholen */
@@ -260,8 +260,9 @@ export function installFarm(Sandbox, K) {
     let st;
     if (treasure) {
       const k = r();
-      if (k < 0.4) st = this._randomBook ? this._randomBook(30, true) : stk("book");
-      else if (k < 0.7) { st = stk("bow"); if (this._enchantStack) this._enchantStack(st, 20 + Math.floor(r() * 10)); }
+      if (k < 0.35) st = this._randomBook ? this._randomBook(30, true) : stk("book");
+      else if (k < 0.5) st = stk("nautilus_shell");
+      else if (k < 0.75) { st = stk("bow"); if (this._enchantStack) this._enchantStack(st, 20 + Math.floor(r() * 10)); }
       else { st = stk("fishing_rod"); if (this._enchantStack) this._enchantStack(st, 20 + Math.floor(r() * 10)); }
       st.d = Math.floor(r() * (ITEMS[st.id].dur || 1) * 0.5);
     } else if (junk) {

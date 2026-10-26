@@ -11,6 +11,7 @@ import { drawMob, drawProjectile, MOB_COLORS } from "./sandbox-mobart.js?v=10";
 import { drawBlock4 } from "./sandbox-art4.js?v=10";
 import { drawBlock8 } from "./sandbox-art8.js?v=10";
 import { drawBlock9, bannerCloth } from "./sandbox-art9.js?v=10";
+import { drawBlock11, plantSprite, FIRST11 } from "./sandbox-art11.js?v=10";
 import { LOOM_PATTERNS, TRIM_MATS, TRIM_MAT_IDS, FIRST9, COLORS } from "./sandbox-data.js?v=10";
 import { mcY } from "./sandbox-const.js?v=10";
 import { drawBlock5, IDX5 } from "./sandbox-art5.js?v=10";
@@ -57,7 +58,7 @@ export function mount(root, ctx) {
   const keys = { left: false, right: false, jump: false, down: false };
   const mouse = { px: 0, py: 0, in: false, down: false, btn: 0 };
   const cam = { x: game.player.x, y: game.player.y };
-  const parts = [], floats = [], sweeps = [];
+  const parts = [], floats = [], sweeps = [], rays = [];
   const audio = createAudio();
   audio.apply(settings);
   const ensureAudio = () => audio.ensure();
@@ -109,7 +110,7 @@ export function mount(root, ctx) {
   const help = h("div", { class: "sb-help" },
     h("div", null, kbd("A"), kbd("D"), " laufen · ", kbd("W"), " / ", kbd("Leertaste"), " springen · ", kbd("S"), " Leiter runter"),
     h("div", null, "Linke Maustaste: abbauen und kämpfen · rechte: benutzen, bauen, essen"),
-    h("div", null, "Bogen und Armbrust: rechte Maustaste halten (Armbrust: loslassen = geladen, nächster Klick = Schuss) · Schild: rechte Maustaste halten · ", kbd("F"), " zweite Hand · ", kbd("G"), " Fortschritte"),
+    h("div", null, "Bogen und Armbrust: rechte Maustaste halten (Armbrust: loslassen = geladen, nächster Klick = Schuss) · Dreizack: halten und loslassen = werfen (Sog im Wasser/Regen) · Schild: rechte Maustaste halten · ", kbd("F"), " zweite Hand · ", kbd("G"), " Fortschritte"),
     h("div", null, "Linke Maustaste gedrückt halten schlägt erst bei voller Ladung zu: Kritisch im Fall, Schwert schwingt, Axt entwaffnet Schilde"),
     h("div", null, kbd("1"), "–", kbd("9"), " / Mausrad: Platz · ", kbd("E"), " Inventar · ", kbd("Q"), " werfen · ", kbd("P"), " Pause"));
   const touchBtn = (label, action, title) => {
@@ -126,7 +127,7 @@ export function mount(root, ctx) {
     h("div", { class: "sb-view" }, canvas,
       h("div", { class: "sb-hud-top" }, h("div", { class: "sb-left" }, info, fxRow), h("div", { class: "sb-right" }, advBtn, invBtn, chatBtn, soundBtn, pauseBtn)),
       toastEl, chatLog, h("div", { class: "sb-bottom" }, heldName, barsRow, xpBar, hotbar), chatIn, winWrap, cursorEl, padEl, overlay),
-    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 10 · Etappe 10 · Spielstand 11")));
+    touch, help, h("div", { class: "sb-ver" }, "Blockdorf Version 11 · Etappe 11 · Spielstand 12")));
   barsRow.append(h("div", { class: "sb-barcol" }, armorRow, heartsRow), h("div", { class: "sb-barcol sb-foodcol" }, airRow, foodRow));
   function applySettings() {
     audio.apply(settings);
@@ -199,7 +200,7 @@ export function mount(root, ctx) {
   function syncWindow() {
     const w = game.win;
     if (!w) { if (!winWrap.hidden) { winWrap.hidden = true; cursorEl.hidden = true; sig.win = ""; } return; }
-    if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.blocking = false; game.bow = null; game.xbow = null; }
+    if (winWrap.hidden) { winWrap.hidden = false; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.blocking = false; game.bow = null; game.xbow = null; game.trid = null; }
     const e = game.winEnt();
     const sg = JSON.stringify([w.kind, cre.tab, game.inv, game.armor, game.offh, game.grid, game.cursor, e && e.s, w.kind === "adv" ? game.adv : 0, w.kind === "trade" && w.v ? [w.v.offers.map(o => o.uses), w.v.lvl, w.v.xp, game.hero()] : 0, w.kind === "map" ? Math.floor(game.player.x / 3) : 0, w.kind === "ench" || w.kind === "anvil" ? game.xp : 0, w.kind === "beacon" && e ? [e.eff, game.beaconLevel(w.x, w.y), game.beaconClear(w.x, w.y)] : 0]);
     if (sg !== sig.win) { sig.win = sg; renderWindow(); renderBook(); updateCursor(); }
@@ -539,7 +540,7 @@ export function mount(root, ctx) {
   }
   function pause() {
     if (state !== "playing") return;
-    state = "paused"; cancelAnimationFrame(raf); raf = 0; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop(); game.bow = null; game.xbow = null; game.blocking = false;
+    state = "paused"; cancelAnimationFrame(raf); raf = 0; keys.left = keys.right = keys.jump = keys.down = false; mouse.down = false; game.mineStop(); game.bow = null; game.xbow = null; game.trid = null; game.blocking = false;
     padMine = padUse = false; pad.left = pad.right = pad.jump = pad.down = false; padEl.hidden = true; padShown = false;
     if (!chatIn.hidden) closeChat();
     saveNow(); page = "main"; showOverlay("paused"); draw(0);
@@ -721,8 +722,8 @@ export function mount(root, ctx) {
   });
   canvas.addEventListener("pointermove", setPointer);
   const up = () => {
-    if (mouse.down && mouse.btn === 2 && (game.bow || game.xbow)) { const m = worldMouse(); if (game.handRelease(m.x, m.y)) { dirty = true; } }
-    game.bow = null; game.xbow = null; game.blocking = false; mouse.used = false;
+    if (mouse.down && mouse.btn === 2 && (game.bow || game.xbow || game.trid)) { const m = worldMouse(); if (game.handRelease(m.x, m.y)) { dirty = true; } }
+    game.bow = null; game.xbow = null; game.trid = null; game.blocking = false; mouse.used = false;
     mouse.down = false; game.mineStop();
   };
   canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
@@ -802,6 +803,7 @@ export function mount(root, ctx) {
     if (Math.abs(cam.x - tx) > 30 || Math.abs(cam.y - ty) > 30) { cam.x = tx; cam.y = ty; }      // nach einem Sprung (/tp) sofort mitkommen
     // Ereignisse verarbeiten
     for (const e of game.events) {
+      if (ocean11Event(e)) continue;
       if (e.t === "break") { spark(e.x + 0.5, e.y + 0.5, e.id, 9); sfx("break"); dirty = true; }
       else if (e.t === "place") { spark(e.x + 0.5, e.y + 0.5, e.id, 3); sfx("place"); }
       else if (e.t === "door") sfx("door");
@@ -909,7 +911,7 @@ export function mount(root, ctx) {
     }
     game.events.length = 0;
     // Partikel, Schwebetexte, Meldungen
-    for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.life -= dt; q.vy += 24 * dt; q.x += q.vx * dt; q.y += q.vy * dt; if (q.life <= 0) parts.splice(i, 1); }
+    for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.life -= dt; q.vy += (q.gy === undefined ? 24 : q.gy) * dt; q.x += q.vx * dt; q.y += q.vy * dt; if (q.life <= 0) parts.splice(i, 1); }
     for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.life -= dt; f.y -= dt * 0.9; if (f.life <= 0) floats.splice(i, 1); }
     flash = Math.max(0, flash - dt); shake = Math.max(0, shake - dt); fade = Math.max(0, fade - dt); whiteout = Math.max(0, whiteout - dt);
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.hidden = true; }
@@ -938,6 +940,31 @@ export function mount(root, ctx) {
     const p = game.player;
     for (const f of floats) if (f.text === text && f.life > 0.8) { return; }
     floats.push({ x: p.x + p.w / 2, y: p.y - 0.4 - floats.length * 0.35, text, color, life: 1.4 });
+  }
+
+  /** Ereignisse der Etappe 11 (Ozean); true = behandelt */
+  function ocean11Event(e) {
+    const p = game.player, bub = (x, y, n) => { for (let i = 0; i < n; i++) parts.push({ x: x + (Math.random() - 0.5) * 0.7, y: y + (Math.random() - 0.5) * 0.5, vx: (Math.random() - 0.5) * 1.4, vy: -1.5 - Math.random() * 2, gy: -3, life: 0.7 + Math.random() * 0.7, c: [220, 240, 255], s: 0.07 + Math.random() * 0.08 }); };
+    switch (e.t) {
+      case "ink": spark(e.x, e.y + 0.5, e.glow ? [90, 235, 225] : [24, 24, 40], 18); bub(e.x, e.y + 0.5, 4); sfx("splash"); return true;
+      case "jet": bub(e.x, e.y + 0.4, 7); return true;
+      case "splash": spark(e.x, e.y, B.WATER, 12); bub(e.x, e.y, 4); sfx("splash"); return true;
+      case "puff": spark(e.x, e.y + 0.3, [226, 198, 62], 8); bub(e.x, e.y + 0.3, 3); sfx("hiss"); return true;
+      case "beam_start": sfx("gcharge"); return true;
+      case "beam_hit": rays.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, life: 0.3, col: "#ff9060" }); spark(e.tx, e.ty, [255, 130, 90], 14); sfx("gshoot"); return true;
+      case "curse": spark(p.x + p.w / 2, p.y + 0.6, [190, 190, 160], 22); say("Der Älteste Wächter hat dich verflucht – Abbaumüdigkeit!", 3200); sfx("roar"); kick(0.5); return true;
+      case "convert": spark(e.x, e.y + 0.8, [106, 168, 158], 16); bub(e.x, e.y + 0.8, 6); sfx("splash"); return true;
+      case "scute": spark(e.x, e.y + 0.4, [100, 190, 80], 8); sfx("pick"); return true;
+      case "egg_lay": spark(e.x + 0.5, e.y + 0.6, [236, 232, 200], 6); sfx("place"); dirty = true; return true;
+      case "hatch": for (let i = 0; i < 3; i++) floats.push({ x: e.x + 0.5 + (i - 1) * 0.35, y: e.y - 0.1 - (i % 2) * 0.25, text: "❤", color: "#9be07a", life: 1.1 }); spark(e.x + 0.5, e.y + 0.6, [236, 232, 200], 12); sfx("tame"); dirty = true; return true;
+      case "sponge": spark(e.x + 0.5, e.y + 0.5, [212, 196, 70], 14); bub(e.x + 0.5, e.y + 0.5, 6); sfx("splash"); dirty = true; return true;
+      case "riptide": bub(e.x, e.y, 14); spark(e.x, e.y, B.WATER, 10); sfx("splash"); kick(0.35); return true;
+      case "conduit_hit": rays.push({ x: e.x + 0.5, y: e.y + 0.5, tx: e.tx, ty: e.ty, life: 0.35, col: "#9af4ff" }); spark(e.tx, e.ty, [150, 240, 255], 6); sfx("click"); return true;
+      case "trident_back": spark(e.x, e.y, [140, 235, 250], 8); sfx("click"); dirty = true; return true;
+      case "heal_fx": for (let i = 0; i < 3; i++) floats.push({ x: e.x + (i - 1) * 0.35, y: e.y - 0.2 - (i % 2) * 0.3, text: "❤", color: "#ff6080", life: 1.1 }); sfx("tame"); return true;
+      case "coral_dies": spark(e.x + 0.5, e.y + 0.5, [150, 144, 134], 8); dirty = true; return true;
+      default: return false;
+    }
   }
 
   // =====================================================================
@@ -1036,7 +1063,7 @@ export function mount(root, ctx) {
 
     // --- Blöcke ---
     const vw = Math.ceil(cw / tile) + 2, vh = Math.ceil(ch / tile) + 2;
-    const fluids = [];
+    const fluids = [], plants = [], bcols = [];
     for (let j = 0; j < vh; j++) {
       const ty = y0 + j;
       if (ty < 0 || ty >= H) continue;
@@ -1047,13 +1074,14 @@ export function mount(root, ctx) {
         const id = game.tiles[ty * W + tx], gy = game.ground[tx], bd = BLOCKS[id];
         if (ty > gy && (id === B.AIR || !bd.solid || id === B.GLASS)) g.drawImage(atlas, (dim === 1 ? IDX5.WALL_NETHER : ty < gy + 7 ? IDX.WALL_DIRT : ty >= DEEP_Y - 2 ? IDX.WALL_DEEP : IDX.WALL_STONE) * T, 0, T, T, px, py, tile, tile);
         if (id === B.AIR) continue;
-        if (bd.fluid) { fluids.push(px, py, id, game.lvl[ty * W + tx], ty > 0 ? game.tiles[(ty - 1) * W + tx] : 0); continue; }
+        if (bd.fluid) { fluids.push(px, py, id, game.lvl[ty * W + tx], ty > 0 ? game.tiles[(ty - 1) * W + tx] : 0); if (id === B.WATER) { const wa = game.aux[ty * W + tx]; if (wa > 0 && wa < 40) plants.push(px, py, wa, tx); } continue; }
+        if ((id === B.SOUL_SAND || id === B.MAGMA) && ty > 0 && game.tiles[(ty - 1) * W + tx] === B.WATER) bcols.push(tx, ty, id === B.SOUL_SAND ? 1 : -1);
         let idx = id, row = 0;
         if (id === B.FLOWER) idx = [B.FLOWER, IDX.FLOWER2, IDX.FLOWER3][(tx * 7 + ty * 3) % 3];
         else if (id === B.FURNACE) { const fe = game.ents.get(tx + "," + ty); if (fe && fe.burn > 0) idx = IDX.FURNACE_LIT; }
         else if (id === B.GRASS || id === B.LEAVES || id === B.TALLGRASS) { idx = game.biomes[tx] * 3 + (id === B.GRASS ? 0 : id === B.LEAVES ? 1 : 2); row = 1; }
         else if (ty >= DEEP_Y && ORE_DEEP[id] != null) idx = ORE_DEEP[id];
-        if (id >= FIRST9 && drawBlock9(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 9 */ } else if (id >= B.POWDER_SNOW && drawBlock8(g, atlas, id, 0, px, py, tile)) { /* Etappe 8 */ } else if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
+        if (id >= FIRST11 && drawBlock11(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 11 */ } else if (id >= FIRST9 && drawBlock9(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* Etappe 9 */ } else if (id >= B.POWDER_SNOW && drawBlock8(g, atlas, id, 0, px, py, tile)) { /* Etappe 8 */ } else if ((id === B.WOOL || id >= B.CONCRETE) && drawBlock6(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id >= B.NETHERRACK && drawBlock5(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) { /* gemalt */ } else if (id < B.FARMLAND || !drawBlock4(g, atlas, id, game.aux[ty * W + tx], px, py, tile, S, game, tx, ty)) g.drawImage(atlas, idx * T, row * T, T, T, px, py, tile, tile);
         if (id === B.TORCH) { const fl = 0.5 + 0.5 * Math.sin(game.time * 3000 + tx * 2.1); g.fillStyle = `rgba(255,${180 + fl * 60 | 0},80,${0.35 + fl * 0.3})`; g.fillRect(px + 6 * S, py + (2 + (fl > 0.6 ? 0 : 1)) * S, 4 * S, 3 * S); }
       }
     }
@@ -1088,13 +1116,35 @@ export function mount(root, ctx) {
     }
     // --- Figuren ---
     for (const v of game.villagers) drawVillager(v, scr);
-    for (const m of game.mobs) {
-      if (m.x + m.w < left - 3 || m.x > left + cw / tile + 3) continue;
+    const drawMobOne = m => {
       const [mx, my] = scr(m.x, m.y + (m.visOff || 0));
       drawMob(g, m, mx, my + Math.round((m.visOff || 0) * T * S), S, T, performance.now(), art);
       if (m.hp !== m._uiHp) { if (m._uiHp !== undefined) m._uiT = performance.now(); m._uiHp = m.hp; }
+    };
+    const seaMobs = [];
+    for (const m of game.mobs) {
+      if (m.x + m.w < left - 3 || m.x > left + cw / tile + 3) continue;
+      if (MOBS[m.type] && MOBS[m.type].aq) { seaMobs.push(m); continue; }      // Meerestiere werden nach dem Wasser gemalt, damit sie darin sichtbar bleiben
+      drawMobOne(m);
     }
-    for (const a of game.proj) { const [ax, ay] = scr(a.x, a.y); drawProjectile(g, a, ax, ay, S, performance.now()); }
+    const tridents = [];
+    for (const a of game.proj) { if (a.kind === "trident") { tridents.push(a); continue; } const [ax, ay] = scr(a.x, a.y); drawProjectile(g, a, ax, ay, S, performance.now()); }
+    for (const m of game.mobs) {         // Wächterstrahl: wird in zwei bzw. drei Sekunden dicker und röter
+      if (!m.beaming) continue;
+      const el = m.type === "elder_guardian", f = clamp((m.beamT || 0) / (el ? 3 : 2), 0, 1), pl = game.player;
+      const [ax, ay] = scr(m.x + m.w / 2, m.y + m.h * 0.45), [bx2, by2] = scr(pl.x + pl.w / 2, pl.y + 0.7);
+      g.save(); g.lineCap = "round";
+      g.globalAlpha = 0.25 + 0.45 * f; g.strokeStyle = `rgb(255,${Math.round(210 - f * 120)},${Math.round(160 - f * 110)})`; g.lineWidth = Math.max(1, S * (1 + f * 2.2)); g.beginPath(); g.moveTo(ax, ay);
+      const nseg = 7; for (let i = 1; i < nseg; i++) { const u = i / nseg; g.lineTo(ax + (bx2 - ax) * u + Math.sin(performance.now() / 60 + i * 2) * S * (1 - f), ay + (by2 - ay) * u + Math.cos(performance.now() / 70 + i) * S * (1 - f)); } g.lineTo(bx2, by2); g.stroke();
+      g.globalAlpha = 0.5 + 0.4 * f; g.strokeStyle = "#fff6e0"; g.lineWidth = Math.max(1, S * 0.5); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx2, by2); g.stroke();
+      g.restore();
+    }
+    for (let i = rays.length - 1; i >= 0; i--) {
+      const r = rays[i]; r.life -= 1 / 60;
+      if (r.life <= 0) { rays.splice(i, 1); continue; }
+      const [ax, ay] = scr(r.x, r.y), [bx2, by2] = scr(r.tx, r.ty);
+      g.save(); g.globalAlpha = clamp(r.life * 3, 0, 1); g.strokeStyle = r.col; g.lineWidth = Math.max(1, S * 1.4); g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx2, by2); g.stroke(); g.restore();
+    }
     drawPlayer(scr);
     if (game.fish) {                       // Angelschnur und Schwimmer
       const f = game.fish, p = game.player, t = performance.now(), dip = f.st === 1 ? 0.22 + 0.06 * Math.sin(t / 55) : 0.03 * Math.sin(t / 420);
@@ -1107,12 +1157,20 @@ export function mount(root, ctx) {
       g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(Math.round(px - bwid / 2) - S, py - 7 * S - S, bwid + 2 * S, 3 * S + 2 * S);
       g.fillStyle = f >= 1 ? "#ffe14a" : "#ffffff"; g.fillRect(Math.round(px - bwid / 2), py - 7 * S, Math.round(bwid * f), 3 * S);
     }
+    if (game.trid && game.trid.t > 0.05) {
+      const p = game.player, [px, py] = scr(p.x + p.w / 2, p.y), bwid = 16 * S, f = Math.min(1, game.trid.t / 0.5);
+      g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(Math.round(px - bwid / 2) - S, py - 7 * S - S, bwid + 2 * S, 3 * S + 2 * S);
+      g.fillStyle = f >= 1 ? "#7af0ff" : "#ffffff"; g.fillRect(Math.round(px - bwid / 2), py - 7 * S, Math.round(bwid * f), 3 * S);
+    }
     if (game.xbow && game.xbow.t > 0.05) {
       const p = game.player, [px, py] = scr(p.x + p.w / 2, p.y), bwid = 16 * S, f = Math.min(1, game.xbow.t / game.crossbowTime());
       g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(Math.round(px - bwid / 2) - S, py - 7 * S - S, bwid + 2 * S, 3 * S + 2 * S);
       g.fillStyle = f >= 1 ? "#6ae06a" : "#ffffff"; g.fillRect(Math.round(px - bwid / 2), py - 7 * S, Math.round(bwid * f), 3 * S);
     }
     drawFluids(fluids, tile);
+    drawOcean(plants, bcols, tile, scr);
+    g.globalAlpha = 0.92; for (const m of seaMobs) drawMobOne(m); g.globalAlpha = 1;
+    for (const a of tridents) { const [ax, ay] = scr(a.x, a.y); drawProjectile(g, a, ax, ay, S, performance.now()); }
     // Wolken am Boden (Verweiltränke, Drachenatem)
     for (const c of game.clouds) {
       if (c.x + c.r < left - 2 || c.x - c.r > left + cw / tile + 2) continue;
@@ -1242,6 +1300,8 @@ export function mount(root, ctx) {
     const a = lightImg.data, b = glowImg.data, sky = game.sky, blk = game.blk, p = game.player;
     const he = game.heldEmit(), pcx = p.x + p.w / 2, pcy = p.y + p.h / 2, fl = 1 + 0.05 * Math.sin(game.time * 2600), nv = game.hasFx("night_vision");
     const noSky = !!game.noSky, amb = game.dim === 2 ? 7 : game.ambient || 0, tintC = game.dim === 1 ? [34, 4, 4] : game.dim === 2 ? [12, 2, 28] : null;
+    const gsq = [];
+    for (const m of game.mobs) if (m.type === "glow_squid" && !m.dead) gsq.push(m.x + m.w / 2, m.y + m.h / 2);
     for (let j = 0; j < hh; j++) {
       const ty = y0 + j - 0, rowOk = ty >= 0 && ty < H;
       for (let i = 0; i < w; i++) {
@@ -1251,7 +1311,8 @@ export function mount(root, ctx) {
         else if (ty < 0 && tx >= 0 && tx < W) s = noSky ? 0 : 15 * d;
         const near = Math.max(0, 1 - Math.hypot(tx + 0.5 - pcx, ty + 0.5 - pcy) / 4.2);
         const hl = he ? Math.max(0, he * fl - Math.hypot(tx + 0.5 - pcx, ty + 0.5 - pcy) * 1.5) : 0;
-        const lum = Math.max(s, bl * fl, near * near * 5.2, hl, nv ? 12 : 0, amb) / 15;
+        let gl = 0; for (let q = 0; q < gsq.length; q += 2) { const v = 9 - Math.hypot(tx + 0.5 - gsq[q], ty + 0.5 - gsq[q + 1]) * 1.8; if (v > gl) gl = v; }
+        const lum = Math.max(s, bl * fl, near * near * 5.2, hl, gl, nv ? 12 : 0, amb) / 15;
         const bright = Math.max(0.025, Math.pow(Math.min(1, lum), 0.82));
         const skyShare = s / (s + bl + 0.001), night = nv ? (1 - d) * 0.25 : 1 - d;
         if (tintC) { a[o] = tintC[0]; a[o + 1] = tintC[1]; a[o + 2] = tintC[2]; } else { a[o] = 2 * night * skyShare; a[o + 1] = 6 * night * skyShare; a[o + 2] = 26 * night * skyShare; }
@@ -1284,6 +1345,29 @@ export function mount(root, ctx) {
     // Kopf unter Wasser / in Lava: Farbschleier über dem ganzen Bild
     const p = game.player, head = game.fluidAt(Math.floor(p.x + p.w / 2), Math.floor(p.y + 0.25));
     if (head) { g.fillStyle = head === B.WATER ? "rgba(24,70,200,.26)" : "rgba(255,90,10,.55)"; g.fillRect(-8, -8, canvas.width + 16, canvas.height + 16); }
+  }
+  /** Wasserpflanzen und Blasensäulen über dem Wasser (Etappe 11) */
+  function drawOcean(pl, bc, tile, scr) {
+    const t = performance.now(), k = tile / T;
+    g.globalAlpha = 0.93;
+    for (let i = 0; i < pl.length; i += 4) plantSprite(g, pl[i + 2], pl[i], pl[i + 1], k, t, pl[i + 3] * 0.9);
+    g.globalAlpha = 1;
+    for (let i = 0; i < bc.length; i += 3) {
+      const tx = bc[i], ty = bc[i + 1], up = bc[i + 2] > 0, [bx, by] = scr(tx, ty);
+      // Wassersäule oberhalb bis zur Wasseroberfläche (höchstens 24 Felder, sichtbarer Teil)
+      for (let yy = ty - 1, n = 0; yy >= 0 && n < 24 && game.tiles[yy * W + tx] === B.WATER; yy--, n++) {
+        const cy = by - (ty - yy) * tile;
+        if (cy < -tile || cy > canvas.height) continue;
+        for (let b = 0; b < 3; b++) {
+          const ph = ((t / (up ? 900 : 1100) + b * 0.34 + yy * 0.17 + tx * 0.3) % 1 + 1) % 1, fy = up ? 1 - ph : ph;
+          const bxx = bx + Math.round((0.2 + ((b * 0.37 + yy * 0.13) % 0.6)) * tile + Math.sin(t / 300 + b + yy) * S), byy = cy + Math.round(fy * tile);
+          const sz = Math.max(2, Math.round((1 + (b % 2)) * S));
+          g.globalAlpha = 0.75; g.fillStyle = up ? "#e8f6ff" : "#3a2230"; g.fillRect(bxx, byy, sz, sz);
+          g.globalAlpha = 0.9; g.fillStyle = up ? "#9fd2ff" : "#6a3040"; g.fillRect(bxx, byy, Math.max(1, sz - S), Math.max(1, sz - S));
+        }
+      }
+      g.globalAlpha = 1;
+    }
   }
   function bubble(text, bx, by) {
     const fs = Math.round(5 * S); g.font = `${fs}px system-ui, sans-serif`;
@@ -1321,7 +1405,7 @@ export function mount(root, ctx) {
     // Kopf
     R(3, 2 - bob, 7, 7, "#ecbc94"); R(3, 1 - bob, 8, 2.6, "#54341e"); R(2, 1.6 - bob, 2, 5.5, "#54341e"); R(8, 4.6 - bob, 1.6, 1.6, "#1e1e28"); R(7.5, 7 - bob, 2.5, 0.8, "#c88a6c");
     // Rüstung
-    const AC = { leather: ["#a0612f", "#c98a52", "#6f4220"], iron: ["#d0d3de", "#f4f5fa", "#8e91a0"], gold: ["#f2c93c", "#fff0a0", "#b8861a"], diamond: ["#4fe0d8", "#c8fffa", "#1f9c9e"] };
+    const AC = { leather: ["#a0612f", "#c98a52", "#6f4220"], iron: ["#d0d3de", "#f4f5fa", "#8e91a0"], gold: ["#f2c93c", "#fff0a0", "#b8861a"], diamond: ["#4fe0d8", "#c8fffa", "#1f9c9e"], turtle: ["#58b04a", "#7ad064", "#3e8a38"] };
     const arm = i => (game.armor[i] ? AC[ITEMS[game.armor[i].id].mat] : null);
     let c = arm(2); if (c && !sit) { R(3 + sw * 0.5, 17.5 - bob, 3, 5, c[0]); R(7 - sw * 0.5, 17.5 - bob, 3, 5, c[1]); R(2, 16.5 - bob, 9, 2, c[2]); }
     c = arm(3); if (c && !sit) { R(2.5 + sw * 0.5, 24.5 - bob, 4, 3.5, c[0]); R(6.5 - sw * 0.5, 24.5 - bob, 4, 3.5, c[2]); }
@@ -1330,7 +1414,7 @@ export function mount(root, ctx) {
     // Arm und Gegenstand in der Hand
     const swing = p.swing ? Math.sin(performance.now() / 55) : 0;
     const hx = 9.5, hy = 11 - bob;
-    g.save(); g.translate(Math.round(hx * S), Math.round(hy * S)); g.rotate(p.swing ? -0.5 + swing * 0.9 : 0.25);
+    g.save(); g.translate(Math.round(hx * S), Math.round(hy * S)); g.rotate(game.trid && game.trid.t > 0.05 ? -2.1 : p.swing ? -0.5 + swing * 0.9 : 0.25);
     R(-1, -0.5, 2.6, 6.5, "#3c6ec8"); R(-1, 5.5, 2.6, 2, "#ecbc94");
     const held = game.selStack();
     if (held) {

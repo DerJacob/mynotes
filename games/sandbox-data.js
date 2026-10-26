@@ -38,7 +38,9 @@ export const B = {
   CANDLE: 178, TINTED_GLASS: 179, COPPER_BLOCK: 180, CUT_COPPER: 181, CHISELED_COPPER: 182, COPPER_GRATE: 183, COPPER_BULB: 184,
   TUFF_BRICKS: 185, P_TUFF: 186, CH_TUFF: 187, WPLANKS: 188, WSTAIRS: 189, WSLAB: 190, SSTAIRS: 191, SSLAB: 192,
   DOORM_B: 193, DOORM_T: 194, DOORM_BO: 195, DOORM_TO: 196, TRAP: 197, TRAP_O: 198, SIGN: 199, HSIGN: 200, CBOOKSHELF: 201,
-  CANDLE_LIT: 202, BULB_ON: 203, TRAP_OL: 204
+  CANDLE_LIT: 202, BULB_ON: 203, TRAP_OL: 204,
+  // Etappe 11: Ozean (Zusatzfeld aux: Korallenart 0–4 · Schildkrötenei: Anzahl-1 | Reifestufe·4). Wasserpflanzen sind KEINE Blöcke, sie stehen als Zusatzfeld auf Wasserquellen (WP)
+  CORAL_BLOCK: 205, DEAD_CORAL_BLOCK: 206, SPONGE: 207, WET_SPONGE: 208, CONDUIT: 209, DRIED_KELP_BLOCK: 210, TURTLE_EGG: 211
 };
 export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG, B.POPLAR_LOG, B.CHERRY_LOG, B.MANGROVE_LOG, B.BAMBOO_BLOCK];
 export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES, B.PLEAVES_R, B.PLEAVES_O, B.PLEAVES_Y, B.AZALEA_LEAVES, B.FLOWERING_AZALEA_LEAVES, B.CHERRY_LEAVES, B.MANGROVE_LEAVES];
@@ -812,3 +814,65 @@ for (let f = 1; f <= 3; f++) for (const star of [false, true]) {
 }
 // Schild + Banner: das Muster kommt auf den Schild
 for (const [key] of COLORS) shapeless(`shield_banner_${key}`, 1, ["shield", `banner_${key}`], { out: ["shield", 1], dyn: "shieldbanner", hide: true });
+
+
+// ---------------------------------------------------------------------
+// Etappe 11: Ozean (Wächter, Wasserleben, Schiffswracks)
+//   Wasserpflanzen: Zusatzfeld (aux) auf einer Wasserquelle. Fließt die Quelle weg oder wird sie aufgenommen, ist die Pflanze weg.
+//     1 Tang (Stiel) · 2 Tang (Spitze) · 3 Seegras · 4–7 Seegurken (Anzahl 1–4) · 8–12 Koralle · 16–20 Korallenfächer · 24–28 tote Koralle · 32–36 toter Fächer
+// ---------------------------------------------------------------------
+export const WP = { KELP: 1, KELP_TOP: 2, SEAGRASS: 3, PICKLE: 4, CORAL: 8, FAN: 16, DEAD_CORAL: 24, DEAD_FAN: 32 };
+/** Wasserpflanze (aux auf Wasser)? */
+export const isWaterPlant = aux => aux > 0 && aux < 40;
+export const CORALS = [["tube", "Röhrenkoralle", "#3050c8"], ["brain", "Hirnkoralle", "#d060a0"], ["bubble", "Blasenkoralle", "#a030b8"], ["fire", "Feuerkoralle", "#d03030"], ["horn", "Geweihkoralle", "#e0c038"]];
+export const coralBlockOf = c => `coral_block_${CORALS[c][0]}`;
+BLOCKS[B.CORAL_BLOCK] = def("coral_block", { solid: true, lcost: 3, hard: 2.25, tool: "pick", tier: 1, drop: "coral_block_tube" });
+BLOCKS[B.DEAD_CORAL_BLOCK] = def("dead_coral_block", { solid: true, lcost: 3, hard: 2.25, tool: "pick", tier: 1, drop: "dead_coral_block" });
+BLOCKS[B.SPONGE] = def("sponge", { solid: true, lcost: 3, hard: 0.9, drop: "sponge" });
+BLOCKS[B.WET_SPONGE] = def("wet_sponge", { solid: true, lcost: 3, hard: 0.9, drop: "wet_sponge" });
+BLOCKS[B.CONDUIT] = def("conduit", { solid: true, lcost: 1, hard: 4.5, tool: "pick", tier: 1, drop: "conduit", emit: 15 });
+BLOCKS[B.DRIED_KELP_BLOCK] = def("dried_kelp_block", { solid: true, lcost: 3, hard: 0.75, drop: "dried_kelp_block" });
+BLOCKS[B.TURTLE_EGG] = def("turtle_egg", { solid: false, lcost: 0, hard: 0.6, drop: null, interact: false });
+export const FIRST11 = B.CORAL_BLOCK, LAST11 = B.TURTLE_EGG;
+
+/** Gegenstand je gesetztem Block der Etappe 11 (null = fällt nicht) */
+export const ITEM_OF11 = new Map();
+const item11 = (id, name, block, aux, o = {}) => { item(id, name, { block, col: aux, ...o }); ITEM_OF11.set(block * 256 + aux, id); };
+export function itemOf11(id, aux) {
+  if (id === B.CORAL_BLOCK) return coralBlockOf(clamp5(aux));
+  return ITEM_OF11.get(id * 256 + 0) || null;
+}
+const clamp5 = a => (a < 0 ? 0 : a > 4 ? 4 : a | 0);
+
+CORALS.forEach(([key, name], c) => {
+  item11(`coral_block_${key}`, `${name.replace("koralle", "korallenblock")}`, B.CORAL_BLOCK, c);
+  item(`coral_${key}`, name, { wet: WP.CORAL + c, coral: c });
+  item(`coral_fan_${key}`, name.replace("koralle", "korallenfächer"), { wet: WP.FAN + c, coral: c });
+});
+item11("dead_coral_block", "Toter Korallenblock", B.DEAD_CORAL_BLOCK, 0);
+item11("sponge", "Schwamm", B.SPONGE, 0);
+item11("wet_sponge", "Nasser Schwamm", B.WET_SPONGE, 0);
+item11("conduit", "Leitstrom", B.CONDUIT, 0);
+item11("dried_kelp_block", "Dörrtangblock", B.DRIED_KELP_BLOCK, 0, { fuel: 200 });
+item11("turtle_egg", "Schildkrötenei", B.TURTLE_EGG, 0, { stack: 16 });
+item("kelp", "Tang", { wet: WP.KELP });
+item("seagrass", "Seegras", { wet: WP.SEAGRASS });
+item("sea_pickle", "Seegurke", { wet: WP.PICKLE, fuel: 0 });
+item("dried_kelp", "Dörrtang", { food: [1, 0.6], fast: true });
+item("prismarine_shard", "Prismarinsplitter"); item("prismarine_crystals", "Prismarinkristalle");
+item("scute", "Panzerschuppe"); item("nautilus_shell", "Nautilusschale"); item("heart_of_the_sea", "Herz des Meeres");
+item("turtle_helmet", "Schildkrötenpanzer", { stack: 1, armor: { slot: 0, def: 2 }, dur: 275, mat: "turtle" });
+item("trident", "Dreizack", { stack: 1, dur: 250, tool: "trident", tier: 0, speed: 1, dmg: 9 });
+item("ink_sac", "Tintenbeutel"); item("glow_ink_sac", "Leuchttintenbeutel");
+item("tropical_fish", "Tropenfisch", { food: [1, 0.2] });
+for (const [k, n] of [["cod", "Kabeljau"], ["salmon", "Lachs"], ["pufferfish", "Kugelfisch"], ["tropical", "Tropenfisch"], ["axolotl", "Axolotl"]]) item(`bucket_${k}`, `Eimer mit ${n}`, { stack: 1, fishbucket: k });
+item("map_treasure", "Schatzkarte", { stack: 1, map: "treasure" });
+SMELT.kelp = ["dried_kelp", 0.1]; SMELT.wet_sponge = ["sponge", 0.15]; SMELT.sea_pickle = ["dye_lime", 0.1];
+shaped("prismarine", 1, ["PP", "PP"], { P: "prismarine_shard" });
+shaped("sea_lantern", 1, ["CSC", "SSS", "CSC"], { C: "prismarine_crystals", S: "prismarine_shard" });
+shaped("turtle_helmet", 1, ["SSS", "S S"], { S: "scute" });
+shaped("conduit", 1, ["NNN", "NHN", "NNN"], { N: "nautilus_shell", H: "heart_of_the_sea" });
+shapeless("dried_kelp_block", 1, new Array(9).fill("dried_kelp"), { id: "dried_kelp_block_c" });
+shapeless("dried_kelp_b", 9, ["dried_kelp_block"], { out: ["dried_kelp", 9] });
+shapeless("dye_black_ink", 1, ["ink_sac"], { out: ["dye_black", 1] });
+shapeless("dye_cyan_glow", 1, ["glow_ink_sac"], { out: ["dye_cyan", 1] });
