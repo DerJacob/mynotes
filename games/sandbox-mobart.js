@@ -1,3 +1,4 @@
+import { drawMob5, drawProjectile5, MOB_COLORS5 } from "./sandbox-mobart5.js?v=6";
 // =====================================================================
 // Blockdorf – Tiere und Monster malen (Etappe 3)
 // Alle Figuren sind aus Rechtecken zusammengesetzt (1 Bildpunkt = S Bildschirmpixel), eigene Entwürfe im
@@ -7,7 +8,7 @@
 /** Hauptfarbe je Sorte (für Partikel beim Treffer/Tod) */
 export const MOB_COLORS = {
   cow: [86, 62, 46], pig: [240, 160, 164], sheep: [236, 236, 230], chicken: [244, 244, 240], rabbit: [168, 132, 88], wolf: [200, 200, 200], cat: [201, 138, 74],
-  zombie: [92, 154, 84], skeleton: [216, 216, 204], creeper: [78, 166, 75], spider: [58, 47, 42], witch: [74, 42, 106], enderman: [28, 24, 36], slime: [60, 174, 94]
+  zombie: [92, 154, 84], skeleton: [216, 216, 204], creeper: [78, 166, 75], spider: [58, 47, 42], witch: [74, 42, 106], enderman: [28, 24, 36], slime: [60, 174, 94], ...MOB_COLORS5
 };
 
 const tintCache = new Map();
@@ -151,7 +152,7 @@ export function drawMob(g, m, bx, by, S, T, now, art) {
       drawSlime(g, m, bx, by, S, T, k);
       return;
     }
-    default: R(0, 0, bw, bh, "#f0f");
+    default: if (!drawMob5(R, m, bw, bh, sw, g, S, now)) R(0, 0, bw, bh, "#f0f");
   }
   if (m.fire) {
     for (let i = 0; i < 5; i++) {
@@ -178,6 +179,7 @@ export function drawSlime(g, s, bx, by, S, T, k = 0) {
 
 /** Pfeil oder Trank, sx/sy = Bildschirmposition der Spitze */
 export function drawProjectile(g, a, sx, sy, S, now) {
+  if (drawProjectile5(g, a, sx, sy, S, now)) return;
   g.save();
   g.translate(sx, sy);
   if (a.kind === "potion") {

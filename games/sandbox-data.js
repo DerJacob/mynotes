@@ -19,7 +19,10 @@ export const B = {
   // Etappe 4: Redstone
   RS_WIRE: 63, RS_TORCH: 64, LEVER: 65, BUTTON: 66, PLATE: 67, PISTON: 68, STICKY: 69, PISTON_HEAD: 70, DISPENSER: 71, LAMP: 72, LAMP_ON: 73, RS_BLOCK: 74, RS_TORCH_OFF: 80,
   // Etappe 4: Verzaubern, Amboss, Brauen
-  ENCHANT: 75, BOOKSHELF: 76, ANVIL: 77, BREWING: 78, IRON_BLOCK: 79
+  ENCHANT: 75, BOOKSHELF: 76, ANVIL: 77, BREWING: 78, IRON_BLOCK: 79,
+  // Etappe 5: Nether, Ende, Wither, Leuchtfeuer
+  NETHERRACK: 81, SOUL_SAND: 82, GLOWSTONE: 83, QUARTZ_ORE: 84, NETHER_GOLD: 85, MAGMA: 86, NETHER_BRICK: 87, SPAWNER: 88, PORTAL: 89, QUARTZ_BLOCK: 90,
+  END_STONE: 91, FRAME: 92, END_PORTAL: 93, PURPUR: 94, DRAGON_EGG: 95, SKULL: 96, BEACON: 97, GOLD_BLOCK: 98, DIAMOND_BLOCK: 99, EMERALD_BLOCK: 100, GATEWAY: 101
 };
 export const LOGS = [B.LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.JUNGLE_LOG, B.ACACIA_LOG];
 export const LEAVES = [B.LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES, B.JUNGLE_LEAVES, B.ACACIA_LEAVES];
@@ -121,15 +124,39 @@ BLOCKS[B.BOOKSHELF] = def("bookshelf", { solid: true, lcost: 3, hard: 2.25, tool
 BLOCKS[B.ANVIL] = def("anvil", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 1, drop: "anvil", interact: true });
 BLOCKS[B.BREWING] = def("brewing", { solid: true, lcost: 3, hard: 0.75, tool: "pick", drop: "brewing_stand", interact: true, entity: "brew", emit: 1 });
 BLOCKS[B.IRON_BLOCK] = def("iron_block", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 2, drop: "iron_block" });
+// Etappe 5: Nether, Ende, Wither, Leuchtfeuer (Zustand im Zusatzfeld aux: Rahmen = Auge eingesetzt, siehe sandbox-dims.js)
+BLOCKS[B.NETHERRACK] = def("netherrack", { solid: true, lcost: 3, hard: 0.6, tool: "pick", tier: 1, drop: "netherrack" });
+BLOCKS[B.SOUL_SAND] = def("soul_sand", { solid: true, lcost: 3, hard: 0.75, tool: "shovel", drop: "soul_sand" });
+BLOCKS[B.GLOWSTONE] = def("glowstone", { solid: true, lcost: 3, hard: 0.45, drop: "glowstone_dust", dropN: [2, 4], emit: 15 });
+BLOCKS[B.QUARTZ_ORE] = def("quartz_ore", { solid: true, lcost: 3, hard: 4.5, tool: "pick", tier: 1, drop: "quartz" });
+BLOCKS[B.NETHER_GOLD] = def("nether_gold", { solid: true, lcost: 3, hard: 4.5, tool: "pick", tier: 1, drop: "gold_nugget", dropN: [2, 6] });
+BLOCKS[B.MAGMA] = def("magma", { solid: true, lcost: 3, hard: 0.75, tool: "pick", tier: 1, drop: "magma_block", emit: 3 });
+BLOCKS[B.NETHER_BRICK] = def("nether_brick", { solid: true, lcost: 3, hard: 3, tool: "pick", tier: 1, drop: "nether_bricks" });
+BLOCKS[B.SPAWNER] = def("spawner", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 1, drop: null });
+BLOCKS[B.PORTAL] = def("portal", { hard: Infinity, emit: 11 });
+BLOCKS[B.QUARTZ_BLOCK] = def("quartz_block", { solid: true, lcost: 3, hard: 1.2, tool: "pick", tier: 1, drop: "quartz_block" });
+BLOCKS[B.END_STONE] = def("end_stone", { solid: true, lcost: 3, hard: 4.5, tool: "pick", tier: 1, drop: "end_stone" });
+BLOCKS[B.FRAME] = def("frame", { solid: true, lcost: 3, hard: Infinity, interact: true, emit: 1 });
+BLOCKS[B.END_PORTAL] = def("end_portal", { hard: Infinity, emit: 9 });
+BLOCKS[B.PURPUR] = def("purpur", { solid: true, lcost: 3, hard: 3, tool: "pick", tier: 1, drop: "purpur_block" });
+BLOCKS[B.DRAGON_EGG] = def("dragon_egg", { solid: true, lcost: 3, hard: 4.5, drop: "dragon_egg", emit: 2 });
+BLOCKS[B.SKULL] = def("skull", { hard: 1.5, drop: "wither_skeleton_skull" });
+BLOCKS[B.BEACON] = def("beacon", { solid: true, lcost: 0, hard: 4.5, drop: "beacon", interact: true, entity: "beacon", emit: 15 });
+BLOCKS[B.GOLD_BLOCK] = def("gold_block", { solid: true, lcost: 3, hard: 4.5, tool: "pick", tier: 3, drop: "gold_block" });
+BLOCKS[B.DIAMOND_BLOCK] = def("diamond_block", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 3, drop: "diamond_block" });
+BLOCKS[B.EMERALD_BLOCK] = def("emerald_block", { solid: true, lcost: 3, hard: 7.5, tool: "pick", tier: 3, drop: "emerald_block" });
+BLOCKS[B.GATEWAY] = def("gateway", { hard: Infinity, emit: 7 });
+// Lücke 80 (Redstone-Fackel aus) bleibt wie sie war; Block 81+ liegen dahinter
 
 /** Behutsamkeit (Silk Touch): welcher Gegenstand fällt statt der üblichen Beute */
 export const SILK = {
   [B.STONE]: "stone", [B.COAL]: "coal_ore", [B.IRON]: "iron_ore", [B.GOLD]: "gold_ore", [B.DIAMOND]: "diamond_ore", [B.COPPER]: "copper_ore", [B.REDSTONE]: "redstone_ore",
   [B.LAPIS]: "lapis_ore", [B.EMERALD]: "emerald_ore", [B.GRASS]: "grass_block", [B.GRASS_SNOW]: "grass_block", [B.DEEPSLATE]: "deepslate", [B.ICE]: "ice", [B.GLASS]: "glass",
-  [B.LEAVES]: "leaves", [B.BOOKSHELF]: "bookshelf", [B.MELON]: "melon", [B.CLAY]: "clay", [B.SNOW]: "snow"
+  [B.LEAVES]: "leaves", [B.BOOKSHELF]: "bookshelf", [B.MELON]: "melon", [B.CLAY]: "clay", [B.SNOW]: "snow",
+  [B.QUARTZ_ORE]: "quartz_ore", [B.NETHER_GOLD]: "nether_gold_ore", [B.GLOWSTONE]: "glowstone"
 };
 /** Glück (Fortune) erhöht die Ausbeute dieser Blöcke */
-export const FORTUNE_BLOCKS = new Set([B.COAL, B.DIAMOND, B.EMERALD, B.LAPIS, B.REDSTONE, B.COPPER]);
+export const FORTUNE_BLOCKS = new Set([B.COAL, B.DIAMOND, B.EMERALD, B.LAPIS, B.REDSTONE, B.COPPER, B.QUARTZ_ORE, B.NETHER_GOLD, B.GLOWSTONE]);
 /** Wasser zerstört diese weichen Blöcke */
 export const isSoft = id => isPlant(id) || isCrop(id) || id === B.TORCH || id === B.RS_WIRE || id === B.RS_TORCH || id === B.RS_TORCH_OFF || id === B.LEVER || id === B.BUTTON || id === B.PLATE;
 
@@ -200,6 +227,16 @@ item("enchanted_book", "Verzaubertes Buch", { stack: 1 });
 item("glass_bottle", "Glasflasche"); item("potion", "Trank", { stack: 1 }); item("splash_potion", "Wurftrank", { stack: 1 });
 putItem("nether_wart", "Netherwarze", "plant", B.WART); item("blaze_rod", "Lohenrute", { fuel: 120 }); item("blaze_powder", "Lohenstaub"); item("fermented_spider_eye", "Fermentiertes Spinnenauge");
 item("glowstone_dust", "Glowstone-Staub");
+// Etappe 5: Nether, Ende, Wither, Leuchtfeuer
+blockItem("netherrack", "Netherrack", B.NETHERRACK); blockItem("soul_sand", "Seelensand", B.SOUL_SAND); blockItem("glowstone", "Glowstone", B.GLOWSTONE);
+blockItem("magma_block", "Magmablock", B.MAGMA); blockItem("nether_bricks", "Netherziegel", B.NETHER_BRICK); blockItem("quartz_block", "Quarzblock", B.QUARTZ_BLOCK);
+blockItem("quartz_ore", "Netherquarzerz", B.QUARTZ_ORE); blockItem("nether_gold_ore", "Nethergolderz", B.NETHER_GOLD);
+blockItem("end_stone", "Endstein", B.END_STONE); blockItem("purpur_block", "Purpurblock", B.PURPUR); blockItem("dragon_egg", "Drachenei", B.DRAGON_EGG, { stack: 1 });
+blockItem("wither_skeleton_skull", "Wither-Skelettschädel", B.SKULL); blockItem("beacon", "Leuchtfeuer", B.BEACON);
+blockItem("gold_block", "Goldblock", B.GOLD_BLOCK); blockItem("diamond_block", "Diamantblock", B.DIAMOND_BLOCK); blockItem("emerald_block", "Smaragdblock", B.EMERALD_BLOCK);
+item("quartz", "Netherquarz"); item("nether_brick", "Netherziegel (Barren)"); item("magma_cream", "Magmacreme"); item("ghast_tear", "Ghast-Träne"); item("nether_star", "Netherstern");
+item("ender_eye", "Enderauge"); item("flint_and_steel", "Feuerzeug", { stack: 1, dur: 64 });
+item("elytra", "Elytren", { stack: 1, dur: 432, armor: { slot: 1, def: 0 }, mat: "elytra" });
 // Erzblöcke und Co. als Gegenstände (für Behutsamkeit / Silk Touch)
 blockItem("coal_ore", "Kohleerz", B.COAL); blockItem("iron_ore", "Eisenerz", B.IRON); blockItem("gold_ore", "Golderz", B.GOLD); blockItem("diamond_ore", "Diamanterz", B.DIAMOND);
 blockItem("copper_ore", "Kupfererz", B.COPPER); blockItem("redstone_ore", "Redstone-Erz", B.REDSTONE); blockItem("lapis_ore", "Lapiserz", B.LAPIS); blockItem("emerald_ore", "Smaragderz", B.EMERALD);
@@ -289,6 +326,17 @@ shaped("brewing_stand", 1, [" B ", "CCC"], { B: "blaze_rod", C: "cobble" });
 shaped("glass_bottle", 3, ["G G", " G "], { G: "glass" });
 shapeless("blaze_powder", 2, ["blaze_rod"]);
 shapeless("fermented_spider_eye", 1, ["spider_eye", "sugar", "flower"]);
+// Etappe 5
+shapeless("flint_and_steel", 1, ["iron_ingot", "flint"]);
+shapeless("ender_eye", 1, ["ender_pearl", "blaze_powder"]);
+shapeless("magma_cream", 1, ["blaze_powder", "slimeball"]);
+shaped("glowstone", 1, ["GG", "GG"], { G: "glowstone_dust" });
+shaped("quartz_block", 1, ["QQ", "QQ"], { Q: "quartz" });
+shaped("nether_bricks", 1, ["NN", "NN"], { N: "nether_brick" });
+shaped("gold_block", 1, ["GGG", "GGG", "GGG"], { G: "gold_ingot" }); shapeless("gold_ingot_g", 9, ["gold_block"], { out: ["gold_ingot", 9] });
+shaped("diamond_block", 1, ["DDD", "DDD", "DDD"], { D: "diamond" }); shapeless("diamond_b", 9, ["diamond_block"], { out: ["diamond", 9] });
+shaped("emerald_block", 1, ["EEE", "EEE", "EEE"], { E: "emerald" }); shapeless("emerald_b", 9, ["emerald_block"], { out: ["emerald", 9] });
+shaped("beacon", 1, ["GGG", "GNG", "OOO"], { G: "glass", N: "nether_star", O: "obsidian" });
 { const k = { X: "leather" };
   shaped("leather_helmet", 1, ["XXX", "X X"], k); shaped("leather_chest", 1, ["X X", "XXX", "XXX"], k);
   shaped("leather_legs", 1, ["XXX", "X X", "X X"], k); shaped("leather_boots", 1, ["X X", "X X"], k); }
@@ -312,6 +360,7 @@ export const SMELT = {
   raw_iron: ["iron_ingot", 0.7], raw_gold: ["gold_ingot", 1], raw_copper: ["copper_ingot", 0.7], sand: ["glass", 0.1], cobble: ["stone", 0.1], clay: ["brick", 0.3],
   raw_beef: ["steak", 0.35], raw_porkchop: ["cooked_porkchop", 0.35], raw_chicken: ["cooked_chicken", 0.35], raw_mutton: ["cooked_mutton", 0.35], raw_rabbit: ["cooked_rabbit", 0.35],
   potato: ["baked_potato", 0.35], raw_cod: ["cooked_cod", 0.35], raw_salmon: ["cooked_salmon", 0.35],
+  netherrack: ["nether_brick", 0.1], nether_gold_ore: ["gold_ingot", 1],
   log: ["charcoal", 0.15], birch_log: ["charcoal", 0.15], spruce_log: ["charcoal", 0.15], jungle_log: ["charcoal", 0.15], acacia_log: ["charcoal", 0.15]
 };
 export const SMELT_TIME = 10;

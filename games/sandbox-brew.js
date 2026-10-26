@@ -6,8 +6,8 @@
 //   Effekte: Schnelligkeit, Langsamkeit, Stärke, Schwäche, Sprungkraft, Regeneration, Gift, Heilung, Schaden, Feuerschutz, Wasseratmung, Nachtsicht, Unsichtbarkeit, Federfall
 // Engine ohne Oberfläche; Anzeige in sandbox.js.
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag } from "./sandbox-data.js?v=5";
-import { mulberry32 } from "./sandbox-noise.js?v=5";
+import { B, BLOCKS, ITEMS, MATERIALS, SMELT, hasTag } from "./sandbox-data.js?v=6";
+import { mulberry32 } from "./sandbox-noise.js?v=6";
 
 // ---------------------------------------------------------------------
 // Verzauberungen
@@ -67,8 +67,8 @@ export const POTION_FX = {
 };
 export const POTION_BASE = { water: ["Wasserflasche", "#4a78d8"], awkward: ["Seltsamer Trank", "#6a5ac0"], mundane: ["Langweiliger Trank", "#8a78b8"] };
 /** Namen aller Effekte (Anzeige oben im Spiel) */
-export const EFFECT_NAMES = { speed: "Schnelligkeit", slowness: "Langsamkeit", strength: "Stärke", weakness: "Schwäche", jump: "Sprungkraft", regen: "Regeneration", poison: "Gift", fire_resistance: "Feuerschutz", water_breathing: "Wasseratmung", night_vision: "Nachtsicht", invisibility: "Unsichtbarkeit", slow_fall: "Sanftes Fallen" };
-export const EFFECT_BAD = new Set(["slowness", "weakness", "poison"]);
+export const EFFECT_NAMES = { speed: "Schnelligkeit", slowness: "Langsamkeit", strength: "Stärke", weakness: "Schwäche", jump: "Sprungkraft", regen: "Regeneration", poison: "Gift", fire_resistance: "Feuerschutz", water_breathing: "Wasseratmung", night_vision: "Nachtsicht", invisibility: "Unsichtbarkeit", slow_fall: "Sanftes Fallen", wither: "Wither" };
+export const EFFECT_BAD = new Set(["slowness", "weakness", "poison", "wither"]);
 export const potionKind = d => POTION_KINDS[(d | 0) >> 2] || "water";
 export const potionMod = d => (d | 0) & 3;
 export const potionCode = (kind, mod = 0) => POTION_KINDS.indexOf(kind) * 4 + mod;
@@ -131,11 +131,11 @@ export function installBrew(Sandbox, K) {
 
   // ---------- Effekte ----------
   /** Effekt hinzufügen: stärkerer ersetzt schwächeren, bei gleicher Stärke gilt die längere Dauer */
-  P.addEffect = function (name, seconds, amp = 0) {
+  P.addEffect = function (name, seconds, amp = 0, silent = false) {
     const cur = this.fx[name];
     if (cur && (cur.amp > amp || (cur.amp === amp && cur.t >= seconds))) return;
     this.fx[name] = { t: seconds, amp };
-    this.events.push({ t: "effect", name });
+    if (!silent || !cur) this.events.push({ t: "effect", name, silent });
   };
   P.hasFx = function (name) { return !!this.fx[name]; };
   P.fxAmp = function (name) { return this.fx[name] ? this.fx[name].amp + 1 : 0; };
@@ -149,6 +149,10 @@ export function installBrew(Sandbox, K) {
     if (this.fx.poison) {
       this.fxT.poison -= dt;
       if (this.fxT.poison <= 0) { this.fxT.poison = 1.25 / Math.pow(2, this.fx.poison.amp); if (p.hp > 1) this.hurt(1, 0, "poison"); }
+    }
+    if (this.fx.wither) {
+      this.fxT.wither = (this.fxT.wither ?? 2) - dt;
+      if (this.fxT.wither <= 0) { this.fxT.wither = 2 / Math.pow(2, this.fx.wither.amp); this.hurt(1, 0, "wither"); }
     }
     if (this.fx.slow_fall && p.vy > 2.5) p.vy = 2.5;
   };

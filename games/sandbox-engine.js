@@ -7,14 +7,17 @@
 //   Speichern: Blöcke als Lauflängen (Base64) – klein genug für den Spielstand im Drive
 // =====================================================================
 
-import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid } from "./sandbox-data.js?v=5";
-import { installInventory } from "./sandbox-inventory.js?v=5";
-import { installFluids, SRC } from "./sandbox-fluids.js?v=5";
-import { installMobs } from "./sandbox-mobs.js?v=5";
-import { installFarm } from "./sandbox-farm.js?v=5";
-import { installRedstone } from "./sandbox-redstone.js?v=5";
-import { installBrew, ENCH } from "./sandbox-brew.js?v=5";
-import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=5";
+import { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS, isFluid } from "./sandbox-data.js?v=6";
+import { installInventory } from "./sandbox-inventory.js?v=6";
+import { installFluids, SRC } from "./sandbox-fluids.js?v=6";
+import { installMobs } from "./sandbox-mobs.js?v=6";
+import { installFarm } from "./sandbox-farm.js?v=6";
+import { installRedstone } from "./sandbox-redstone.js?v=6";
+import { installBrew, ENCH } from "./sandbox-brew.js?v=6";
+import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=6";
+import { installDims } from "./sandbox-dims.js?v=6";
+import { installBoss } from "./sandbox-boss.js?v=6";
+import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=6";
 export { BIOMES, BIOME_NAMES };
 export { B, BLOCKS, ITEMS, RECIPES, MATERIALS, SMELT, SMELT_TIME, hasTag, stackMax, ARMOR_SLOTS };
 
@@ -22,12 +25,12 @@ export const W = 512, H = 192, SURF = 60, SPAWN_X = W >> 1;
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
-import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=5";
+import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=6";
 export { mulberry32 };
-export { MOBS, ADV } from "./sandbox-mobs.js?v=5";
-export { ENCH, ROMAN, POTION_KINDS, POTION_FX, EFFECT_NAMES, EFFECT_BAD, stackName, stackLines, enchLines, potionKind, potionMod, potionCode, potionColor, brewResult, BREW_TIME } from "./sandbox-brew.js?v=5";
+export { MOBS, ADV } from "./sandbox-mobs.js?v=6";
+export { ENCH, ROMAN, POTION_KINDS, POTION_FX, EFFECT_NAMES, EFFECT_BAD, stackName, stackLines, enchLines, potionKind, potionMod, potionCode, potionColor, brewResult, BREW_TIME } from "./sandbox-brew.js?v=6";
 
 // ---------------------------------------------------------------------
 // Blöcke ↔ Text (Lauflängen, Base64)
@@ -74,6 +77,7 @@ export class Sandbox {
     this.input = { left: false, right: false, jump: false };
     this.mining = null;
     this.lightDirty = true;
+    this._dimInit();
     if (opts.data) this._fromData(opts.data);
     else { this.seed = (opts.seed ?? (Math.random() * 2147483647)) | 0; this._generate(); this._fresh(); this._stockChests(); }
     this._fluidInit();
@@ -85,6 +89,7 @@ export class Sandbox {
     this._farmInit(); this._brewInit();
     if (opts.data && opts.data.v >= 4) this._mobsFromData(opts.data.mobs); else this._populate();
     this._rsInit();
+    if (opts.data) { this._ensureStronghold(); this._restoreDim(opts.data); }
     this.relight();
   }
 
@@ -106,18 +111,25 @@ export class Sandbox {
     const w = generateWorld(this.seed);
     this.tiles = w.tiles; this.lvl = w.lvl; this.aux = new Uint8Array(W * H); this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
     this._worldChests = w.chests;
+    const sh = placeStronghold(this.seed, this.tiles, this.lvl, this.aux, SPAWN_X, SURF);   // Festung mit Endportal tief unter der Erde
+    if (sh) { this.strongholds = [{ x: sh.x, y: sh.y }]; this._worldChests.push(...sh.chests); }
   }
   /** Truhen der Bauwerke (Dörfer, Verliese, Schächte) mit Beute füllen */
-  _stockChests() {
+  _stockChests(ents = this.ents, list = this._worldChests) {
     if (!this.frng) this._farmInit();
-    for (const c of this._worldChests || []) {
+    for (const c of list || []) {
       const s = new Array(27).fill(null);
       c.items.forEach((it, k) => { if (ITEMS[it.id]) s[k * 3 % 27] = it.id === "enchanted_book" ? this._randomBook(12 + Math.floor(this.frng() * 16)) : { id: it.id, n: it.n, d: 0 }; });
-      this.ents.set(`${c.x},${c.y}`, { t: "chest", s });
+      ents.set(`${c.x},${c.y}`, { t: "chest", s });
     }
-    this._worldChests = null;
+    if (list === this._worldChests) this._worldChests = null;
   }
-  biomeAt(x) { return BIOMES[this.biomes[clamp(Math.floor(x), 0, W - 1)]] || "plains"; }
+  biomeAt(x) {
+    const i = clamp(Math.floor(x), 0, W - 1);
+    if (this.dim === 1) return NETHER_BIOMES[this.biomes[i]] || "nether";
+    if (this.dim === 2) return "end";
+    return BIOMES[this.biomes[i]] || "plains";
+  }
   _fresh() {
     this.time = 0.3; this.day = 1;
     this.stats = { mined: 0, built: 0, kills: 0 };
@@ -137,21 +149,23 @@ export class Sandbox {
 
   // ---------- Speichern ----------
   toData() {
-    const p = this.player, pk = st => (st ? (st.e || st.r ? [st.id, st.n, st.d || 0, st.e || 0, st.r || 0] : [st.id, st.n, st.d || 0]) : 0);
-    return {
-      v: SAVE_VERSION, seed: this.seed, tiles: encodeTiles(this.tiles), lvl: encodeTiles(this.lvl), biomes: encodeTiles(this.biomes), villages: this.villages, ground: Array.from(this.ground),
+    const p = this.player, pk = st => this._packStack(st), ow = this._dimGet(0);          // oben steht immer die Oberwelt
+    const data = {
+      v: SAVE_VERSION, seed: this.seed, tiles: encodeTiles(ow.tiles), lvl: encodeTiles(ow.lvl), biomes: encodeTiles(ow.biomes), villages: ow.villages, ground: Array.from(ow.ground),
       p: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), hp: p.hp, food: this.food, sat: +this.sat.toFixed(1), exh: +this.exh.toFixed(2) },
       inv: this.inv.map(pk), armor: this.armor.map(pk), sel: this.sel, xp: this.xp,
-      ents: [...this.ents.entries()].map(([k, e]) => { const [x, y] = k.split(",").map(Number); return { x, y, t: e.t, s: e.s.map(pk), burn: e.burn, burnMax: e.burnMax, cook: e.cook, xp: e.xp, fuel: e.fuel, brewT: e.brewT }; }),
-      drops: this.drops.slice(-120).map(d => [d.id, d.n, d.d || 0, +d.x.toFixed(2), +d.y.toFixed(2)]),
+      ents: this._entsToData(ow.ents),
+      drops: this._dropsToData(ow.drops),
       spawn: { x: +this.spawn.x.toFixed(2), y: +this.spawn.y.toFixed(2) },
       time: +this.time.toFixed(4), day: this.day, stats: { ...this.stats },
-      mobs: this._mobsToData(), adv: { ...this.adv }, bed: this.bed ? { ...this.bed } : null,
-      aux: encodeTiles(this.aux), fx: Object.fromEntries(Object.entries(this.fx).map(([k, f]) => [k, [+f.t.toFixed(1), f.amp]])), es: this.enchSeed
+      mobs: this._mobsToData(ow.mobs), adv: { ...this.adv }, bed: this.bed ? { ...this.bed } : null,
+      aux: encodeTiles(ow.aux), fx: Object.fromEntries(Object.entries(this.fx).map(([k, f]) => [k, [+f.t.toFixed(1), f.amp]])), es: this.enchSeed
     };
+    this._saveDims(data);
+    return data;
   }
   _fromData(d) {
-    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3 && d.v !== 4 && d.v !== 5) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
+    if (!d || (d.v !== 1 && d.v !== 2 && d.v !== 3 && d.v !== 4 && d.v !== 5 && d.v !== 6) || typeof d.tiles !== "string") throw new Error("Unbekanntes Welt-Format");
     this.seed = d.seed | 0;
     this.tiles = decodeTiles(d.tiles);
     this.aux = new Uint8Array(W * H);
@@ -170,13 +184,7 @@ export class Sandbox {
       p.hp = clamp((d.p.hp | 0) * (legacy ? 2 : 1), 1, p.maxHp);
       if (!legacy) { this.food = clamp(d.p.food | 0, 0, 20); this.sat = clamp(+d.p.sat || 0, 0, 20); this.exh = clamp(+d.p.exh || 0, 0, 4); }
     }
-    const un = a => {
-      if (!(Array.isArray(a) && ITEMS[a[0]])) return null;
-      const s = { id: a[0], n: clamp(a[1] | 0, 1, stackMax(a[0])), d: a[2] | 0 };
-      if (a[3] && typeof a[3] === "object") { const e = {}; for (const [k, v] of Object.entries(a[3])) if (ENCH[k] && v > 0) e[k] = Math.min(ENCH[k].max, v | 0); if (Object.keys(e).length) s.e = e; }
-      if (a[4] > 0) s.r = Math.min(10, a[4] | 0);
-      return s;
-    };
+    const un = a => this._unpackStack(a);
     if (legacy) {
       // alter Spielstand: Gegenstände als Zahlen pro Sorte → in die Plätze einsortieren
       const map = { iron: "raw_iron", gold: "raw_gold" };
@@ -187,12 +195,8 @@ export class Sandbox {
       if (Array.isArray(d.inv)) this.inv = this._emptyInv().map((_, i) => un(d.inv[i]));
       if (Array.isArray(d.armor)) this.armor = [0, 1, 2, 3].map(i => un(d.armor[i]));
       this.xp = Math.max(0, d.xp | 0);
-      for (const e of d.ents || []) {
-        if (!(e.t === "chest" || e.t === "furnace" || e.t === "disp" || e.t === "brew") || !Number.isFinite(e.x) || !Number.isFinite(e.y)) continue;
-        const n = { chest: 27, furnace: 3, disp: 9, brew: 5 }[e.t];
-        this.ents.set(`${e.x},${e.y}`, { t: e.t, s: Array.from({ length: n }, (_, i) => un((e.s || [])[i])), burn: +e.burn || 0, burnMax: +e.burnMax || 0, cook: +e.cook || 0, xp: +e.xp || 0, fuel: +e.fuel || 0, brewT: +e.brewT || 0 });
-      }
-      for (const a of d.drops || []) if (ITEMS[a[0]]) this.drops.push({ id: a[0], n: clamp(a[1] | 0, 1, stackMax(a[0])), d: a[2] | 0, x: +a[3], y: +a[4], vx: 0, vy: 0, w: 0.3, h: 0.3, age: 1, stepUp: false });
+      for (const [k, e] of this._entsFromData(d.ents)) this.ents.set(k, e);
+      for (const a of this._dropsFromData(d.drops)) this.drops.push(a);
       if (d.spawn && Number.isFinite(d.spawn.x)) this.spawn = { x: d.spawn.x, y: d.spawn.y };
     }
     this.fx = {};
@@ -204,8 +208,10 @@ export class Sandbox {
     this.time = Number.isFinite(d.time) ? d.time % 1 : 0.3;
     this.day = Math.max(1, d.day | 0);
     if (d.stats) this.stats = { mined: d.stats.mined | 0, built: d.stats.built | 0, kills: d.stats.kills | 0 };
-    // Falls der Spielstand im Boden steckt (beschädigt), zurück ins Dorf
-    if (this._hit(p)) { p.x = SPAWN_X - 6.4; p.y = SURF - 1.8 - 0.001; }
+    if (Array.isArray(d.strongholds)) this.strongholds = d.strongholds.filter(s => s && Number.isFinite(s.x) && Number.isFinite(s.y)).map(s => ({ x: s.x | 0, y: s.y | 0 }));
+    if (d.flags && typeof d.flags === "object") this.flags.dragonDead = !!d.flags.dragonDead;
+    // Falls der Spielstand im Boden steckt (beschädigt), zurück ins Dorf (steht der Spieler im Nether/Ende, prüft _restoreDim das)
+    if (!d.dim && this._hit(p)) { p.x = SPAWN_X - 6.4; p.y = SURF - 1.8 - 0.001; }
   }
 
   // ---------- Licht ----------
@@ -214,7 +220,7 @@ export class Sandbox {
   lightAt(x, y) {
     if (x < 0 || x >= W || y < 0 || y >= H) return 0;
     const i = y * W + x;
-    return Math.max(this.sky[i] * this.dayFactor(), this.blk[i]);
+    return Math.max(this.sky[i] * this.dayFactor(), this.blk[i], this.ambient);
   }
   relight() {
     this.lightDirty = false;
@@ -222,7 +228,7 @@ export class Sandbox {
     sky.fill(0); blk.fill(0);
     const bs = Array.from({ length: 16 }, () => []);
     // Himmelslicht: in jeder Spalte von oben bis zum ersten Block, der Licht schluckt
-    for (let x = 0; x < W; x++) for (let y = 0; y < H && BLOCKS[tiles[y * W + x]].lcost === 0; y++) sky[y * W + x] = 15;
+    if (!this.noSky) for (let x = 0; x < W; x++) for (let y = 0; y < H && BLOCKS[tiles[y * W + x]].lcost === 0; y++) sky[y * W + x] = 15;
     for (let i = 0; i < W * H; i++) if (sky[i] === 15) bs[15].push(i);
     this._spread(sky, bs);
     const bb = Array.from({ length: 16 }, () => []);
@@ -299,6 +305,7 @@ export class Sandbox {
     this.time += dt / DAY_LEN;
     if (this.time >= 1) { this.time -= 1; this.day++; this.events.push({ t: "day", day: this.day }); }
     this._player(dt);
+    this._dimPlayer(dt);
     this._hunger(dt);
     for (const v of this.villagers) this._villager(v, dt);
     this._mobs(dt);
@@ -318,11 +325,13 @@ export class Sandbox {
     this._playerFluids(dt);
     const swim = p.inWater || p.inLava;
     const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-    const acc = (p.onGround ? 70 : 34) * dt;
+    const gl = this._canGlide(); p.glide = gl;                       // Elytren: Sprungtaste im Fall halten
+    const acc = (p.onGround ? 70 : gl ? 14 : 34) * dt;
     const onLadder = BLOCKS[this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h * 0.5))].climb || BLOCKS[this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h - 0.1))].climb;
     p.onLadder = onLadder;
-    const spd = Math.max(0.3, 1 + 0.2 * this.fxAmp("speed") - 0.15 * this.fxAmp("slowness"));
-    p.vx += clamp(dir * (onLadder ? 3.2 : p.inLava ? 2.2 : swim ? 3.8 : 6.2 * spd) - p.vx, -acc, acc);
+    let spd = Math.max(0.3, 1 + 0.2 * this.fxAmp("speed") - 0.15 * this.fxAmp("slowness"));
+    if (p.onGround && this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h + 0.05)) === B.SOUL_SAND) spd *= 0.6;
+    p.vx += clamp((gl ? (dir ? dir * 16 : p.vx) : dir * (onLadder ? 3.2 : p.inLava ? 2.2 : swim ? 3.8 : 6.2 * spd)) - p.vx, -acc, acc);
     if (dir) p.face = dir;
     p.coyote = p.onGround ? 0.1 : p.coyote - dt;
     p.jumpBuf = inp.jump ? 0.12 : p.jumpBuf - dt;
@@ -335,12 +344,13 @@ export class Sandbox {
     if (!inp.jump && p.vy < -5 && !onLadder && !swim) p.vy += 60 * dt;     // kurz tippen = kleiner Sprung
     const wasFalling = p.vy;
     if (swim) p.vy = clamp(p.vy, -5, p.inLava ? 1.5 : 3.5);
-    this._body(p, dt, onLadder ? 0 : swim ? 9 : 42);
+    this._body(p, dt, gl ? 6 : onLadder ? 0 : swim ? 9 : 42);
+    if (gl && p.vy > 4.2) p.vy = 4.2;
     if (swim) p.vy *= Math.max(0, 1 - 2 * dt);
     if (onLadder) { p.landV = 0; if (p.vy > 4.6) p.vy = 4.6; }
     if (p.landV > 0 && !swim) { const dist = (p.landV * p.landV) / 84; if (dist > 3.2) {
       const ff = this.armor[3] && this.armor[3].e ? this.armor[3].e.feather_falling | 0 : 0;
-      const n = this.fx.slow_fall ? 0 : Math.ceil(Math.ceil(dist - 3) * (1 - 0.12 * ff));
+      const n = this.fx.slow_fall || p.glideT > 0 ? 0 : Math.ceil(Math.ceil(dist - 3) * (1 - 0.12 * ff));
       if (n > 0) this.hurt(n, 0, "fall");
     } }
     if (Math.abs(p.vx) > 0.5 && p.onGround) this.addExh(Math.abs(p.vx) * dt * 0.012);
@@ -348,7 +358,7 @@ export class Sandbox {
   }
   hurt(n, dir, why) {
     const p = this.player;
-    const env = why === "hunger" || why === "drown" || why === "lava" || why === "fire" || why === "cactus" || why === "magic" || why === "poison";
+    const env = why === "hunger" || why === "drown" || why === "lava" || why === "fire" || why === "cactus" || why === "magic" || why === "poison" || why === "wither" || why === "void" || why === "magma";
     if ((why === "lava" || why === "fire") && this.fx.fire_resistance) return;
     if (n <= 0 || (p.invuln > 0 && !env)) return;
     // Schild: Angriffe von vorn (Monster, Pfeile, Tränke) werden abgefangen
@@ -382,6 +392,7 @@ export class Sandbox {
     if (this.bed && this.tile(this.bed.x, this.bed.y) !== B.BED) {          // Bett zerstört → zurück ans Weltspawn
       this.bed = null; this.spawn = { x: SPAWN_X - 6.4, y: SURF - 1.8 - 0.001 }; this.events.push({ t: "nobed" });
     }
+    if (this.dim) this._enterDim(0, { keep: true });                      // Tod im Nether / Ende: zurück in die Oberwelt
     p.air = 15; p.burn = 0; p.hp = p.maxHp; p.x = this.spawn.x; p.y = this.spawn.y; p.vx = p.vy = 0; p.invuln = 2;
     if (this._hit(p)) { const q = this._safeSpot(p.x, p.y); p.x = q.x; p.y = q.y; }
     this.mobs = this.mobs.filter(m => m.kind !== "hostile"); this.proj.length = 0; this.bow = null; this.blocking = false;
@@ -411,3 +422,5 @@ installMobs(Sandbox, { clamp, W, H, SURF, SPAWN_X, REACH });
 installFarm(Sandbox, { clamp, W, H });
 installRedstone(Sandbox, { clamp, W, H });
 installBrew(Sandbox, { clamp, W, H, MAX_HP });
+installDims(Sandbox, { clamp, W, H, SURF, SPAWN_X, encodeTiles, decodeTiles, ENCH, stackMax });
+installBoss(Sandbox, { clamp, W, H });

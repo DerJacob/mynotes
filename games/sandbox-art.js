@@ -3,9 +3,10 @@
 // Alles wird beim Start per Code gemalt, es gibt keine Bilddateien. Die Texturen sind eigene Malereien im
 // kantigen Minecraft-Stil (nicht die Originale).
 // =====================================================================
-import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=5";
-import { mulberry32 } from "./sandbox-noise.js?v=5";
-import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=5";
+import { B, BLOCKS, ITEMS, MATERIALS } from "./sandbox-data.js?v=6";
+import { mulberry32 } from "./sandbox-noise.js?v=6";
+import { paintAtlas4, paintItem4, glint } from "./sandbox-art4.js?v=6";
+import { paintAtlas5, paintItem5 } from "./sandbox-art5.js?v=6";
 
 export const T = 16;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -16,7 +17,7 @@ export const IDX = { FLOWER2: 120, FLOWER3: 121, WALL_DIRT: 122, WALL_STONE: 123
 export const ORE_DEEP = { [B.COAL]: 140, [B.IRON]: 141, [B.GOLD]: 142, [B.DIAMOND]: 143, [B.COPPER]: 144, [B.REDSTONE]: 145, [B.LAPIS]: 146, [B.EMERALD]: 147 };
 // Farb-Faktoren (R, G, B) für Gras/Laub je Biom – Reihenfolge wie BIOMES in sandbox-world.js
 export const BIOME_TINT = [[1, 1, 1], [0.9, 0.96, 0.88], [1.04, 1.02, 0.88], [0.7, 0.92, 0.86], [0.82, 0.98, 0.94], [1.4, 0.96, 0.6], [1.38, 0.97, 0.62], [0.72, 1.14, 0.58], [0.74, 0.8, 0.56], [0.86, 1.0, 0.92], [1, 1, 1]];
-const ATLAS_N = 192;
+const ATLAS_N = 224;
 
 export function makeAtlas() {
   const cv = document.createElement("canvas");
@@ -296,6 +297,8 @@ export function makeAtlas() {
   });
   // ---------- Etappe 4: Ackerbau, Redstone, Verzauberung, Brauen ----------
   paintAtlas4(paint, noise, specks);
+  // ---------- Etappe 5: Nether, Ende ----------
+  paintAtlas5(paint, noise, specks);
   // ---------- gefärbte Varianten (Zeile 2): Gras, Laub, hohes Gras je Biom ----------
   {
     const grab = i => g.getImageData(i * T, 0, T, T);
@@ -334,6 +337,7 @@ function paintItem(g, atlas, id, st) {
     g.drawImage(atlas, idx * T, 0, T, T, 0, 0, T, T);
     return;
   }
+  if (paintItem5(id, g, atlas, st)) return;
   if (it.tool) {
     const [c, hi, lo] = MAT_COL[it.mat];
     if (it.tool === "pick") {

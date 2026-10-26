@@ -26,8 +26,8 @@ export const GAMES = [
     id: "sandbox",
     title: "Blockdorf",
     emoji: "⛏️",
-    desc: "Abbauen, handwerken, bauen, kämpfen, Felder bestellen, Redstone-Schaltungen und Tränke brauen – eine Pixelwelt mit Höhlen, Tieren, Monstern, Tag und Nacht. Dein Dorf wartet schon auf dich.",
-    load: () => import("./sandbox.js?v=5"),
+    desc: "Abbauen, handwerken, bauen, kämpfen, Felder bestellen, Redstone-Schaltungen und Tränke brauen – eine Pixelwelt mit Höhlen, Tieren, Monstern, Tag und Nacht. Durch Portale geht es in den Nether und ins Ende zu Enderdrache und Wither. Dein Dorf wartet schon auf dich.",
+    load: () => import("./sandbox.js?v=6"),
     summary: r => r && r.day ? "Tag " + r.day + " · " + fmt(r.mined || 0) + " abgebaut · " + fmt(r.built || 0) + " gebaut" : "Neue Welt"
   },
   {
