@@ -43,10 +43,10 @@ export function findMob(q) {
 }
 
 const PLACES = {
-  mansion: ["mansion", "anwesen", "waldanwesen"], camp: ["camp", "lager"], outpost: ["outpost", "aussenposten"], monument: ["monument", "ozeanmonument"],
+  mansion: ["mansion", "anwesen", "waldanwesen"], camp: ["camp", "lager"], outpost: ["outpost", "aussenposten"], monument: ["monument", "ozeanmonument"], shipwreck: ["shipwreck", "schiffswrack", "wrack"], ruin: ["ruin", "unterwasserruine", "ruine"], treasure: ["treasure", "schatz", "vergrabener"],
   village: ["village", "dorf"]
 };
-const PLACE_NAMES = { mansion: "Waldanwesen", camp: "Lager", outpost: "Außenposten", monument: "Ozeanmonument", village: "Dorf" };
+const PLACE_NAMES = { mansion: "Waldanwesen", camp: "Lager", outpost: "Außenposten", monument: "Ozeanmonument", shipwreck: "Schiffswrack", ruin: "Unterwasserruine", treasure: "Vergrabener Schatz", village: "Dorf" };
 
 export function installPolish(Sandbox, K) {
   const { clamp, W, H, SURF } = K;

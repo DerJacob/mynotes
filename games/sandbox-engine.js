@@ -18,6 +18,7 @@ import { generateWorld, BIOMES, BIOME_NAMES } from "./sandbox-world.js?v=10";
 import { addContent6 } from "./sandbox-world6.js?v=10";
 import { addContent8 } from "./sandbox-world8.js?v=10";
 import { addContent9 } from "./sandbox-world9.js?v=10";
+import { addContent11 } from "./sandbox-world11.js?v=10";
 import { migrateData } from "./sandbox-migrate.js?v=10";
 import { installDims } from "./sandbox-dims.js?v=10";
 import { installBoss } from "./sandbox-boss.js?v=10";
@@ -26,6 +27,8 @@ import { installPolish } from "./sandbox-polish.js?v=10";
 import { installFlora } from "./sandbox-flora.js?v=10";
 import { installCraft9 } from "./sandbox-craft9.js?v=10";
 import { installCombat10 } from "./sandbox-combat10.js?v=10";
+import { installOcean } from "./sandbox-ocean11.js?v=10";
+import { installSeaMobs } from "./sandbox-seamobs11.js?v=10";
 export { MODES, WEATHER_NAMES, MOON_NAMES, MOON_FULL, findItem, findMob } from "./sandbox-polish.js?v=10";
 import { NETHER_BIOMES, placeStronghold } from "./sandbox-nether.js?v=10";
 export { BIOMES, BIOME_NAMES };
@@ -36,7 +39,7 @@ export { W, H, SURF, SPAWN_X };
 export const DAY_LEN = 420;            // Sekunden pro Tag
 export const REACH = 5.5;              // wie weit der Spieler Blöcke erreicht (in Blöcken)
 export const MAX_HP = 20;              // in halben Herzen, wie Minecraft
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 import { mulberry32, hash2, vnoise, fbm, smooth, clamp } from "./sandbox-noise.js?v=10";
 export { mulberry32 };
@@ -120,7 +123,7 @@ export class Sandbox {
 
   // ---------- Welt erzeugen ----------
   _generate() {
-    const w = addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed);
+    const w = addContent11(addContent9(addContent8(addContent6(generateWorld(this.seed), this.seed), this.seed), this.seed), this.seed);
     this.tiles = w.tiles; this.lvl = w.lvl; this.aux = w.aux; this.structs = w.structs; this.ground = w.ground; this.biomes = w.biomes; this.villages = w.villages;
     this._worldChests = w.chests;
     const sh = placeStronghold(this.seed, this.tiles, this.lvl, this.aux, SPAWN_X, SURF);   // Festung mit Endportal tief unter der Erde
@@ -131,7 +134,7 @@ export class Sandbox {
     if (!this.frng) this._farmInit();
     for (const c of list || []) {
       const s = new Array(27).fill(null);
-      c.items.forEach((it, k) => { if (ITEMS[it.id]) s[k * 3 % 27] = it.id === "enchanted_book" ? this._randomBook(12 + Math.floor(this.frng() * 16)) : { id: it.id, n: it.n, d: 0 }; });
+      c.items.forEach((it, k) => { if (ITEMS[it.id]) s[k * 3 % 27] = it.id === "enchanted_book" ? this._randomBook(12 + Math.floor(this.frng() * 16)) : { id: it.id, n: it.n, d: it.d | 0 }; });
       ents.set(`${c.x},${c.y}`, { t: "chest", s });
     }
     if (list === this._worldChests) this._worldChests = null;
@@ -173,7 +176,7 @@ export class Sandbox {
       mobs: this._mobsToData(ow.mobs), adv: { ...this.adv }, bed: this.bed ? { ...this.bed } : null,
       aux: encodeTiles(ow.aux), fx: Object.fromEntries(Object.entries(this.fx).map(([k, f]) => [k, [+f.t.toFixed(1), f.amp]])), es: this.enchSeed
     };
-    Object.assign(data, this._villSave(), this._polishSave(), this._c10Save());
+    Object.assign(data, this._villSave(), this._polishSave(), this._c10Save(), this._oceanSave());
     this._saveDims(data);
     return data;
   }
@@ -226,6 +229,7 @@ export class Sandbox {
     this._villLoad(d);
     this._polishLoad(d);
     this._c10Load(d);
+    this._oceanLoad(d);
     // Falls der Spielstand im Boden steckt (beschädigt), zurück ins Dorf (steht der Spieler im Nether/Ende, prüft _restoreDim das)
     if (!d.dim && this._hit(p)) { p.x = SPAWN_X - 6.4; p.y = SURF - 1.8 - 0.001; }
   }
@@ -248,7 +252,8 @@ export class Sandbox {
     for (let i = 0; i < W * H; i++) if (sky[i] === 15) bs[15].push(i);
     this._spread(sky, bs);
     const bb = Array.from({ length: 16 }, () => []);
-    for (let i = 0; i < W * H; i++) { const e = BLOCKS[tiles[i]].emit; if (e) { blk[i] = e; bb[e].push(i); } }
+    const aux = this.aux;
+    for (let i = 0; i < W * H; i++) { const t = tiles[i]; let e = BLOCKS[t].emit; if (!e && t === B.WATER && aux[i] >= 4 && aux[i] < 8) e = 3 * (aux[i] - 2); if (e) { blk[i] = e; bb[e].push(i); } }
     this._spread(blk, bb);
   }
   _spread(light, buckets) {
@@ -348,6 +353,7 @@ export class Sandbox {
     this._furnaces(dt);
     this._decayStep(dt);
     this._fluidStep(dt);
+    this._oceanStep(dt);
     this._farmStep(dt);
     this._rsStep(dt);
     this._fxStep(dt);
@@ -367,7 +373,7 @@ export class Sandbox {
     let spd = Math.max(0.3, 1 + 0.2 * this.fxAmp("speed") - 0.15 * this.fxAmp("slowness"));
     if (p.onGround && this.tile(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h + 0.05)) === B.SOUL_SAND) spd *= 0.6;
     spd *= this._slowFactor(p);
-    p.vx += clamp((gl ? (dir ? dir * 16 : p.vx) : dir * (onLadder ? 3.2 : p.inLava ? 2.2 : swim ? 3.8 : 6.2 * spd)) - p.vx, -acc, acc);
+    p.vx += clamp((gl ? (dir ? dir * 16 : p.vx) : dir * (onLadder ? 3.2 : p.inLava ? 2.2 : swim ? 3.8 * (this.swimMul || 1) : 6.2 * spd)) - p.vx, -acc, acc);
     if (dir) p.face = dir;
     p.coyote = p.onGround ? 0.1 : p.coyote - dt;
     p.jumpBuf = inp.jump ? 0.12 : p.jumpBuf - dt;
@@ -460,3 +466,5 @@ installFlora(Sandbox, { clamp, W, H });
 installPolish(Sandbox, { clamp, W, H, SURF, stackMax });
 installCraft9(Sandbox, { clamp, W, H });
 installCombat10(Sandbox, { clamp, W, H, REACH });
+installOcean(Sandbox, { clamp, W, H });
+installSeaMobs(Sandbox, { clamp, W, H, SURF });

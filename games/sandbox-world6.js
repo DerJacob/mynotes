@@ -13,7 +13,7 @@ import { BIOMES, MOUNTAIN_BIOMES } from "./sandbox-world.js?v=10";
 
 import { W, H, SURF, SPAWN_X, SEA } from "./sandbox-const.js?v=10";
 export const DAPPLED = "dappled";
-const BI_OCEAN = BIOMES.indexOf("ocean"), BI_DESERT = BIOMES.indexOf("desert");
+const BI_OCEAN = BIOMES.indexOf("ocean"), BI_WARM = BIOMES.indexOf("warm_ocean"), BI_DESERT = BIOMES.indexOf("desert");
 const MOUNT_IDS = new Set([...MOUNTAIN_BIOMES].map(n => BIOMES.indexOf(n)));
 const TENT_COLORS = [1, 4, 14, 11, 12, 5, 0, 13];                                // Orange, Gelb, Rot, Blau, Braun, Hellgrün, Weiß, Grün
 
@@ -33,7 +33,7 @@ export function addContent6(w, seed) {
   for (const v of w.villages) taken.push([v.x - 24, v.x + 24]);
   taken.push([SPAWN_X - 40, SPAWN_X + 40]);
   const free = (x0, x1, gap = 6) => !taken.some(t => x0 - gap < t[1] && x1 + gap > t[0]);
-  const drySurface = x => { const g = ground[x]; return !!g && at(x, g - 1) !== B.WATER && at(x, g) !== B.WATER && at(x, g) !== B.ICE && biomes[x] !== BI_OCEAN; };
+  const drySurface = x => { const g = ground[x]; return !!g && at(x, g - 1) !== B.WATER && at(x, g) !== B.WATER && at(x, g) !== B.ICE && biomes[x] !== BI_OCEAN && biomes[x] !== BI_WARM; };
 
   /** Loot einer Truhe */
   const stock = (x, y, table) => {
@@ -220,7 +220,7 @@ export function addContent6(w, seed) {
     let best = null;
     for (let x = 4; x < W - WD - 4; x++) {
       let ok = true;
-      for (let c = 0; c < WD && ok; c++) if (biomes[x + c] !== BI_OCEAN || ground[x + c] < SEA + 5) ok = false;
+      for (let c = 0; c < WD && ok; c++) if ((biomes[x + c] !== BI_OCEAN && biomes[x + c] !== BI_WARM) || ground[x + c] < SEA + 5) ok = false;
       if (ok) { best = x; break; }
     }
     if (best !== null) {

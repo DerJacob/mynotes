@@ -22,7 +22,7 @@ export const ENCH = {
   efficiency: { name: "Effizienz", max: 5, items: ["pick", "axe", "shovel", "hoe", "shears"], base: 1, step: 10, w: 10, cost: 1 },
   fortune: { name: "Glück", max: 3, items: ["pick", "axe", "shovel", "hoe"], base: 15, step: 9, w: 2, cost: 4 },
   silk_touch: { name: "Behutsamkeit", max: 1, items: ["pick", "axe", "shovel", "hoe"], base: 15, step: 0, w: 1, cost: 8 },
-  unbreaking: { name: "Haltbarkeit", max: 3, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "crossbow", "rod", "armor"], base: 5, step: 8, w: 5, cost: 2 },
+  unbreaking: { name: "Haltbarkeit", max: 3, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "crossbow", "rod", "armor", "trident"], base: 5, step: 8, w: 5, cost: 2 },
   protection: { name: "Schutz", max: 4, items: ["armor"], base: 1, step: 11, w: 10, cost: 1 },
   feather_falling: { name: "Federfall", max: 4, items: ["boots"], base: 5, step: 6, w: 5, cost: 2 },
   power: { name: "Stärke", max: 5, items: ["bow"], base: 1, step: 10, w: 10, cost: 1 },
@@ -41,9 +41,16 @@ export const ENCH = {
   quick_charge: { name: "Schnellladen", max: 3, items: ["crossbow"], base: 12, step: 20, w: 5, cost: 2 },
   lure: { name: "Köder", max: 3, items: ["rod"], base: 15, step: 9, w: 2, cost: 4 },
   luck_of_the_sea: { name: "Glück des Meeres", max: 3, items: ["rod"], base: 15, step: 9, w: 2, cost: 4 },
-  mending: { name: "Reparatur", max: 1, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "crossbow", "rod", "armor"], base: 25, step: 0, w: 2, cost: 4, treasure: true }
+  respiration: { name: "Atmung", max: 3, items: ["helmet"], base: 10, step: 10, w: 2, cost: 4 },
+  aqua_affinity: { name: "Wasseraffinität", max: 1, items: ["helmet"], base: 1, step: 0, w: 2, cost: 4 },
+  depth_strider: { name: "Wasserläufer", max: 3, items: ["boots"], base: 10, step: 10, w: 2, cost: 4 },
+  impaling: { name: "Aufspießen", max: 5, items: ["trident"], base: 1, step: 8, w: 2, cost: 4 },
+  loyalty: { name: "Treue", max: 3, items: ["trident"], base: 12, step: 7, w: 5, cost: 2 },
+  riptide: { name: "Sog", max: 3, items: ["trident"], base: 17, step: 7, w: 2, cost: 4 },
+  channeling: { name: "Blitzschlag", max: 1, items: ["trident"], base: 25, step: 0, w: 1, cost: 8 },
+  mending: { name: "Reparatur", max: 1, items: ["sword", "axe", "pick", "shovel", "hoe", "shears", "bow", "crossbow", "rod", "armor", "trident"], base: 25, step: 0, w: 2, cost: 4, treasure: true }
 };
-const CONFLICT = [["fortune", "silk_touch"], ["infinity", "mending"], ["multishot", "piercing"],
+const CONFLICT = [["riptide", "loyalty"], ["riptide", "channeling"], ["fortune", "silk_touch"], ["infinity", "mending"], ["multishot", "piercing"],
   ["sharpness", "smite"], ["sharpness", "bane_of_arthropods"], ["smite", "bane_of_arthropods"],
   ["protection", "fire_protection"], ["protection", "blast_protection"], ["protection", "projectile_protection"], ["fire_protection", "blast_protection"], ["fire_protection", "projectile_protection"], ["blast_protection", "projectile_protection"]];
 const conflicts = (a, b) => CONFLICT.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
@@ -53,7 +60,7 @@ export function enchClasses(id) {
   const it = ITEMS[id]; if (!it) return [];
   if (id === "book" || id === "enchanted_book") return ["book"];
   if (it.tool) return [it.tool];
-  if (it.armor) return it.armor.slot === 3 ? ["armor", "boots"] : ["armor"];
+  if (it.armor) return it.armor.slot === 3 ? ["armor", "boots"] : it.armor.slot === 0 ? ["armor", "helmet"] : ["armor"];
   if (id === "bow") return ["bow"];
   if (id === "crossbow") return ["crossbow"];
   if (id === "fishing_rod") return ["rod"];

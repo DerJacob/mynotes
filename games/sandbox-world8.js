@@ -25,7 +25,7 @@ export function addContent8(w, seed) {
   const put = (x, y, id) => { if (x > 0 && x < W - 1 && y > 1 && y < H - 3) { const i = y * W + x; tiles[i] = id; lvl[i] = 0; aux[i] = 0; } };
   const solidStone = id => STONEISH.has(id);
   const nearVillage = x => Math.abs(x - SPAWN_X) < 30 || w.villages.some(v => Math.abs(v.x - x) < 28);
-  const colOk = x => biomes[x] !== BI.ocean && !nearVillage(x);
+  const colOk = x => biomes[x] !== BI.ocean && biomes[x] !== BI.warm_ocean && !nearVillage(x);
   const depthOf = (x, y) => y - ground[x];
 
   // ---------- Tuff: Adern im Gestein, vor allem tief unten ----------
